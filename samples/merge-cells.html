@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Merged Cells — Horizontal &amp; Vertical</title>
+    <style>
+      body { font-family: Arial; font-size: 11pt; color: #1f2933; line-height: 1.5; }
+      h1 { font-size: 20pt; color: #0f2f57; margin-bottom: 2pt; }
+      h2 { font-size: 13pt; color: #0f2f57; margin-top: 20pt; margin-bottom: 6pt;
+           border-bottom: 2px solid #e08a1e; padding-bottom: 3pt; }
+      p.lead { color: #52606d; font-size: 9.5pt; margin-top: 0; margin-bottom: 10pt; }
+      .cap { font-size: 8pt; color: #7b8794; margin: 4pt 0 18pt 0; }
+    </style>
+  </head>
+  <body>
+    <!-- Running footer lives in a band so {PAGE}/{TOTAL} resolve per page. -->
+    <footer data-band="pageFooter" style="height: 24pt; font-size: 8.5pt; color: #7b8794">
+      <table>
+        <tr>
+          <td style="width: 240pt">pdf-report-engine &mdash; merged-cell tables</td>
+          <td style="text-align: right">Page {PAGE} of {TOTAL}</td>
+        </tr>
+      </table>
+    </footer>
+
+    <h1>Merged Cells</h1>
+    <p class="lead">
+      Both <strong>horizontal merges</strong> (<code>colspan</code>) and
+      <strong>vertical merges</strong> (<code>rowspan</code>) are supported, and they can be
+      combined in a single table. Vertical merges are honored in authored rows
+      (headers, footers and literal body rows).
+    </p>
+
+    <!-- ===== Table 1: vertical merge ===== -->
+    <h2>1. Vertical merge &mdash; <code>rowspan</code></h2>
+    <p class="lead">Each region label spans three month rows and is centered vertically across the merged cell.</p>
+    <table data-grid="1px solid #b8c4d4" data-striped>
+      <thead>
+        <tr>
+          <th style="background-color: #0f2f57; color: #ffffff; padding: 6pt">Region</th>
+          <th style="background-color: #0f2f57; color: #ffffff; padding: 6pt">Month</th>
+          <th style="background-color: #0f2f57; color: #ffffff; padding: 6pt; text-align: right">Revenue</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td rowspan="3" style="background-color: #eef2f7; vertical-align: middle; font-weight: bold; padding: 6pt">North</td>
+          <td style="padding: 6pt">January</td>
+          <td style="padding: 6pt; text-align: right">120,000</td>
+        </tr>
+        <tr>
+          <td style="padding: 6pt">February</td>
+          <td style="padding: 6pt; text-align: right">131,500</td>
+        </tr>
+        <tr>
+          <td style="padding: 6pt">March</td>
+          <td style="padding: 6pt; text-align: right">142,000</td>
+        </tr>
+        <tr>
+          <td rowspan="3" style="background-color: #eef2f7; vertical-align: middle; font-weight: bold; padding: 6pt">South</td>
+          <td style="padding: 6pt">January</td>
+          <td style="padding: 6pt; text-align: right">90,200</td>
+        </tr>
+        <tr>
+          <td style="padding: 6pt">February</td>
+          <td style="padding: 6pt; text-align: right">95,800</td>
+        </tr>
+        <tr>
+          <td style="padding: 6pt">March</td>
+          <td style="padding: 6pt; text-align: right">110,400</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="cap">Table 1 &mdash; a <code>rowspan="3"</code> label cell centered over its group.</p>
+
+    <!-- ===== Table 2: horizontal merge ===== -->
+    <h2>2. Horizontal merge &mdash; <code>colspan</code></h2>
+    <p class="lead">The header row defines the column grid; body cells then span groups of those columns.</p>
+    <table data-grid="1px solid #b8c4d4">
+      <thead>
+        <tr>
+          <th style="background-color: #0f2f57; color: #ffffff; padding: 6pt; text-align: center">#</th>
+          <th style="background-color: #0f2f57; color: #ffffff; padding: 6pt">Item</th>
+          <th style="background-color: #0f2f57; color: #ffffff; padding: 6pt; text-align: right">Qty</th>
+          <th style="background-color: #0f2f57; color: #ffffff; padding: 6pt; text-align: right">Unit</th>
+          <th style="background-color: #0f2f57; color: #ffffff; padding: 6pt; text-align: right">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="padding: 6pt; text-align: center">1</td>
+          <td style="padding: 6pt">Cloud hosting</td>
+          <td style="padding: 6pt; text-align: right">12</td>
+          <td style="padding: 6pt; text-align: right">400.00</td>
+          <td style="padding: 6pt; text-align: right">4,800.00</td>
+        </tr>
+        <tr>
+          <td style="padding: 6pt; text-align: center">2</td>
+          <td style="padding: 6pt">Support plan</td>
+          <td style="padding: 6pt; text-align: right">1</td>
+          <td style="padding: 6pt; text-align: right">1,200.00</td>
+          <td style="padding: 6pt; text-align: right">1,200.00</td>
+        </tr>
+        <tr>
+          <!-- spans the first four columns; the value fills the merged width -->
+          <td colspan="4" style="padding: 6pt; background-color: #eef2f7">Subtotal (before tax)</td>
+          <td style="padding: 6pt; text-align: right; background-color: #eef2f7; font-weight: bold">6,000.00</td>
+        </tr>
+        <tr>
+          <!-- a single full-width banner spanning every column -->
+          <td colspan="5" style="padding: 8pt; text-align: center; background-color: #e08a1e; color: #ffffff; font-weight: bold">
+            Payment is due within 30 days of invoice date
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="cap">Table 2 &mdash; a <code>colspan="4"</code> subtotal and a <code>colspan="5"</code> full-width banner.</p>
+
+    <!-- ===== Table 3: combined ===== -->
+    <h2>3. Both together &mdash; <code>rowspan</code> + <code>colspan</code></h2>
+    <p class="lead">A day label spans two time rows (<code>rowspan</code>), while a session title spans two columns (<code>colspan</code>).</p>
+    <table data-grid="1px solid #b8c4d4">
+      <thead>
+        <tr>
+          <th style="background-color: #1b3a6b; color: #ffffff; padding: 6pt">Day</th>
+          <th style="background-color: #1b3a6b; color: #ffffff; padding: 6pt">Slot</th>
+          <th style="background-color: #1b3a6b; color: #ffffff; padding: 6pt">Session</th>
+          <th style="background-color: #1b3a6b; color: #ffffff; padding: 6pt">Room</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td rowspan="2" style="background-color: #eef2f7; vertical-align: middle; font-weight: bold; padding: 6pt">Monday</td>
+          <td style="padding: 6pt">09:00</td>
+          <td colspan="2" style="padding: 6pt; background-color: #d8ecd8">Opening keynote &mdash; all attendees</td>
+        </tr>
+        <tr>
+          <td style="padding: 6pt">11:00</td>
+          <td style="padding: 6pt">Layout engines</td>
+          <td style="padding: 6pt">Hall A</td>
+        </tr>
+        <tr>
+          <td rowspan="2" style="background-color: #eef2f7; vertical-align: middle; font-weight: bold; padding: 6pt">Tuesday</td>
+          <td style="padding: 6pt">09:00</td>
+          <td style="padding: 6pt">Pagination deep-dive</td>
+          <td style="padding: 6pt">Hall B</td>
+        </tr>
+        <tr>
+          <td style="padding: 6pt">14:00</td>
+          <td colspan="2" style="padding: 6pt; background-color: #f6e2c4">Closing panel &amp; Q&amp;A</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="cap">Table 3 &mdash; combined merges: a two-row day cell and full-width / two-column session cells in one grid.</p>
+  </body>
+</html>

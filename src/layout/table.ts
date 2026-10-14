@@ -47,9 +47,11 @@ interface ResolvedColumn {
 type Unit =
   | { t: 'header'; row: RowNode }
   | { t: 'footer'; row: RowNode }
-  | { t: 'detail'; row: RowNode; data: Record<string, unknown>; index: number }
+  | { t: 'detail'; row: RowNode; data: Record<string, unknown>; index: number; static?: boolean }
   | { t: 'groupHeader'; group: GroupNode; value: unknown; rows: Array<Record<string, unknown>>; pageBreak: boolean; resetPage: boolean }
   | { t: 'groupFooter'; group: GroupNode; value: unknown; rows: Array<Record<string, unknown>> };
+
+type RowUnit = Extract<Unit, { t: 'header' | 'footer' | 'detail' }>;
 
 interface UnitCtx {
   block: TableBlock;
@@ -81,11 +83,32 @@ export function layoutTable(block: TableBlock, ctx: LayoutContext, opts: BlockLa
   const uc: UnitCtx = { block, ctx, columns, tableStyle, margin, contentLeft: margin.left, grid, groupKey, scope: opts.scope };
 
   const frags: Fragment[] = [];
-  for (let u = 0; u < units.length; u += 1) {
-    const unit = units[u]!;
-    const isFirstVisual = frags.length === 0;
-    if (unit.t === 'groupHeader' || unit.t === 'groupFooter') frags.push(...layoutGroupBand(unit, uc));
-    else frags.push(layoutRow(unit, uc, isFirstVisual));
+  let i = 0;
+  while (i < units.length) {
+    const unit = units[i]!;
+    if (unit.t === 'groupHeader' || unit.t === 'groupFooter') {
+      frags.push(...layoutGroupBand(unit, uc));
+      i += 1;
+      continue;
+    }
+    // Gather a maximal run of consecutive row units (header/detail/footer).
+    const run: RowUnit[] = [];
+    let j = i;
+    while (j < units.length) {
+      const u = units[j]!;
+      if (u.t === 'groupHeader' || u.t === 'groupFooter') break;
+      run.push(u as RowUnit);
+      j += 1;
+    }
+    // Rows that vertically merge must be laid out together as one grid, since a
+    // spanning cell is taller than a single row. Runs without vertical spans keep
+    // the per-row path (so headers repeat and rows break across pages normally).
+    if (runNeedsMerge(run)) {
+      frags.push(layoutMergedRun(run, uc, frags.length === 0));
+    } else {
+      for (let k = 0; k < run.length; k += 1) frags.push(layoutRow(run[k]!, uc, frags.length === 0 && k === 0));
+    }
+    i = j;
   }
   return frags;
 }
@@ -263,6 +286,173 @@ function layoutRow(unit: Extract<Unit, { t: 'header' | 'footer' | 'detail' }>, u
   };
 }
 
+// --- vertical merge (rowSpan) ----------------------------------------------
+
+/**
+ * A vertically-merged cell is taller than a single row, so the rows it spans
+ * cannot be independent fragments. We lay the whole contiguous run of rows into
+ * one grid fragment: build a cell-occupancy matrix (honoring colspan + rowspan),
+ * solve row heights jointly (a tall spanned cell distributes its surplus height
+ * across its rows), then paint each anchor cell over its full merged rectangle.
+ */
+function rowSpanAllowed(unit: RowUnit): boolean {
+  // Only authored rows may start a vertical span; data-expanded detail rows reuse
+  // a single shared template, so a rowspan there is meaningless.
+  return unit.t === 'header' || unit.t === 'footer' || (unit.t === 'detail' && unit.static === true);
+}
+
+function runNeedsMerge(run: RowUnit[]): boolean {
+  return run.some((u) => rowSpanAllowed(u) && u.row.cells.some((c) => (c.rowSpan ?? 1) > 1));
+}
+
+function detailIndexOf(unit: RowUnit): number {
+  return unit.t === 'detail' ? unit.index : 0;
+}
+
+function unitScope(unit: RowUnit, uc: UnitCtx): ExprContext {
+  return unit.t === 'detail' ? { ...uc.scope, $row: unit.data, $index: unit.index } : uc.scope;
+}
+
+interface AnchorCell {
+  row: number;
+  col: number;
+  colSpan: number;
+  rowSpan: number;
+  x: number;
+  w: number;
+  pad: typeof CELL_PAD;
+  lines: Line[];
+  contentH: number;
+  fill: ColorInput | undefined;
+  borders: Sides;
+  vAlign: 'top' | 'middle' | 'bottom';
+}
+
+function layoutMergedRun(run: RowUnit[], uc: UnitCtx, isFirstVisual: boolean): Fragment {
+  const { block, ctx, columns, tableStyle, grid } = uc;
+  const R = run.length;
+  const C = Math.max(1, columns.length);
+
+  const covered: boolean[][] = Array.from({ length: R }, () => Array<boolean>(C).fill(false));
+  const anchors: AnchorCell[] = [];
+
+  for (let r = 0; r < R; r += 1) {
+    const unit = run[r]!;
+    const row = unit.row;
+    const scope = unitScope(unit, uc);
+    const allowSpan = rowSpanAllowed(unit);
+    const rowStyle = resolveRowStyle(block, unit.t === 'detail' ? unit.data : {}, detailIndexOf(unit));
+    const stripedFill = unit.t === 'detail' && detailIndexOf(unit) % 2 === 1 ? grid.stripedColor : undefined;
+
+    let colCursor = 0;
+    for (const cell of row.cells) {
+      while (colCursor < C && covered[r]![colCursor]) colCursor += 1;
+      if (colCursor >= C) break; // no room left in this row
+
+      const startCol = colCursor;
+      const colSpan = Math.min(Math.max(1, cell.colSpan ?? 1), C - startCol);
+      const rowSpan = Math.min(allowSpan ? Math.max(1, cell.rowSpan ?? 1) : 1, R - r);
+
+      // Mark every covered cell of the merged rectangle (except the anchor slot,
+      // which the cursor skips over by advancing past it).
+      for (let rr = r; rr < r + rowSpan; rr += 1) {
+        for (let cc = startCol; cc < startCol + colSpan; cc += 1) {
+          if (rr === r && cc === startCol) continue;
+          covered[rr]![cc] = true;
+        }
+      }
+      colCursor = startCol + colSpan;
+
+      let w = 0;
+      for (let s = 0; s < colSpan; s += 1) w += columns[startCol + s]?.width ?? 0;
+      const column = columns[startCol];
+
+      const baseStyle = ctx.style({ ...rowStyle, ...(column?.style ?? {}), ...(cell.style ?? {}) }, tableStyle);
+      const align = (cell.align ?? column?.align ?? baseStyle.align) as ResolvedStyle['align'];
+      const style = ctx.style({ align }, baseStyle);
+      const pad = {
+        top: cell.paddingTop ?? CELL_PAD.top,
+        right: cell.paddingRight ?? CELL_PAD.right,
+        bottom: cell.paddingBottom ?? CELL_PAD.bottom,
+        left: cell.paddingLeft ?? CELL_PAD.left,
+      };
+      const innerW = Math.max(1, w - pad.left - pad.right);
+      const result = typeset(cellInlines(cell, column, style, ctx, scope), innerW);
+      const contentH = result.lines.reduce((sum, l) => sum + l.height, 0);
+      const x = uc.contentLeft + columns.slice(0, startCol).reduce((s, c) => s + c.width, 0);
+
+      anchors.push({
+        row: r,
+        col: startCol,
+        colSpan,
+        rowSpan,
+        x,
+        w,
+        pad,
+        lines: result.lines,
+        contentH,
+        fill: cell.backgroundColor ?? stripedFill,
+        borders: cellSides(cell.border ?? gridShorthand(grid), 0.5),
+        vAlign: cell.verticalAlign ?? 'top',
+      });
+    }
+  }
+
+  // Solve row heights: start from authored minimums and single-row cells, then
+  // distribute any deficit a tall spanned cell has across the rows it covers.
+  const rowH: number[] = new Array<number>(R).fill(0);
+  for (let r = 0; r < R; r += 1) rowH[r] = Math.max(rowH[r]!, toPt(run[r]!.row.minHeight ?? 0));
+  for (const a of anchors) if (a.rowSpan === 1) rowH[a.row] = Math.max(rowH[a.row]!, a.contentH + a.pad.top + a.pad.bottom);
+  for (const a of anchors) {
+    if (a.rowSpan <= 1) continue;
+    const need = a.contentH + a.pad.top + a.pad.bottom;
+    let cur = 0;
+    for (let k = 0; k < a.rowSpan; k += 1) cur += rowH[a.row + k]!;
+    if (need > cur) {
+      const add = (need - cur) / a.rowSpan;
+      for (let k = 0; k < a.rowSpan; k += 1) rowH[a.row + k]! += add;
+    }
+  }
+
+  const yTop: number[] = new Array<number>(R);
+  let y = 0;
+  for (let r = 0; r < R; r += 1) {
+    yTop[r] = y;
+    y += rowH[r]!;
+  }
+  const totalH = y;
+
+  const commands: DrawCommand[] = [];
+  for (const a of anchors) {
+    let rectH = 0;
+    for (let k = 0; k < a.rowSpan; k += 1) rectH += rowH[a.row + k]!;
+    const ry = yTop[a.row]!;
+    if (a.fill) commands.push({ op: 'fillRect', x: a.x, y: ry, w: a.w, h: rectH, color: toRGB(a.fill) });
+    let vTop = ry + a.pad.top;
+    if (a.vAlign === 'middle') vTop = ry + (rectH - a.contentH) / 2;
+    else if (a.vAlign === 'bottom') vTop = ry + rectH - a.contentH - a.pad.bottom;
+    let lineY = vTop;
+    for (const line of a.lines) {
+      commands.push({ op: 'text', x: a.x + a.pad.left, baselineY: lineY + line.ascent, runs: line.runs, gapWidth: line.gapWidth, decorations: [] });
+      lineY += line.height;
+    }
+    drawSides(commands, a.borders, a.x, ry, a.w, rectH);
+  }
+
+  const allHeader = run.every((u) => u.t === 'header');
+  const allFooter = run.every((u) => u.t === 'footer');
+  const role = allHeader ? 'header' : allFooter ? 'footer' : 'detail';
+  return {
+    height: totalH,
+    before: isFirstVisual ? uc.margin.top : 0,
+    after: run[run.length - 1]!.t === 'footer' ? uc.margin.bottom : 0,
+    commands,
+    avoidSplit: true,
+    role,
+    groupKey: uc.groupKey,
+  };
+}
+
 // --- group bands -----------------------------------------------------------
 
 function layoutGroupBand(unit: Extract<Unit, { t: 'groupHeader' | 'groupFooter' }>, uc: UnitCtx): Fragment[] {
@@ -378,7 +568,7 @@ function buildUnits(block: TableBlock, ctx: LayoutContext, scope: ExprContext): 
   // Authored static body rows keep their own per-cell styling; render them as
   // concrete detail rows (content lives in the cells, so no data binding).
   let staticIndex = 0;
-  for (const row of block.staticRows ?? []) out.push({ t: 'detail', row, data: {}, index: staticIndex++ });
+  for (const row of block.staticRows ?? []) out.push({ t: 'detail', row, data: {}, index: staticIndex++, static: true });
 
   if (block.groups && block.groups.length > 0) out.push(...buildGrouped(block, ctx, scope, data, detailRow));
   else data.forEach((item, i) => out.push({ t: 'detail', row: detailRow, data: item, index: i + staticIndex }));

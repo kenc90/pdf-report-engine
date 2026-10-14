@@ -180,6 +180,13 @@ const pdf = await renderToBuffer(report, { fonts: await readFontFiles([
   `data-grid="1px solid #ccc"` draw a uniform cell grid; `data-striped` (optionally with
   `data-striped-color="#f3f6fb"`) shades alternating rows. Literal `<table>` rows keep their
   own per-cell colors (heatmap / status styling); authored via `TableBlock.staticRows`.
+- **Merged cells:** `colspan` (horizontal) and `rowspan` (vertical) are supported on `<td>`/`<th>`.
+  A horizontal span sums the widths of the columns it covers. A vertical span is laid out as a
+  single merged grid: rows that a `rowspan` links are grouped into one block, the merged cell's
+  height is distributed across the rows it covers, and covered cells below are skipped. Vertical
+  merging is honored in **authored rows** — headers, footers and literal/static body rows
+  (`staticRows`); it is intentionally ignored in data-expanded (`data-each`) detail rows, which
+  share one template. A merged block is kept atomic (it won't split across a page break).
 - **Data binding:** `data-each="item in $data.list"`, `data-bind="<expr>"`,
   `data-format="<pattern>"` turn a `<table>` into a bound data region; `data-bind` on any
   leaf binds that node's text to an expression instead of its literal content.
@@ -237,6 +244,9 @@ The `samples/` folder demonstrates the supported subset:
 - `table-colors.html` — a focused styling showcase: a full cell **grid** with striped rows and
   a dark colored header, a **status table** whose body cells are individually colored, and a
   value **heatmap** — all with real per-cell borders and background fills.
+- `merge-cells.html` — **merged cells**: a `rowspan` table (a label centered over several rows),
+  a `colspan` table (a subtotal spanning columns plus a full-width banner), and a third table
+  that **combines** both merges in one grid.
 - `annual-report.html` + `annual-report.data.json` — the flagship **multi-page** report: a
   colored cover band, KPI "cards", a pull-quote, a regional **heatmap** (value-shaded
   cells), a data-bound 36-row ledger whose **column header repeats on every page**, and

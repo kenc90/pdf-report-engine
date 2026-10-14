@@ -76,7 +76,56 @@ describe('table layout', () => {
     const frags = layoutBlock(sampleTable(), ctx, opts(140));
     for (const f of frags) expect(f.avoidSplit).toBe(true);
   });
+
+  it('lays a rowspan cell over its full merged height (vertical merge)', () => {
+    const ctx = makeCtx();
+    const table = {
+      type: 'table',
+      columns: [{ grow: 1 }, { grow: 1 }],
+      showGrid: true,
+      staticRows: [
+        { kind: 'detail', cells: [{ content: 'span', rowSpan: 2 }, { content: 'b' }] },
+        { kind: 'detail', cells: [{ content: 'c' }] },
+      ],
+    } as unknown as TableBlock;
+    const frags = layoutBlock(table, ctx, opts(100));
+    // The two authored rows merge into one grid fragment, not two.
+    expect(frags).toHaveLength(1);
+    const f = frags[0]!;
+    expect(f.role).toBe('detail');
+    // The spanning cell's vertical border stretches across ~the whole fragment.
+    const verticals = lineSegs(f).filter((c) => Math.abs(c.x1 - c.x2) < 0.01);
+    const maxVert = Math.max(...verticals.map((c) => Math.abs(c.y2 - c.y1)));
+    expect(maxVert).toBeGreaterThan(f.height * 0.8);
+    // Covered cell is skipped, so 'c' lands in column 2; all text still present.
+    const text = fragmentText(f);
+    expect(text).toContain('span');
+    expect(text).toContain('b');
+    expect(text).toContain('c');
+  });
+
+  it('sums spanned column widths for a colspan cell (horizontal merge)', () => {
+    const ctx = makeCtx();
+    const table = {
+      type: 'table',
+      columns: [{ grow: 1 }, { grow: 1 }, { grow: 1 }],
+      showGrid: true,
+      staticRows: [{ kind: 'detail', cells: [{ content: 'wide', colSpan: 2 }, { content: 'x' }] }],
+    } as unknown as TableBlock;
+    const frags = layoutBlock(table, ctx, opts(90));
+    expect(frags).toHaveLength(1);
+    // Two columns merged span ~60 of the 90 content width (each grow column is 30).
+    const horizontals = lineSegs(frags[0]!).filter((c) => Math.abs(c.y1 - c.y2) < 0.01);
+    const maxHoriz = Math.max(...horizontals.map((c) => Math.abs(c.x2 - c.x1)));
+    expect(maxHoriz).toBeGreaterThan(90 * 0.55);
+  });
 });
+
+function lineSegs(f: Fragment): Array<{ x1: number; y1: number; x2: number; y2: number }> {
+  const out: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
+  for (const c of f.commands) if (c.op === 'line') out.push({ x1: c.x1, y1: c.y1, x2: c.x2, y2: c.y2 });
+  return out;
+}
 
 function fragmentText(f: Fragment): string {
   const parts: string[] = [];
