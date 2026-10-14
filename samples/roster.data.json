@@ -1,0 +1,12 @@
+{
+  "people": [
+    { "name": "Ada Lovelace", "department": "Analytics", "salary": 142000, "startDate": "2019-03-01" },
+    { "name": "Grace Hopper", "department": "Compilers", "salary": 138500, "startDate": "2018-07-15" },
+    { "name": "Alan Turing", "department": "Cryptography", "salary": 151000, "startDate": "2020-01-06" },
+    { "name": "Katherine Johnson", "department": "Orbit Mechanics", "salary": 147250, "startDate": "2017-11-20" },
+    { "name": "Linus Torvalds", "department": "Kernel", "salary": 160000, "startDate": "2016-04-02" },
+    { "name": "Margaret Hamilton", "department": "Flight Software", "salary": 155750, "startDate": "2015-09-14" },
+    { "name": "Ken Thompson", "department": "Operating Systems", "salary": 149000, "startDate": "2018-02-28" },
+    { "name": "Barbara Liskov", "department": "Abstraction", "salary": 153400, "startDate": "2019-08-05" }
+  ]
+}

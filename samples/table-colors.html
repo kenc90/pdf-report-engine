@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+  <body style="font-family: Arial; font-size: 11pt; color: #24303f">
+    <h1 style="color: #0f2f57; border-bottom: 3pt solid #e08a1e; padding-bottom: 6pt">Table Styling Showcase</h1>
+    <p style="color: #64748b">
+      Every table below uses real <strong>cell borders</strong> and <strong>background colors</strong>
+      rendered by the layout engine — no images, no CSS beyond the supported subset.
+    </p>
+
+    <!-- 1. Full grid + striped rows + colored header -->
+    <h2 style="color: #0f2f57">Grid &amp; striped rows</h2>
+    <p style="font-size: 8pt; color: #94a3b8; text-transform: uppercase; letter-spacing: 1pt">
+      &lt;table data-grid="1px solid #b8c4d4" data-striped data-striped-color="#f3f6fb"&gt;
+    </p>
+    <table data-grid="1px solid #b8c4d4" data-striped data-striped-color="#f3f6fb">
+      <tr>
+        <th style="background-color: #0f2f57; color: #ffffff; text-align: left; padding: 6pt">Product</th>
+        <th style="background-color: #0f2f57; color: #ffffff; text-align: right; padding: 6pt">Units</th>
+        <th style="background-color: #0f2f57; color: #ffffff; text-align: right; padding: 6pt">Price</th>
+        <th style="background-color: #0f2f57; color: #ffffff; text-align: right; padding: 6pt">Total</th>
+      </tr>
+      <tr><td style="padding: 5pt">Widget</td><td style="text-align: right; padding: 5pt">120</td><td style="text-align: right; padding: 5pt">12.50</td><td style="text-align: right; padding: 5pt">1,500.00</td></tr>
+      <tr><td style="padding: 5pt">Gadget</td><td style="text-align: right; padding: 5pt">80</td><td style="text-align: right; padding: 5pt">24.00</td><td style="text-align: right; padding: 5pt">1,920.00</td></tr>
+      <tr><td style="padding: 5pt">Gizmo</td><td style="text-align: right; padding: 5pt">45</td><td style="text-align: right; padding: 5pt">39.75</td><td style="text-align: right; padding: 5pt">1,788.75</td></tr>
+      <tr><td style="padding: 5pt">Sprocket</td><td style="text-align: right; padding: 5pt">300</td><td style="text-align: right; padding: 5pt">2.20</td><td style="text-align: right; padding: 5pt">660.00</td></tr>
+    </table>
+
+    <!-- 2. Per-cell background colors (status) -->
+    <h2 style="color: #0f2f57; margin-top: 18pt">Per-cell status colors</h2>
+    <p style="font-size: 8pt; color: #94a3b8; text-transform: uppercase; letter-spacing: 1pt">each &lt;td style="background-color: …"&gt;</p>
+    <table data-grid="1px solid #cbd5e1">
+      <tr>
+        <th style="background-color: #eef2f7; color: #0f2f57; padding: 6pt">Order</th>
+        <th style="background-color: #eef2f7; color: #0f2f57; padding: 6pt">Customer</th>
+        <th style="background-color: #eef2f7; color: #0f2f57; padding: 6pt">Status</th>
+      </tr>
+      <tr>
+        <td style="padding: 6pt">#10241</td><td style="padding: 6pt">Globex Ltd.</td>
+        <td style="padding: 6pt; background-color: #1b7f4b; color: #ffffff; text-align: center">Paid</td>
+      </tr>
+      <tr>
+        <td style="padding: 6pt">#10242</td><td style="padding: 6pt">Initech</td>
+        <td style="padding: 6pt; background-color: #e08a1e; color: #ffffff; text-align: center">Pending</td>
+      </tr>
+      <tr>
+        <td style="padding: 6pt">#10243</td><td style="padding: 6pt">Umbrella Co.</td>
+        <td style="padding: 6pt; background-color: #b3261e; color: #ffffff; text-align: center">Overdue</td>
+      </tr>
+      <tr>
+        <td style="padding: 6pt">#10244</td><td style="padding: 6pt">Soylent Corp</td>
+        <td style="padding: 6pt; background-color: #64748b; color: #ffffff; text-align: center">Refunded</td>
+      </tr>
+    </table>
+
+    <!-- 3. Value heatmap -->
+    <h2 style="color: #0f2f57; margin-top: 18pt">Revenue heatmap (shaded cells)</h2>
+    <p style="font-size: 8pt; color: #94a3b8; text-transform: uppercase; letter-spacing: 1pt">background tint encodes magnitude</p>
+    <table data-grid="1px solid #ffffff">
+      <tr>
+        <th style="background-color: #0f2f57; color: #ffffff; padding: 5pt">Team</th>
+        <th style="background-color: #0f2f57; color: #ffffff; text-align: center; padding: 5pt">Jan</th>
+        <th style="background-color: #0f2f57; color: #ffffff; text-align: center; padding: 5pt">Feb</th>
+        <th style="background-color: #0f2f57; color: #ffffff; text-align: center; padding: 5pt">Mar</th>
+      </tr>
+      <tr>
+        <td style="font-weight: 700; padding: 5pt">Sales</td>
+        <td style="background-color: #cfe3f5; text-align: center; padding: 5pt">42</td>
+        <td style="background-color: #6ba3d6; color: #ffffff; text-align: center; padding: 5pt">67</td>
+        <td style="background-color: #0f2f57; color: #ffffff; text-align: center; padding: 5pt">91</td>
+      </tr>
+      <tr>
+        <td style="font-weight: 700; padding: 5pt">Support</td>
+        <td style="background-color: #eaf2fb; text-align: center; padding: 5pt">18</td>
+        <td style="background-color: #cfe3f5; text-align: center; padding: 5pt">35</td>
+        <td style="background-color: #9cc3e4; color: #12314f; text-align: center; padding: 5pt">58</td>
+      </tr>
+      <tr>
+        <td style="font-weight: 700; padding: 5pt">Ops</td>
+        <td style="background-color: #6ba3d6; color: #ffffff; text-align: center; padding: 5pt">74</td>
+        <td style="background-color: #4f8bc9; color: #ffffff; text-align: center; padding: 5pt">80</td>
+        <td style="background-color: #2f6db5; color: #ffffff; text-align: center; padding: 5pt">88</td>
+      </tr>
+    </table>
+  </body>
+</html>

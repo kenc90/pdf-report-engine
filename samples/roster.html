@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+  <body style="font-family: Arial; font-size: 11pt; color: #222">
+    <h1 style="color: #7c2d12">Staff Roster</h1>
+    <p style="color: #666; margin-top: 0">
+      Generated for <strong>Acme Engineering</strong> — figures bound from an external JSON file.
+    </p>
+
+    <p>
+      This table is <em>data-bound</em>: the rows come from <code>roster.data.json</code> via
+      <code>data-each</code>, and each cell is filled by a <code>data-bind</code> expression.
+      Run the CLI with <code>--data samples/roster.data.json</code> to populate it.
+    </p>
+
+    <table data-each="person in $data.people" style="border: 1px solid #ddd">
+      <thead>
+        <tr>
+          <th style="background-color: #7c2d12; color: #ffffff">Name</th>
+          <th style="background-color: #7c2d12; color: #ffffff">Department</th>
+          <th style="background-color: #7c2d12; color: #ffffff; text-align: right">Salary</th>
+          <th style="background-color: #7c2d12; color: #ffffff; text-align: right">Start</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td data-bind="name"></td>
+          <td data-bind="department"></td>
+          <td style="text-align: right" data-bind="salary" data-format="#,##0.00"></td>
+          <td style="text-align: right" data-bind="startDate"></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p style="margin-top: 16px; text-align: right; font-size: 8pt; color: #999">
+      Page {PAGE} of {TOTAL}
+    </p>
+  </body>
+</html>
