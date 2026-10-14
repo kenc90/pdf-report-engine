@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <style>
+      @page { size: A4 portrait; margin: 18mm 18mm 16mm 18mm; }
+    </style>
+  </head>
+  <!-- Original uses Times New Roman (body) + PMingLiU (Chinese). The stack falls back to
+       Georgia (auto-loaded serif) unless you pass real Times fonts on the CLI. -->
+  <body style="font-family: 'Times New Roman', Georgia; font-size: 11pt; color: #000000; line-height: 1.5">
+
+    <!-- ===== Repeating header band (title appears on every page, like the original) ===== -->
+    <header data-band="pageHeader" style="height: 54pt; border-bottom: 1.5pt solid #000000; padding-bottom: 6pt">
+      <table style="border: 0">
+        <tr>
+          <td style="width: 60pt; vertical-align: middle">
+            <!-- Drop a University of Macau crest here, e.g.:
+                 <img src="assets/um-logo.png" width="52" style="text-align:left"> -->
+            &nbsp;
+          </td>
+          <td style="vertical-align: middle; text-align: center">
+            <span style="font-size: 16pt; font-weight: 700; letter-spacing: 1pt">University of Macau</span>
+            <br />
+            <span style="font-size: 9pt; letter-spacing: 3pt; text-transform: uppercase; color: #333333">Office of the Registry</span>
+          </td>
+          <td style="width: 60pt">&nbsp;</td>
+        </tr>
+      </table>
+    </header>
+
+    <!-- ===== Repeating footer band ===== -->
+    <footer data-band="pageFooter" style="height: 20pt; font-size: 9pt; color: #333333; border-top: 0.75pt solid #999999; padding-top: 3pt">
+      <table style="border: 0">
+        <tr>
+          <td style="width: 300pt">[A-B5-1550-9]</td>
+          <td style="text-align: right">Page {PAGE} of {TOTAL}</td>
+        </tr>
+      </table>
+    </footer>
+
+    <!-- ===== Title ===== -->
+    <h1 style="text-align: center; font-size: 15pt; font-weight: 700; letter-spacing: 1pt; margin-top: 10pt; margin-bottom: 12pt">Testimonial</h1>
+
+    <p style="font-weight: 700; margin-bottom: 8pt">TO WHOM IT MAY CONCERN</p>
+    <p style="text-align: justify; margin-bottom: 6pt">
+      This is to certify the status of the following student of the University of XXX as at
+      20 January 2025:
+    </p>
+
+    <!-- ===== Personal Data ===== -->
+    <table style="border: 0; margin-top: 10pt">
+      <tr><td colspan="2" style="font-weight: 700; font-size: 11pt; border-bottom: 0.75pt solid #000000; padding: 4pt 0">Personal Data</td></tr>
+      <tr><td class="l" style="width: 170pt; padding: 3pt 0; vertical-align: top">Name</td><td style="padding: 3pt 0; vertical-align: top">HO SIU IN</td></tr>
+      <tr><td style="width: 170pt; padding: 3pt 0; vertical-align: top">Chinese Name</td><td style="padding: 3pt 0; vertical-align: top; font-family: 'PMingLiU', 'Microsoft YaHei'">&#20309; &#23567; &#29310;</td></tr>
+      <tr><td style="width: 170pt; padding: 3pt 0; vertical-align: top">Student No.</td><td style="padding: 3pt 0; vertical-align: top">A-B5-1550-9</td></tr>
+      <tr><td style="width: 170pt; padding: 3pt 0; vertical-align: top">ID No.</td><td style="padding: 3pt 0; vertical-align: top">1125058(8)</td></tr>
+      <tr><td style="width: 170pt; padding: 3pt 0; vertical-align: top">Date of Birth</td><td style="padding: 3pt 0; vertical-align: top">--</td></tr>
+      <tr><td style="width: 170pt; padding: 3pt 0; vertical-align: top">Place of Birth</td><td style="padding: 3pt 0; vertical-align: top">Macao</td></tr>
+      <tr><td style="width: 170pt; padding: 3pt 0; vertical-align: top">Gender</td><td style="padding: 3pt 0; vertical-align: top">Female</td></tr>
+      <tr><td style="width: 170pt; padding: 3pt 0; vertical-align: top">Nationality</td><td style="padding: 3pt 0; vertical-align: top">Chinese</td></tr>
+    </table>
+
+    <!-- ===== Student Status ===== -->
+    <table style="border: 0; margin-top: 14pt">
+      <tr><td colspan="2" style="font-weight: 700; font-size: 11pt; border-bottom: 0.75pt solid #000000; padding: 4pt 0">Student Status</td></tr>
+      <tr><td style="width: 170pt; padding: 3pt 0; vertical-align: top">Current Status</td><td style="padding: 3pt 0; vertical-align: top">Registered Student</td></tr>
+      <tr><td style="width: 170pt; padding: 3pt 0; vertical-align: top">Date of Admission</td><td style="padding: 3pt 0; vertical-align: top">12 August 2015</td></tr>
+      <tr><td style="width: 170pt; padding: 3pt 0; vertical-align: top">Academic Unit</td><td style="padding: 3pt 0; vertical-align: top">Faculty of Arts and Humanities</td></tr>
+      <tr><td style="width: 170pt; padding: 3pt 0; vertical-align: top">Enrolled Degree Programme</td><td style="padding: 3pt 0; vertical-align: top">Bachelor of Arts in Portuguese Studies</td></tr>
+      <tr><td style="width: 170pt; padding: 3pt 0; vertical-align: top">Duration of Programme</td><td style="padding: 3pt 0; vertical-align: top">Four Years</td></tr>
+      <tr><td style="width: 170pt; padding: 3pt 0; vertical-align: top">Programme Mode</td><td style="padding: 3pt 0; vertical-align: top">Full Time</td></tr>
+      <tr><td style="width: 170pt; padding: 3pt 0; vertical-align: top">Year of Study</td><td style="padding: 3pt 0; vertical-align: top">First Year</td></tr>
+      <tr><td style="width: 170pt; padding: 3pt 0; vertical-align: top">Medium of Instruction</td><td style="padding: 3pt 0; vertical-align: top">Portuguese</td></tr>
+      <tr><td style="width: 170pt; padding: 3pt 0; vertical-align: top">Expected Date of Completion</td><td style="padding: 3pt 0; vertical-align: top">31 January 2021</td></tr>
+      <tr><td style="width: 170pt; padding: 3pt 0; vertical-align: top">Honours Programme</td><td style="padding: 3pt 0; vertical-align: top">--</td></tr>
+    </table>
+
+    <!-- ===== Remaining sections ===== -->
+    <table style="border: 0; margin-top: 14pt">
+      <tr><td style="font-weight: 700; font-size: 11pt; border-bottom: 0.75pt solid #000000; padding: 4pt 0">Exchange Programme</td></tr>
+      <tr><td style="padding: 3pt 0">--</td></tr>
+    </table>
+
+    <table style="border: 0; margin-top: 14pt">
+      <tr><td style="font-weight: 700; font-size: 11pt; border-bottom: 0.75pt solid #000000; padding: 4pt 0">Scholarship</td></tr>
+      <tr><td style="padding: 3pt 0">--</td></tr>
+    </table>
+
+    <table style="border: 0; margin-top: 14pt">
+      <tr><td style="font-weight: 700; font-size: 11pt; border-bottom: 0.75pt solid #000000; padding: 4pt 0">Academic Honours</td></tr>
+      <tr><td style="padding: 3pt 0">--</td></tr>
+    </table>
+
+    <table style="border: 0; margin-top: 14pt">
+      <tr><td style="font-weight: 700; font-size: 11pt; border-bottom: 0.75pt solid #000000; padding: 4pt 0">Additional Information</td></tr>
+      <tr><td style="padding: 3pt 0">--</td></tr>
+    </table>
+
+    <!-- ===== Signature ===== -->
+    <table style="border: 0; margin-top: 40pt">
+      <tr>
+        <td style="width: 55%">&nbsp;</td>
+        <td style="width: 45%; text-align: center">
+          <p style="margin-top: 0; margin-bottom: 26pt">&nbsp;</p>
+          <p style="font-weight: 700; margin-top: 0; margin-bottom: 0; border-top: 0.75pt solid #000000; padding-top: 3pt">Peter Chan</p>
+          <p style="margin-top: 1pt">Head of Registry</p>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
