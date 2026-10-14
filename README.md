@@ -158,6 +158,22 @@ const pdf = await renderToBuffer(report, {
 See `src/cli/demo.ts` for a complete, runnable example (grouping, subtotals, running
 tokens, embedded fonts with a base-14 fallback).
 
+### Runnable JS-library examples
+
+Plain `.mjs` scripts under [`examples/`](./examples) show the package the way a JS caller uses it
+(`import { … } from 'pdf-report-engine'`). Build once, then run any file:
+
+```bash
+npm run build
+node examples/01-basic.mjs                 # minimal IR: heading, paragraph, static table
+node examples/02-data-table.mjs            # dataSource + grouping + subtotals + running footer
+node examples/03-from-html.mjs             # author with HTML via htmlToReportDoc
+node examples/04-create-report-stream.mjs  # createReport -> pipe the stream + read pages
+node examples/05-images.mjs                # images from bytes / path / online (resolveImage hook)
+```
+
+Each writes a PDF to `output/examples/`. They need no fonts (base-14 fallback) and no network.
+
 ### B. From the HTML subset
 
 ```ts
