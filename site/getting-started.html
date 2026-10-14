@@ -145,6 +145,16 @@ const pdf = await renderToBuffer(report);</code></pre>
       <p>The HTML subset understands <code>colspan</code>/<code>rowspan</code>, per-cell colours and
       borders, <code>data-band</code> for page headers/footers, and running <code>{PAGE}</code> tokens.
       A block-level <code>&lt;img&gt;</code> becomes an embedded image.</p>
+      <p>You can set the page from the document itself — no JS needed:</p>
+      <pre data-copy><code>&lt;style&gt;
+  @page { size: A4 landscape; margin: 15mm 18mm; }
+&lt;/style&gt;
+&lt;!-- or --&gt;
+&lt;meta name="pdf-page" content="size=letter; margin=0.5in" /&gt;</code></pre>
+      <p>Accepted: <code>size</code> = a named size (<code>a3 a4 a5 b4 b5 letter legal tabloid executive</code>),
+      <code>[w h]</code> in any unit, plus <code>portrait</code>/<code>landscape</code>; <code>margin</code> =
+      a CSS 1&ndash;4 value shorthand. A <code>page</code> passed to <code>htmlToReportDoc(html, { page })</code>
+      from JS overrides whatever the HTML declares.</p>
     </section>
 
     <section id="images">

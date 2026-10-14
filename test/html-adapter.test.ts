@@ -5,6 +5,8 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import { parseHtml, htmlToReportDoc, type HElement } from '../src/adapter/html.js';
+import { resolvePage } from '../src/core/page.js';
+import { MM_TO_PT } from '../src/core/units.js';
 import { renderToBuffer } from '../src/index.js';
 import type { TableBlock, Block, ParagraphBlock, HeadingBlock, ImageBlock, ContentSpan } from '../src/ir/schema.js';
 
@@ -170,5 +172,53 @@ describe('html adapter -> image block', () => {
   it('leaves data URIs and absolute URLs untouched', () => {
     const doc = htmlToReportDoc('<img src="https://x.test/a.png" width="40" />', { baseDir: '/reports' });
     expect((doc.body![0] as ImageBlock).src).toBe('https://x.test/a.png');
+  });
+});
+
+describe('html adapter -> page geometry (@page / meta)', () => {
+  it('parses size + orientation from an @page rule', () => {
+    const doc = htmlToReportDoc('<style>@page { size: A4 landscape; margin: 10mm; }</style><p>x</p>');
+    expect(doc.page?.size).toBe('a4');
+    expect(doc.page?.orientation).toBe('landscape');
+    const resolved = resolvePage(doc.page);
+    expect(resolved.width).toBeCloseTo(297 * MM_TO_PT, 1); // landscape swaps w/h
+    expect(resolved.height).toBeCloseTo(210 * MM_TO_PT, 1);
+    expect(resolved.margin.top).toBeCloseTo(10 * MM_TO_PT, 1);
+  });
+
+  it('normalizes a CSS margin shorthand to [top,right,bottom,left]', () => {
+    const doc = htmlToReportDoc('<style>@page { margin: 1cm 2cm 3cm 4cm; }</style>');
+    const m = resolvePage(doc.page).margin;
+    expect(m.top).toBeCloseTo(1 * 28.3465, 1);
+    expect(m.right).toBeCloseTo(2 * 28.3465, 1);
+    expect(m.bottom).toBeCloseTo(3 * 28.3465, 1);
+    expect(m.left).toBeCloseTo(4 * 28.3465, 1);
+  });
+
+  it('supports explicit [w h] dimensions in units', () => {
+    const doc = htmlToReportDoc('<style>@page { size: 100mm 150mm; }</style>');
+    expect(doc.page?.size).toEqual(['100mm', '150mm']);
+    const resolved = resolvePage(doc.page);
+    expect(resolved.width).toBeCloseTo(100 * MM_TO_PT, 1);
+    expect(resolved.height).toBeCloseTo(150 * MM_TO_PT, 1);
+  });
+
+  it('reads a <meta name="pdf-page"> and lets @page override it', () => {
+    const doc = htmlToReportDoc(
+      '<meta name="pdf-page" content="size=letter; margin=0.5in" /><style>@page { margin: 20mm; }</style>',
+    );
+    expect(doc.page?.size).toBe('letter'); // from meta
+    expect(doc.page?.margin).toEqual(['20mm', '20mm', '20mm', '20mm']); // @page wins
+  });
+
+  it('omits page entirely when the document declares none', () => {
+    const doc = htmlToReportDoc('<p>plain</p>');
+    expect(doc.page).toBeUndefined();
+  });
+
+  it('gives a JS-provided page option precedence over @page', () => {
+    const doc = htmlToReportDoc('<style>@page { size: a4; }</style>', { page: { size: 'legal', margin: 30 } });
+    expect(doc.page?.size).toBe('legal');
+    expect(doc.page?.margin).toBe(30);
   });
 });

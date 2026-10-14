@@ -16,6 +16,7 @@
  * `toPt`, matching the rest of the engine.
  */
 import { toPt } from '../core/units.js';
+import type { PageSpec } from '../core/page.js';
 import { isAbsolute, resolve } from 'node:path';
 import { exprSource } from '../expr/eval.js';
 import type {
@@ -598,6 +599,11 @@ export interface HtmlOptions {
   style?: Partial<StyleProps>;
   /** Base directory used to resolve relative `<img src>` paths (e.g. the HTML file's folder). */
   baseDir?: string;
+  /**
+   * Page geometry. Wins over any `@page` rule / `<meta name="pdf-page">` found in the
+   * HTML, so a JS caller can always override what the document declares.
+   */
+  page?: PageSpec;
   info?: ReportDoc['info'];
 }
 
@@ -638,6 +644,110 @@ function bandContent(el: HElement, opts: HtmlOptions): BandContent {
   return band;
 }
 
+// --- page geometry: `@page` rule + `<meta name="pdf-page">` ----------------
+
+const LENGTH_TOKEN = /^[0-9]*\.?[0-9]+(pt|mm|cm|in|px|%)?$/i;
+const IGNORED_PAGE_KEYWORDS = /^(auto|inherit|initial|unset)$/i;
+
+type PagePairs = Array<[string, string]>;
+
+// Split a declaration body (`a: b; c: d`) on `;` then the first `:`.
+function cssPairs(body: string): PagePairs {
+  return body
+    .split(';')
+    .map((seg) => {
+      const i = seg.indexOf(':');
+      return i < 0 ? ([seg, ''] as [string, string]) : ([seg.slice(0, i), seg.slice(i + 1)] as [string, string]);
+    });
+}
+
+// Split a meta `content` (`size=letter; margin=0.5in`) on `;`/`,`/newline then `=` or `:`.
+function attrPairs(content: string): PagePairs {
+  return content
+    .split(/[;,\n]+/)
+    .map((seg) => {
+      const i = seg.search(/[=:]/);
+      return i < 0 ? ([seg, ''] as [string, string]) : ([seg.slice(0, i), seg.slice(i + 1)] as [string, string]);
+    });
+}
+
+function applySize(target: PageSpec, value: string): void {
+  const tokens = value.trim().split(/\s+/).filter(Boolean);
+  let orientation: 'portrait' | 'landscape' | undefined;
+  let name: string | undefined;
+  const dims: string[] = [];
+  for (const t of tokens) {
+    const lower = t.toLowerCase();
+    if (lower === 'landscape' || lower === 'portrait') orientation = lower;
+    else if (IGNORED_PAGE_KEYWORDS.test(lower)) continue;
+    else if (LENGTH_TOKEN.test(t)) dims.push(t);
+    else name = lower;
+  }
+  if (dims.length >= 2) target.size = [dims[0]!, dims[1]!];
+  else if (name) target.size = name;
+  if (orientation) target.orientation = orientation;
+}
+
+// Normalize a CSS margin shorthand (1..4 values) to a `[top, right, bottom, left]`
+// tuple in the order `resolveMargins` expects (avoiding its 3-value ambiguity).
+function applyMargin(target: PageSpec, value: string): void {
+  const parts = value.trim().split(/\s+/).filter((p) => p && !IGNORED_PAGE_KEYWORDS.test(p));
+  if (parts.length === 0) return;
+  let top: string, right: string, bottom: string, left: string;
+  if (parts.length === 1) [top, right, bottom, left] = [parts[0]!, parts[0]!, parts[0]!, parts[0]!];
+  else if (parts.length === 2) [top, right, bottom, left] = [parts[0]!, parts[1]!, parts[0]!, parts[1]!];
+  else if (parts.length === 3) [top, right, bottom, left] = [parts[0]!, parts[1]!, parts[2]!, parts[1]!];
+  else [top, right, bottom, left] = [parts[0]!, parts[1]!, parts[2]!, parts[3]!];
+  target.margin = [top, right, bottom, left];
+}
+
+function applyPagePairs(target: PageSpec, pairs: PagePairs): void {
+  for (const [rawKey, rawVal] of pairs) {
+    const key = rawKey.trim().toLowerCase();
+    const val = rawVal.trim();
+    if (!key || !val) continue;
+    if (key === 'size') applySize(target, val);
+    else if (key === 'margin') applyMargin(target, val);
+    else if (key === 'orientation') {
+      const l = val.toLowerCase();
+      if (l === 'portrait' || l === 'landscape') target.orientation = l;
+    }
+  }
+}
+
+function findMetaPages(root: HElement): PagePairs[] {
+  const out: PagePairs[] = [];
+  const walk = (el: HElement): void => {
+    for (const c of el.children) {
+      if (c.type === 'element') {
+        if (c.tag === 'meta' && (c.attrs['name'] ?? '').toLowerCase() === 'pdf-page') {
+          out.push(attrPairs(c.attrs['content'] ?? ''));
+        }
+        walk(c);
+      }
+    }
+  };
+  walk(root);
+  return out;
+}
+
+/** Build a `PageSpec` from the document's `<meta name="pdf-page">` and `@page` rules. */
+function pageSpecFromHtml(html: string, root: HElement): PageSpec {
+  const spec: PageSpec = {};
+  // Meta provides defaults; a `@page` block (later in the cascade) overrides it.
+  for (const pairs of findMetaPages(root)) applyPagePairs(spec, pairs);
+  const rule = /@page[^{]*\{([^}]*)\}/gi;
+  let m: RegExpExecArray | null;
+  while ((m = rule.exec(html)) !== null) applyPagePairs(spec, cssPairs(m[1] ?? ''));
+  return spec;
+}
+
+function pickDefined<T extends object>(obj: T | undefined): Partial<T> {
+  const out: Record<string, unknown> = {};
+  if (obj) for (const [k, v] of Object.entries(obj)) if (v !== undefined) out[k] = v;
+  return out as Partial<T>;
+}
+
 /** Convert constrained authoring HTML into the report IR. */
 export function htmlToReportDoc(html: string, opts: HtmlOptions = {}): ReportDoc {
   const tree = parseHtml(html);
@@ -659,10 +769,15 @@ export function htmlToReportDoc(html: string, opts: HtmlOptions = {}): ReportDoc
     blocks.push(...elToBlock(child, opts));
   }
 
+  const htmlPage = pageSpecFromHtml(html, tree);
+  const page = { ...htmlPage, ...pickDefined(opts.page) };
+  const hasPage = Object.keys(page).length > 0;
+
   return {
     info: opts.info,
     data: opts.data,
     style: { ...opts.style, ...reportStyle },
+    ...(hasPage ? { page } : {}),
     ...(Object.keys(bands).length ? { bands } : {}),
     body: blocks,
   };

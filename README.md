@@ -23,6 +23,9 @@ glyph embedding all happen in-process via [`pdfkit`](https://pdfkit.org) +
 - **Sandboxed expression evaluator** — data bindings run inside a `Proxy`-whitelisted
   scope with a small function library; there is no raw `eval` of globals.
 - **HTML-subset adapter** so you can author with plain markup.
+- **`@page` control from HTML** — a `<style>@page { size: A4 landscape; margin: 15mm }</style>`
+  rule (or a `<meta name="pdf-page" content="size=letter; margin=0.5in">`) sets the page size,
+  orientation and margins; a JS-provided `page` option still wins.
 - **Measurement == rendering oracle** — text widths are measured through the exact code
   path pdfkit paints with, so wrapped lines never overflow their box.
 

@@ -106,7 +106,7 @@ const pdf = await renderToBuffer(report, {
     </section>
 
     <section id="ex-band">
-      <h3>Page bands &amp; running tokens</h3>
+      <h3>Page bands &amp; running tokens (IR)</h3>
       <p>Bands repeat on every page; <code>{PAGE}</code>/<code>{TOTAL}</code> (or <code>$page.number</code>/
       <code>$page.total</code> in expressions) resolve per page only inside bands.</p>
       <pre data-copy><code>bands: {
@@ -117,6 +117,84 @@ const pdf = await renderToBuffer(report, {
       content: ['Page ', { bind: '$page.number' }, ' of ', { bind: '$page.total' }] }],
   },
 }</code></pre>
+    </section>
+
+    <section id="ex-band-html">
+      <h3>Page bands in HTML (<code>data-band</code>)</h3>
+      <p>
+        The same bands authored in markup: tag any block-level element with
+        <code>data-band="…"</code> and the adapter lifts it out of the body flow into a repeated
+        page band. Supported types: <code>title</code>, <code>pageHeader</code>, <code>pageFooter</code>,
+        <code>summary</code>, <code>background</code>. An <code>height</code> on the element fixes the band
+        height; running tokens are written inline as <code>{PAGE}</code> / <code>{TOTAL}</code>.
+      </p>
+      <pre data-copy><code>&lt;header data-band="pageHeader" style="height:34pt; border-bottom:1px solid #dbe2ea"&gt;
+  &lt;h1 style="font-size:16pt; color:#1a3d6d"&gt;Quarterly Report&lt;/h1&gt;
+&lt;/header&gt;
+
+&lt;footer data-band="pageFooter" style="height:20pt; font-size:8pt; color:#666"&gt;
+  &lt;table&gt;
+    &lt;tr&gt;
+      &lt;td style="width:300pt"&gt;pdf-report-engine&lt;/td&gt;
+      &lt;td style="text-align:right"&gt;Page {PAGE} of {TOTAL}&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/table&gt;
+&lt;/footer&gt;
+
+&lt;section data-band="title"&gt;
+  &lt;h1&gt;Annual Summary&lt;/h1&gt;
+  &lt;p&gt;Shown once at the top of the first page.&lt;/p&gt;
+&lt;/section&gt;
+
+&lt;section data-band="summary" style="font-weight:bold"&gt;
+  Grand total: $1,240,000
+&lt;/section&gt;
+
+&lt;!-- Normal body flow, repeating under the pageHeader / above the pageFooter --&gt;
+&lt;p&gt;Body content …&lt;/p&gt;</code></pre>
+      <p>
+        Feed it through the adapter and render exactly like any other document — the bands repeat on
+        every page and <code>{PAGE}</code>/<code>{TOTAL}</code> resolve per page:
+      </p>
+      <pre data-copy><code>const report = htmlToReportDoc(html, { baseDir: 'samples' });
+const pdf = await renderToBuffer(report);</code></pre>
+      <p class="note" style="margin-top:12px">
+        The repo's <code>samples/</code> folder has runnable versions — <code>image.html</code> and
+        <code>annual-report.html</code> use <code>data-band</code> headers/footers.
+      </p>
+    </section>
+
+    <section id="ex-image-html">
+      <h3>Images in HTML (<code>&lt;img&gt;</code>)</h3>
+      <p>
+        A block-level <code>&lt;img&gt;</code> is embedded as a real PDF image object. Its
+        <code>src</code> may be a <strong>local path</strong>, a <strong><code>data:</code> URI</strong>,
+        or an <strong><code>http(s)</code> URL</strong> (the CLI/adapter fetches remote URLs at render
+        time). Relative paths resolve against <code>baseDir</code> (the CLI uses the HTML file's folder).
+        Give <code>width</code>/<code>height</code> as attributes or in <code>style</code>; supply just one
+        and the engine keeps the intrinsic aspect ratio.
+      </p>
+      <pre data-copy><code>&lt;!-- natural size, shrunk to fit the page --&gt;
+&lt;img src="assets/logo.png" alt="Logo"&gt;
+
+&lt;!-- width only: height follows the aspect ratio --&gt;
+&lt;img src="assets/logo.png" width="240"&gt;
+
+&lt;!-- alignment is the image's OWN text-align (it is a block) --&gt;
+&lt;img src="assets/logo.png" width="160" style="text-align:center"&gt;
+
+&lt;!-- explicit box + a ruled frame --&gt;
+&lt;img src="https://cdn.example.com/chart.png" width="220" height="80"
+     style="border:1px solid #b8c4d4; padding:4pt"&gt;</code></pre>
+      <p>Images also work inside repeated bands — a letterhead logo in a page header:</p>
+      <pre data-copy><code>&lt;header data-band="pageHeader" style="height:40pt; border-bottom:1px solid #dbe2ea"&gt;
+  &lt;img src="assets/logo.png" width="80" style="text-align:right"&gt;
+&lt;/header&gt;</code></pre>
+      <p class="note" style="margin-top:12px">
+        Images are <strong>block-level only</strong> — place <code>&lt;img&gt;</code> as its own element,
+        not inline inside a paragraph or a table cell. See <code>samples/image.html</code> (local) and
+        <code>samples/image-online.html</code> (remote) for runnable versions.
+      </p>
     </section>
   </main>
 
