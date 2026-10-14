@@ -4,6 +4,15 @@
   "description": "Real (vector, searchable-text) paginated PDF report engine: report IR -> layout -> pagination -> PDF. Pure JS, no Chromium.",
   "type": "module",
   "license": "MIT",
+  "author": "kenc90",
+  "homepage": "https://kenc90.github.io/pdf-report-engine/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kenc90/pdf-report-engine.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kenc90/pdf-report-engine/issues"
+  },
   "keywords": [
     "pdf",
     "report",
@@ -22,7 +31,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

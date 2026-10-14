@@ -8,6 +8,9 @@ No Chromium. No headless browser. No screenshots. Layout, line-breaking, paginat
 glyph embedding all happen in-process via [`pdfkit`](https://pdfkit.org) +
 [`fontkit`](https://github.com/foliojs/fontkit).
 
+> **Documentation site:** <https://kenc90.github.io/pdf-report-engine/> ·
+> **Source:** <https://github.com/kenc90/pdf-report-engine>
+
 ## Features
 
 - **Vector, text-selectable output** — fonts are embedded as `/Type0` → `/CIDFontType2`
@@ -428,4 +431,5 @@ so the model-level checks always run.
 
 ## License
 
-MIT
+[MIT](./LICENSE) — free to use, modify and redistribute, including commercially, as long as
+the copyright and license notice are retained.
