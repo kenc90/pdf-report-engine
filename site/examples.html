@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Examples · pdf-report-engine</title>
+  <meta name="description" content="Runnable JavaScript examples for pdf-report-engine: basic IR, data-driven tables, HTML authoring, streaming, images and merged cells." />
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <span class="brand">pdf-report-engine<span class="dot">.</span></span>
+      <nav class="nav">
+        <a href="index.html">Home</a>
+        <a href="getting-started.html">Getting started</a>
+        <a href="examples.html">Examples</a>
+        <a href="api.html">API</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section id="intro">
+      <h2>Runnable examples</h2>
+      <p>
+        The repo ships five plain <code>.mjs</code> scripts under <code>examples/</code> that consume the
+        package exactly like a JS caller (<code>import … from 'pdf-report-engine'</code>). Build once, then
+        run any file — each writes a PDF to <code>output/examples/</code>, needs no fonts and no network.
+      </p>
+      <pre data-copy><code>npm run build
+node examples/01-basic.mjs
+node examples/02-data-table.mjs
+node examples/03-from-html.mjs
+node examples/04-create-report-stream.mjs
+node examples/05-images.mjs</code></pre>
+      <table>
+        <thead><tr><th>File</th><th>Shows</th><th>Entry point</th></tr></thead>
+        <tbody>
+          <tr><td><code>01-basic.mjs</code></td><td>Minimal IR: heading, paragraph, static table</td><td><code>renderToBuffer</code></td></tr>
+          <tr><td><code>02-data-table.mjs</code></td><td>dataSource, grouping, subtotals, running footer, summary</td><td><code>renderToBuffer</code></td></tr>
+          <tr><td><code>03-from-html.mjs</code></td><td>Author with HTML via the adapter</td><td><code>htmlToReportDoc</code></td></tr>
+          <tr><td><code>04-create-report-stream.mjs</code></td><td>Live doc + paginated model; pipe the stream yourself</td><td><code>createReport</code></td></tr>
+          <tr><td><code>05-images.mjs</code></td><td>Images from bytes / path / online (<code>resolveImage</code>)</td><td><code>renderToBuffer</code></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="ex-stream">
+      <h3>Streaming with <code>createReport</code></h3>
+      <p>The lower-level, synchronous entry returns the pdfkit <code>doc</code> and the paginated
+      <code>pages</code> array, so you can pipe the bytes to any writable stream.</p>
+      <pre data-copy><code>import fs from 'node:fs';
+import { createReport } from 'pdf-report-engine';
+
+const { doc, pages } = createReport(report);
+console.log('paginated into', pages.length, 'page(s)');
+
+const out = fs.createWriteStream('output/stream.pdf');
+doc.pipe(out);
+doc.end();</code></pre>
+    </section>
+
+    <section id="ex-online">
+      <h3>Online images via a custom loader</h3>
+      <p>Point <code>src</code> at an <code>http(s)</code> URL and either let the built-in fetch run, or
+      inject a <code>resolveImage</code> hook (proxy / auth / cache / test fixtures).</p>
+      <pre data-copy><code>const report = {
+  body: [{ type: 'image', src: 'https://cdn.example.com/chart.png', width: 200, align: 'center' }],
+};
+
+const pdf = await renderToBuffer(report, {
+  images: {
+    resolveImage: async (url) =&gt; {
+      const res = await fetch(url);
+      return new Uint8Array(await res.arrayBuffer());
+    },
+    timeoutMs: 10000,
+    onError: 'throw',
+  },
+});</code></pre>
+    </section>
+
+    <section id="ex-merge">
+      <h3>Merged cells (<code>colSpan</code> / <code>rowSpan</code>)</h3>
+      <p>Horizontal and vertical merges work in both the IR and the HTML subset. Author them on
+      cells; the engine lays the run out as a single grid fragment so borders and fills line up.</p>
+      <pre data-copy><code>// IR: a banner cell spanning three columns
+{
+  type: 'table',
+  columns: [{ grow: 1 }, { grow: 1 }, { grow: 1 }],
+  staticRows: [
+    { cells: [{ content: 'Region summary', colSpan: 3,
+                align: 'center', backgroundColor: '#dce6f2', style: { fontWeight: 'bold' } }] },
+    { cells: [{ content: 'North' }, { content: 'Q1' }, { content: '$1,000' }] },
+    { cells: [{ content: '2026', rowSpan: 2 }, { content: 'Jan' }, { content: '$400' }] },
+    { cells: [                       { content: 'Feb' }, { content: '$600' }] },
+  ],
+}</code></pre>
+      <p>In HTML it is just the familiar attributes:</p>
+      <pre data-copy><code>&lt;table&gt;
+  &lt;tr&gt;&lt;th colspan="3"&gt;Region summary&lt;/th&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td rowspan="2"&gt;2026&lt;/td&gt;&lt;td&gt;Jan&lt;/td&gt;&lt;td&gt;$400&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;Feb&lt;/td&gt;&lt;td&gt;$600&lt;/td&gt;&lt;/tr&gt;
+&lt;/table&gt;</code></pre>
+    </section>
+
+    <section id="ex-band">
+      <h3>Page bands &amp; running tokens</h3>
+      <p>Bands repeat on every page; <code>{PAGE}</code>/<code>{TOTAL}</code> (or <code>$page.number</code>/
+      <code>$page.total</code> in expressions) resolve per page only inside bands.</p>
+      <pre data-copy><code>bands: {
+  pageHeader: { height: 34, blocks: [{ type: 'heading', level: 1, content: 'Quarterly Report' }] },
+  pageFooter: {
+    style: { fontSize: 8, color: '#666' },
+    blocks: [{ type: 'paragraph', align: 'right',
+      content: ['Page ', { bind: '$page.number' }, ' of ', { bind: '$page.total' }] }],
+  },
+}</code></pre>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <span>pdf-report-engine — documentation site (static).</span>
+      <span><a href="index.html">Home</a> · <a href="getting-started.html">Getting started</a> · <a href="api.html">API</a></span>
+    </div>
+  </footer>
+
+  <script src="assets/site.js"></script>
+</body>
+</html>

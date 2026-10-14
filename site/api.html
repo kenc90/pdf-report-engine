@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>API reference · pdf-report-engine</title>
+  <meta name="description" content="Public API for pdf-report-engine: createReport, renderToBuffer, the HTML adapter, font loading, render options and the ReportDoc IR." />
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <span class="brand">pdf-report-engine<span class="dot">.</span></span>
+      <nav class="nav">
+        <a href="index.html">Home</a>
+        <a href="getting-started.html">Getting started</a>
+        <a href="examples.html">Examples</a>
+        <a href="api.html">API</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section id="entry">
+      <h2>Entry points</h2>
+      <table>
+        <thead><tr><th>Export</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>createReport(report, options?)</code></td><td>Build the pdfkit doc + paginated <code>pages</code>; returns <code>{ doc, pages, registry }</code>. Synchronous; offline only.</td></tr>
+          <tr><td><code>renderToBuffer(report, options?)</code></td><td><code>createReport</code> + collect to a <code>Buffer</code>. Async; resolves remote images first.</td></tr>
+          <tr><td><code>htmlToReportDoc(html, options?)</code></td><td>HTML subset → <code>ReportDoc</code>.</td></tr>
+          <tr><td><code>parseHtml(html)</code></td><td>HTML subset → element tree (<code>HElement</code>) without converting.</td></tr>
+          <tr><td><code>readFontFiles(entries)</code></td><td>Load <code>FontFileEntry[]</code> (paths or bytes) → <code>FontSource[]</code>.</td></tr>
+          <tr><td><code>resolveRemoteImages(report, opts)</code></td><td>Run the URL→bytes pre-pass yourself (advanced).</td></tr>
+          <tr><td><code>FontRegistry</code></td><td>Lower-level face registration / measurement.</td></tr>
+          <tr><td><code>paginate</code></td><td>Drive the pagination engine directly against your own fragments.</td></tr>
+          <tr><td><code>resolvePage</code>, <code>toPt</code>, <code>expandBox</code>, <code>MM_TO_PT</code>, <code>CM_TO_PT</code>, <code>IN_TO_PT</code>, <code>PX_TO_PT</code></td><td>Page-size &amp; unit helpers (lengths default to points).</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="options">
+      <h2><code>RenderOptions</code></h2>
+      <pre data-copy><code>{
+  fonts?: FontSource[];                       // embedded font programs
+  now?: () => Date;                           // injectable clock (deterministic tests)
+  baseStyle?: Partial&lt;StyleProps&gt;;            // applied before IR style inheritance
+  images?: ImageResolveOptions;               // remote image handling (renderToBuffer only)
+}</code></pre>
+      <h3><code>ImageResolveOptions</code></h3>
+      <pre data-copy><code>{
+  fetchRemote?: boolean;                      // default true
+  timeoutMs?: number;                         // default 15000
+  maxBytes?: number;                          // default 25 MiB
+  resolveImage?: (url) => Promise&lt;Uint8Array | null&gt;; // proxy / auth / cache / fixtures
+  onError?: 'throw' | 'skip';                 // default 'throw'
+}</code></pre>
+    </section>
+
+    <section id="ir">
+      <h2>The <code>ReportDoc</code> IR</h2>
+      <p>Everything an adapter produces targets this plain data object.</p>
+      <pre data-copy><code>{
+  info?:    { title?, author?, subject?, keywords?, creator?, producer? },
+  page?:    { size?, margin?, ... },           // default A4, ~20mm margins
+  style?:   Partial&lt;StyleProps&gt;,               // the report's base style
+  data?:    Record&lt;string, unknown&gt;,           // $data / bindings
+  variables?: Record&lt;string, unknown&gt;,         // $vars (precomputed totals)
+  bands?:   { title?, pageHeader?, pageFooter?, summary?, background? },
+  body?:    Block[],
+}</code></pre>
+
+      <h3>Blocks</h3>
+      <table>
+        <thead><tr><th>Block</th><th>Key fields</th></tr></thead>
+        <tbody>
+          <tr><td><code>heading</code></td><td><code>content</code>, <code>level</code>, style/box props, <code>outline</code></td></tr>
+          <tr><td><code>paragraph</code></td><td><code>content</code> (string | number | span | array), style/box props</td></tr>
+          <tr><td><code>table</code></td><td><code>columns</code>, <code>headerRows</code>, <code>footerRows</code>, <code>staticRows</code>, <code>dataSource</code>, <code>detail</code>, <code>groups</code>, <code>showGrid</code>, <code>striped</code>, <code>repeatHeader</code>, <code>rowStyle</code></td></tr>
+          <tr><td><code>image</code></td><td><code>src</code> (path / data: / bytes / URL), <code>width</code>, <code>height</code>, <code>intrinsic</code>, <code>alt</code></td></tr>
+          <tr><td><code>spacer</code></td><td><code>size</code></td></tr>
+          <tr><td><code>pageBreak</code></td><td><code>always</code></td></tr>
+        </tbody>
+      </table>
+
+      <h3>Cells &amp; columns</h3>
+      <pre data-copy><code>ColumnNode: { width?, grow?, minWidth?, align?, style?, key? }
+CellNode:   { content?, colSpan?, rowSpan?, align?, verticalAlign?, style?,
+              backgroundColor?, border?, padding*?, subtotal?, format? }</code></pre>
+
+      <h3>Content &amp; bindings</h3>
+      <p>A <code>Content</code> is a string, number, span, or an array of them. Spans bind to data:</p>
+      <pre data-copy><code>'Revenue'                                  // literal
+{ bind: 'amount', format: '#,##0.00' }     // field + number format
+['Page ', { bind: '$page.number' }]         // mixed array
+{ bind: "concat('Total: ', money($vars.grandTotal))" }  // sandboxed expression</code></pre>
+    </section>
+
+    <section id="types">
+      <h2>Exported types</h2>
+      <p>
+        <code>ReportDoc</code>, <code>Block</code>, <code>ParagraphBlock</code>, <code>HeadingBlock</code>,
+        <code>TableBlock</code>, <code>SpacerBlock</code>, <code>PageBreakBlock</code>, <code>ImageBlock</code>,
+        <code>BandContent</code>, <code>BandType</code>, <code>StyleProps</code>, <code>BoxProps</code>,
+        <code>Content</code>, <code>ContentSpan</code>, <code>ColumnNode</code>, <code>RowNode</code>,
+        <code>CellNode</code>, <code>GroupNode</code>, <code>DataSource</code>, <code>Expr</code>,
+        <code>RenderOptions</code>, <code>ImageResolveOptions</code>.
+      </p>
+    </section>
+
+    <section id="pagination">
+      <h2>Pagination model</h2>
+      <p>
+        Rendering runs in three passes: measure fixed bands against a placeholder, flow the body with
+        break/keep rules and repeated headers, then re-flow the bands with the real <code>$page</code>
+        so running tokens are correct. Layout never touches pdfkit, and the writer translates
+        fragment-local coordinates into absolute page space.
+      </p>
+    </section>
+
+    <section id="layout-src">
+      <h2>Source layout</h2>
+      <pre data-copy><code>src/
+  ir/          ReportDoc IR schema
+  core/        page sizes + unit conversion + image probing/remote resolution
+  fonts/       font registry + metrics (measure/render oracle)
+  text/        style resolution + line breaking / typesetting
+  layout/      block &amp; table layout, column sizing, fragments
+  pagination/  three-pass band paginator
+  expr/        sandboxed expression evaluator + function library
+  writer/      pdfkit writer (draws fragments, embeds fonts)
+  adapter/     HTML-subset -> IR adapter
+  render.ts    createReport / renderToBuffer orchestration</code></pre>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <span>pdf-report-engine — documentation site (static).</span>
+      <span><a href="index.html">Home</a> · <a href="getting-started.html">Getting started</a> · <a href="examples.html">Examples</a></span>
+    </div>
+  </footer>
+
+  <script src="assets/site.js"></script>
+</body>
+</html>

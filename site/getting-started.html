@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Getting started · pdf-report-engine</title>
+  <meta name="description" content="Install pdf-report-engine, build your first report, embed fonts, render data-driven tables, use the HTML adapter and the CLI." />
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <span class="brand">pdf-report-engine<span class="dot">.</span></span>
+      <nav class="nav">
+        <a href="index.html">Home</a>
+        <a href="getting-started.html">Getting started</a>
+        <a href="examples.html">Examples</a>
+        <a href="api.html">API</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section id="requirements">
+      <h2>Requirements</h2>
+      <ul>
+        <li><strong>Node.js ≥ 18</strong> — the package is ESM-only (<code>"type": "module"</code>).</li>
+        <li>Runtime dependencies: <code>pdfkit</code> and <code>fontkit</code>. Everything else is a dev dependency.</li>
+      </ul>
+    </section>
+
+    <section id="install">
+      <h2>Install</h2>
+      <pre data-copy><code>npm install pdf-report-engine</code></pre>
+      <p>Building from source:</p>
+      <pre data-copy><code>npm install     # dev dependencies
+npm run build   # compile TypeScript -> dist/ (JS + .d.ts)</code></pre>
+      <div class="note">
+        After <code>npm run build</code>, the package's <code>exports</code> map points at <code>dist/</code>,
+        so you can <code>import { renderToBuffer } from 'pdf-report-engine'</code> from any ESM project.
+      </div>
+    </section>
+
+    <section id="first-report">
+      <h2>Your first report (IR)</h2>
+      <p>The report is a plain data object — <code>ReportDoc</code>. It is serialisable, diffable and
+      validatable without any parser.</p>
+      <pre data-copy><code>import fs from 'node:fs';
+import { renderToBuffer } from 'pdf-report-engine';
+
+const report = {
+  info: { title: 'Hello, PDF' },
+  page: { size: 'a4', margin: 56 },
+  style: { fontFamily: 'Helvetica', fontSize: 11, color: '#222' },
+  body: [
+    { type: 'heading', level: 1, content: 'Quarterly Snapshot', color: '#1a3d6d' },
+    { type: 'paragraph', content: 'A vector PDF with selectable text — no browser involved.' },
+  ],
+};
+
+const pdf = await renderToBuffer(report);
+fs.writeFileSync('output/hello.pdf', pdf);</code></pre>
+      <p>Without embedding fonts, the standard PDF <em>base-14</em> fonts (like <code>Helvetica</code>)
+      render out of the box, so a first report needs nothing installed.</p>
+    </section>
+
+    <section id="fonts">
+      <h2>Embedding fonts</h2>
+      <p>To use real font programs (and non-Latin scripts), register them with
+      <code>readFontFiles</code>. It reads from disk paths or from bytes you already have.</p>
+      <pre data-copy><code>import { renderToBuffer, readFontFiles } from 'pdf-report-engine';
+
+const fonts = await readFontFiles([
+  { family: 'Arial', path: 'C:/Windows/Fonts/arial.ttf',  weight: 400 },
+  { family: 'Arial', path: 'C:/Windows/Fonts/arialbd.ttf', weight: 700 },
+]);
+
+const pdf = await renderToBuffer(report, { fonts });</code></pre>
+      <div class="note">
+        Prefer a graceful fallback: filter candidates with <code>fs.existsSync()</code> and pass
+        <code>fonts: []</code> when none are found — the base-14 fonts still render, so the report
+        never hard-fails on a machine with no system fonts.
+      </div>
+    </section>
+
+    <section id="data-table">
+      <h2>Data-driven tables</h2>
+      <p>Feed an array into <code>dataSource</code>; the <code>detail</code> template expands once
+      per row, <code>groups</code> produce breaks and subtotal footers, and <code>repeatHeader</code>
+      keeps column headers on every page.</p>
+      <pre data-copy><code>const rows = [
+  { region: 'North', product: 'Widget', qty: 12, amount: 2400 },
+  { region: 'South', product: 'Gizmo',  qty:  3, amount:  990 },
+  // ...
+];
+
+const report = {
+  data: { rows },
+  bands: {
+    pageFooter: {
+      style: { fontSize: 8, color: '#666' },
+      blocks: [{ type: 'paragraph', align: 'right',
+        content: ['Page ', { bind: '$page.number' }, ' of ', { bind: '$page.total' }] }],
+    },
+  },
+  body: [{
+    type: 'table',
+    showGrid: true, striped: true, repeatHeader: true,
+    dataSource: { bind: '$data.rows' },
+    columns: [
+      { key: 'region', grow: 1 }, { key: 'product', grow: 2 },
+      { key: 'qty', width: 50, align: 'right' },
+      { key: 'amount', width: 110, align: 'right' },
+    ],
+    headerRows: [{ kind: 'header', cells:
+      ['Region', 'Product', 'Qty', 'Amount'].map(c => ({
+        content: c, style: { fontWeight: 'bold', color: '#fff' }, backgroundColor: '#1a3d6d' })) }],
+    groups: [{
+      by: '$row.region',
+      footer: [{ bind: "concat('Subtotal: ', money($group.amount_sum))" }],
+      footerStyle: { fontWeight: 'bold', align: 'right' },
+    }],
+    detail: { cells: [
+      { bind: 'region' }, { bind: 'product' }, { bind: 'qty' },
+      { bind: 'amount', format: '#,##0.00' },
+    ] },
+  }],
+};</code></pre>
+    </section>
+
+    <section id="from-html">
+      <h2>Author with HTML</h2>
+      <p>Prefer markup? The adapter parses a forgiving HTML/CSS subset into the same IR.</p>
+      <pre data-copy><code>import { renderToBuffer, htmlToReportDoc } from 'pdf-report-engine';
+
+const html = `
+  &lt;h1 style="color:#1a3d6d"&gt;Invoice #A-1001&lt;/h1&gt;
+  &lt;table&gt;
+    &lt;tr&gt;&lt;th&gt;Item&lt;/th&gt;&lt;th&gt;Price&lt;/th&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;Widget&lt;/td&gt;&lt;td&gt;$19.00&lt;/td&gt;&lt;/tr&gt;
+  &lt;/table&gt;`;
+
+const report = htmlToReportDoc(html, { baseDir: process.cwd(), style: { fontFamily: 'Helvetica' } });
+const pdf = await renderToBuffer(report);</code></pre>
+      <p>The HTML subset understands <code>colspan</code>/<code>rowspan</code>, per-cell colours and
+      borders, <code>data-band</code> for page headers/footers, and running <code>{PAGE}</code> tokens.
+      A block-level <code>&lt;img&gt;</code> becomes an embedded image.</p>
+    </section>
+
+    <section id="images">
+      <h2>Images (offline &amp; online)</h2>
+      <p>An <code>ImageBlock</code> takes a local path, a <code>data:</code> URI, raw bytes, or an
+      <code>http(s)</code> URL. Offline sources render synchronously; remote URLs are fetched by
+      <code>renderToBuffer</code>'s pre-pass.</p>
+      <pre data-copy><code>import fs from 'node:fs';
+
+const report = {
+  body: [
+    { type: 'image', src: 'assets/logo.png', width: 200, align: 'center' },     // local path
+    { type: 'image', src: fs.readFileSync('chart.png') },                        // raw bytes
+    { type: 'image', src: 'https://cdn.example.com/chart.png', width: 300 },     // online
+  ],
+};
+
+const pdf = await renderToBuffer(report, {
+  images: { timeoutMs: 10000, maxBytes: 5000000, onError: 'skip' },
+});</code></pre>
+    </section>
+
+    <section id="cli">
+      <h2>The CLI</h2>
+      <p>Convert authoring HTML files to PDF, or build the bundled demo report.</p>
+      <pre data-copy><code># HTML -> PDF (relative image paths resolve against the HTML file's folder)
+npx tsx src/cli/html-to-pdf.ts samples/annual-report.html -o output/
+
+# Build the sample multi-page report -> output/demo.pdf
+npm run demo</code></pre>
+      <p>Then explore the runnable library scripts in the <a href="examples.html">Examples</a> page,
+      or read the full surface on the <a href="api.html">API reference</a>.</p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <span>pdf-report-engine — documentation site (static).</span>
+      <span><a href="index.html">Home</a> · <a href="examples.html">Examples</a> · <a href="api.html">API</a></span>
+    </div>
+  </footer>
+
+  <script src="assets/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>pdf-report-engine — pure-JS paginated PDF report engine</title>
+  <meta name="description" content="A pure-JavaScript paginated PDF report engine: report IR or HTML to real vector PDFs with selectable text and Jasper-style pagination. No Chromium." />
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <span class="brand">pdf-report-engine<span class="dot">.</span></span>
+      <nav class="nav">
+        <a href="index.html">Home</a>
+        <a href="getting-started.html">Getting started</a>
+        <a href="examples.html">Examples</a>
+        <a href="api.html">API</a>
+      </nav>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="wrap">
+      <h1>Real PDF reports, from pure JavaScript.</h1>
+      <p class="lead">
+        Turn a report <em>IR</em> — or a small subset of authoring HTML — into a
+        <strong>vector PDF with selectable, searchable text</strong> and
+        <strong>Jasper-style band pagination</strong>. No Chromium. No headless browser. No screenshots.
+      </p>
+      <div class="cta">
+        <a class="btn" href="getting-started.html">Get started</a>
+        <a class="btn ghost" href="examples.html">See examples</a>
+      </div>
+      <div class="badges">
+        <span class="badge">Node ≥ 18</span>
+        <span class="badge">ESM</span>
+        <span class="badge">pdfkit + fontkit</span>
+        <span class="badge">MIT</span>
+      </div>
+    </div>
+  </section>
+
+  <main>
+    <section id="why">
+      <h2>Why this, and not HTML→PDF?</h2>
+      <p>
+        Most "HTML to PDF" tools drive a headless browser and screenshot the page — the result is
+        an image, text is not selectable, and pagination is an afterthought. <code>pdf-report-engine</code>
+        lays out, line-breaks, paginates and embeds glyphs <em>in-process</em>, emitting true vector
+        text. It is built for <strong>reports</strong>: repeated column headers, group breaks, subtotals,
+        running page numbers, and band-based page headers/footers.
+      </p>
+    </section>
+
+    <section id="features">
+      <h2>Features</h2>
+      <div class="grid">
+        <div class="card">
+          <h4>Vector, selectable text</h4>
+          <p>Fonts embed as <code>/Type0</code> → <code>/CIDFontType2</code> composites with a
+          <code>/ToUnicode</code> CMap, so text extracts cleanly — including CJK.</p>
+        </div>
+        <div class="card">
+          <h4>Band pagination</h4>
+          <p>Jasper-style bands: <code>title</code>, <code>pageHeader</code>, <code>detail</code>,
+          <code>groupHeader/Footer</code>, <code>pageFooter</code>, <code>summary</code>.</p>
+        </div>
+        <div class="card">
+          <h4>Repeated headers &amp; groups</h4>
+          <p>Table column headers repeat on every page; groups carry subtotal footers with
+          keep rules and widow/orphan control.</p>
+        </div>
+        <div class="card">
+          <h4>Running tokens</h4>
+          <p><code>{PAGE}</code> / <code>{TOTAL}</code> / <code>{TOP}</code> resolved per page
+          inside bands.</p>
+        </div>
+        <div class="card">
+          <h4>Two authoring modes</h4>
+          <p>Hand-build the <code>ReportDoc</code> IR in JS, or feed an HTML subset through
+          <code>htmlToReportDoc()</code>.</p>
+        </div>
+        <div class="card">
+          <h4>Merged cells</h4>
+          <p>Horizontal <code>colSpan</code> and vertical <code>rowSpan</code> merges, including
+          combinations in one grid.</p>
+        </div>
+        <div class="card">
+          <h4>Images — offline &amp; online</h4>
+          <p>Local paths, <code>data:</code> URIs, raw bytes, and <code>http(s)</code> URLs —
+          with aspect-ratio sizing, alignment and borders.</p>
+        </div>
+        <div class="card">
+          <h4>Sandboxed expressions</h4>
+          <p>Data bindings evaluate inside a <code>Proxy</code>-whitelisted scope — no raw
+          <code>eval</code> of globals.</p>
+        </div>
+        <div class="card">
+          <h4>Measure == render</h4>
+          <p>Text widths are measured through the exact code path pdfkit paints with, so wrapped
+          lines never overflow their box.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="pipeline">
+      <h2>How it works</h2>
+      <p>Two entry points funnel through one pipeline:</p>
+      <pre data-copy><code>authoring (IR or HTML)  →  ReportDoc IR  →  layout  →  pagination  →  pdfkit writer  →  PDF bytes</code></pre>
+      <ul>
+        <li><a href="api.html"><code>renderToBuffer(report, options?)</code></a> — one-shot: IR in, PDF bytes out.</li>
+        <li><a href="api.html"><code>createReport(report, options?)</code></a> — the live pdfkit doc plus the paginated <code>pages</code> model, so you can stream yourself.</li>
+      </ul>
+    </section>
+
+    <section id="quick">
+      <h2>60-second taste</h2>
+      <pre data-copy><code>import fs from 'node:fs';
+import { renderToBuffer } from 'pdf-report-engine';
+
+const report = {
+  info: { title: 'Hello, PDF' },
+  page: { size: 'a4', margin: 56 },
+  style: { fontFamily: 'Helvetica', fontSize: 11 },
+  body: [
+    { type: 'heading', level: 1, content: 'Quarterly Snapshot' },
+    { type: 'paragraph', content: 'Built entirely in JavaScript — no browser.' },
+  ],
+};
+
+const pdf = await renderToBuffer(report);
+fs.writeFileSync('report.pdf', pdf);</code></pre>
+      <p>Continue to <a href="getting-started.html">Getting started</a> for fonts, data-driven tables and the CLI.</p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <span>pdf-report-engine — documentation site (static).</span>
+      <span>MIT License · pdfkit + fontkit</span>
+    </div>
+  </footer>
+
+  <script src="assets/site.js"></script>
+</body>
+</html>
