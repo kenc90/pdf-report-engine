@@ -6,7 +6,7 @@ import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import { parseHtml, htmlToReportDoc, type HElement } from '../src/adapter/html.js';
 import { renderToBuffer } from '../src/index.js';
-import type { TableBlock, Block, ParagraphBlock, HeadingBlock, ContentSpan } from '../src/ir/schema.js';
+import type { TableBlock, Block, ParagraphBlock, HeadingBlock, ImageBlock, ContentSpan } from '../src/ir/schema.js';
 
 const ARIAL = 'C:/Windows/Fonts/arial.ttf';
 
@@ -145,5 +145,30 @@ describe('htmlToReportDoc: end to end', { timeout: 20000 }, () => {
     expect(latin).toContain('%%EOF');
     if (fonts.length) expect(latin).toContain('/ToUnicode');
     void (doc.body![0] as Block);
+  });
+});
+
+describe('html adapter -> image block', () => {
+  it('maps a block-level <img> to an ImageBlock with width/height/align', () => {
+    const doc = htmlToReportDoc('<img src="logo.png" width="120" height="80" style="text-align: center" alt="Brand" />');
+    const img = doc.body![0] as ImageBlock;
+    expect(img.type).toBe('image');
+    expect(img.src).toBe('logo.png');
+    expect(img.alt).toBe('Brand');
+    expect(String(img.width)).toBe('120px');
+    expect(String(img.height)).toBe('80px');
+    expect(img.align).toBe('center');
+  });
+
+  it('resolves a relative src against baseDir', () => {
+    const doc = htmlToReportDoc('<img src="assets/logo.png" width="60" />', { baseDir: '/reports' });
+    const img = doc.body![0] as ImageBlock;
+    expect(img.src).toMatch(/assets[\\/]logo\.png$/);
+    expect(img.src).not.toBe('assets/logo.png'); // made absolute
+  });
+
+  it('leaves data URIs and absolute URLs untouched', () => {
+    const doc = htmlToReportDoc('<img src="https://x.test/a.png" width="40" />', { baseDir: '/reports' });
+    expect((doc.body![0] as ImageBlock).src).toBe('https://x.test/a.png');
   });
 });

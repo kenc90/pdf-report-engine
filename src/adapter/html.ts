@@ -16,6 +16,7 @@
  * `toPt`, matching the rest of the engine.
  */
 import { toPt } from '../core/units.js';
+import { isAbsolute, resolve } from 'node:path';
 import { exprSource } from '../expr/eval.js';
 import type {
   ReportDoc,
@@ -370,7 +371,7 @@ function isBlock(node: HNode): node is HElement {
   return node.type === 'element' && BLOCK_TAGS.has(node.tag);
 }
 
-const BLOCK_TAGS = new Set(['p', 'div', 'section', 'article', 'header', 'footer', 'main', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'table', 'ul', 'ol', 'li', 'hr', 'blockquote']);
+const BLOCK_TAGS = new Set(['p', 'div', 'section', 'article', 'header', 'footer', 'main', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'table', 'ul', 'ol', 'li', 'hr', 'img', 'blockquote']);
 
 /** Inline content of an element (its text + nested inline spans). */
 function inlineContent(el: HElement, opts: HtmlOptions, inherited: IrBox): Content {
@@ -435,6 +436,16 @@ function elToBlock(el: HElement, opts: HtmlOptions): Block[] {
     return [{ type: 'heading', level: Number(heading[1]), content: leafContent(el, opts, style), ...style } as Block];
   }
   if (el.tag === 'table') return [tableBlock(el, opts, style)];
+  if (el.tag === 'img') {
+    const block: Record<string, unknown> = { type: 'image', src: resolveImageSrc(el.attrs['src'] ?? '', opts), ...style };
+    // `width`/`height` HTML attributes are CSS pixels; honour them when inline
+    // style did not already set a size. Omitting one lets layout infer it from
+    // the image's intrinsic aspect ratio.
+    if (block.width === undefined && el.attrs['width'] !== undefined) block.width = `${el.attrs['width']}px`;
+    if (block.height === undefined && el.attrs['height'] !== undefined) block.height = `${el.attrs['height']}px`;
+    if (el.attrs['alt'] !== undefined) block.alt = el.attrs['alt'];
+    return [block as unknown as Block];
+  }
 
   const blockChildren = el.children.filter(isBlock);
   if (blockChildren.length > 0) {
@@ -585,7 +596,16 @@ export interface HtmlOptions {
   data?: Record<string, unknown>;
   /** Report-level base style, merged under `<body style>`. */
   style?: Partial<StyleProps>;
+  /** Base directory used to resolve relative `<img src>` paths (e.g. the HTML file's folder). */
+  baseDir?: string;
   info?: ReportDoc['info'];
+}
+
+/** Resolve an `<img>` `src`: absolute paths, `data:` URIs and URLs pass through;
+ *  relative paths are joined against `baseDir` when it is set. */
+function resolveImageSrc(src: string, opts: HtmlOptions): string {
+  if (!src || /^(data:|https?:|file:)/i.test(src) || isAbsolute(src)) return src;
+  return opts.baseDir ? resolve(opts.baseDir, src) : src;
 }
 
 function findFirst(root: HElement, tag: string): HElement | undefined {

@@ -116,6 +116,25 @@ export interface PageBreakBlock extends BlockBase {
   always?: boolean;
 }
 
+/**
+ * A raster image block (PNG / JPEG / GIF / BMP). `src` is a filesystem path, a
+ * `data:` URI, or raw bytes; the writer hands it to pdfkit unchanged.
+ *
+ * Sizing rules resolved at layout time (see `core/image.ts`):
+ *  - `width`/`height` (any `Length`, default unit pt) are honoured exactly;
+ *  - when only one is given, the other follows the image's intrinsic aspect
+ *    ratio (read from the file header — no pdfkit in the layout pass);
+ *  - with neither given, the intrinsic size (px → pt at 96 dpi) is used, capped
+ *    to the content width.
+ */
+export interface ImageBlock extends BlockBase {
+  type: 'image';
+  src: string | Uint8Array;
+  /** Explicit intrinsic size (px); probed from `src` when omitted. */
+  intrinsic?: { width: number; height: number };
+  alt?: string;
+}
+
 /** A single row of a `table`, produced by expanding a `dataSource`. */
 export interface RowNode {
   cells: CellNode[];
@@ -209,7 +228,7 @@ export interface TableBlock extends BlockBase {
   subtotalToken?: string;
 }
 
-export type Block = ParagraphBlock | HeadingBlock | TableBlock | SpacerBlock | PageBreakBlock;
+export type Block = ParagraphBlock | HeadingBlock | TableBlock | SpacerBlock | PageBreakBlock | ImageBlock;
 
 export type BandType = 'pageHeader' | 'pageFooter' | 'title' | 'summary' | 'background';
 

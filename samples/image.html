@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Images in Reports</title>
+    <style>
+      body { font-family: Arial; font-size: 11pt; color: #1f2933; line-height: 1.5; }
+      h1 { font-size: 20pt; color: #0f2f57; margin-bottom: 2pt; }
+      h2 { font-size: 13pt; color: #0f2f57; margin-top: 18pt; margin-bottom: 6pt;
+           border-bottom: 2px solid #e08a1e; padding-bottom: 3pt; }
+      p.lead { color: #52606d; font-size: 9.5pt; margin: 0 0 10pt 0; }
+      .cap { font-size: 8pt; color: #7b8794; margin: 4pt 0 16pt 0; }
+    </style>
+  </head>
+  <body>
+    <!-- A logo in a repeated pageHeader band paints on every page. -->
+    <header data-band="pageHeader" style="height: 40pt; border-bottom: 1px solid #dbe2ea">
+      <img src="assets/logo.png" width="80" style="text-align: right" alt="Northwind" />
+    </header>
+    <footer data-band="pageFooter" style="height: 20pt; font-size: 8.5pt; color: #7b8794">
+      <table>
+        <tr>
+          <td style="width: 300pt">pdf-report-engine &mdash; image support</td>
+          <td style="text-align: right">Page {PAGE} of {TOTAL}</td>
+        </tr>
+      </table>
+    </footer>
+
+    <h1>Images</h1>
+    <p class="lead">
+      Raster images (PNG / JPEG / GIF / BMP) are embedded as real PDF image objects,
+      so they stay crisp and non-selectable. Sizes are resolved at layout time from the
+      file header, and the intrinsic aspect ratio is always preserved. Images are
+      block-level: place them as their own element and align them with <code>text-align</code>.
+    </p>
+
+    <h2>1. Full intrinsic size (auto-capped to the page)</h2>
+    <p class="lead">No <code>width</code>/<code>height</code>: the 600&times;260 logo renders at its native 450&times;195 pt, shrunk to fit the content width.</p>
+    <img src="assets/logo.png" alt="logo natural size" />
+    <p class="cap">&lt;img src="assets/logo.png"&gt;</p>
+
+    <h2>2. Width only &mdash; height follows the aspect ratio</h2>
+    <p class="lead">Give only <code>width="240"</code>; the height is derived (240 &times; 260/600 &asymp; 104 pt).</p>
+    <img src="assets/logo.png" width="240" alt="logo 240 wide" />
+    <p class="cap">&lt;img src="assets/logo.png" width="240"&gt;</p>
+
+    <h2>3. Alignment</h2>
+    <p class="lead">A block image honours its own <code>text-align</code> within the content area.</p>
+    <img src="assets/logo.png" width="160" style="text-align: center" alt="centered" />
+    <img src="assets/logo.png" width="120" style="text-align: right" alt="right aligned" />
+    <p class="cap">centered and right-aligned copies</p>
+
+    <h2>4. Border and explicit box</h2>
+    <p class="lead">Both dimensions fixed, with a ruled frame drawn around the image.</p>
+    <img src="assets/logo.png" width="220" height="80" style="border: 1px solid #b8c4d4; padding: 4pt; text-align: center" alt="framed" />
+    <p class="cap">a bordered placement at 220&times;80 pt</p>
+
+    <p style="break-before: page; font-size: 8pt; color: #94a3b8; letter-spacing: 1pt; text-transform: uppercase">Second page</p>
+    <p>
+      The page-header logo repeats here, confirming images also work inside repeated
+      bands. Body content flows around them and paginates normally.
+    </p>
+    <img src="assets/logo.png" width="180" alt="repeated context" />
+    <p class="cap">image on a later page, with the header band repeated above.</p>
+  </body>
+</html>

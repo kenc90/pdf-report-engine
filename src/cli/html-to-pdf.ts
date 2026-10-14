@@ -205,7 +205,11 @@ async function main(): Promise<void> {
   for (const file of files) {
     try {
       const html = fs.readFileSync(file, 'utf8');
-      const report = htmlToReportDoc(html, { data: dataFor(file), style: { fontSize: opts.baseFontSize } });
+      const report = htmlToReportDoc(html, {
+        data: dataFor(file),
+        style: { fontSize: opts.baseFontSize },
+        baseDir: path.dirname(path.resolve(file)),
+      });
       const buffer = await renderToBuffer(report, { fonts });
       const out = outputPathFor(file, opts, single);
       fs.writeFileSync(out, buffer);

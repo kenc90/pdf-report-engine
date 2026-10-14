@@ -7,8 +7,9 @@ import { FontRegistry, HeuristicFontHandle } from '../src/fonts/registry.js';
 import { resolveStyle } from '../src/text/style.js';
 import { LayoutContext } from '../src/layout/context.js';
 import { layoutBlock } from '../src/layout/block.js';
-import type { ReportDoc, TableBlock, ParagraphBlock } from '../src/ir/schema.js';
+import type { ReportDoc, TableBlock, ParagraphBlock, ImageBlock } from '../src/ir/schema.js';
 import type { Fragment } from '../src/layout/flow.js';
+import { probeImageSize } from '../src/core/image.js';
 
 function makeCtx(): LayoutContext {
   const registry = new FontRegistry();
@@ -118,6 +119,40 @@ describe('table layout', () => {
     const horizontals = lineSegs(frags[0]!).filter((c) => Math.abs(c.y1 - c.y2) < 0.01);
     const maxHoriz = Math.max(...horizontals.map((c) => Math.abs(c.x2 - c.x1)));
     expect(maxHoriz).toBeGreaterThan(90 * 0.55);
+  });
+});
+
+describe('image layout', () => {
+  it('reads intrinsic size from a PNG header without decoding pixels', () => {
+    const header = new Uint8Array(24);
+    header.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52], 0);
+    const dv = new DataView(header.buffer);
+    dv.setUint32(16, 320);
+    dv.setUint32(20, 200);
+    expect(probeImageSize(header)).toEqual({ width: 320, height: 200 });
+  });
+
+  it('derives height from the aspect ratio when only width is given', () => {
+    const ctx = makeCtx();
+    const img = { type: 'image', src: '/none', intrinsic: { width: 600, height: 300 }, width: 120 } as unknown as ImageBlock;
+    const frags = layoutBlock(img, ctx, opts(400));
+    expect(frags).toHaveLength(1);
+    expect(frags[0]!.height).toBeCloseTo(60, 3); // 120 * 300/600
+    expect(frags[0]!.avoidSplit).toBe(true);
+    expect(frags[0]!.commands[0]!.op).toBe('image');
+  });
+
+  it('caps an undersized box to content width and honours center alignment', () => {
+    const ctx = makeCtx();
+    const img = { type: 'image', src: '/none', intrinsic: { width: 100, height: 100 }, width: 100, align: 'center' } as unknown as ImageBlock;
+    const frags = layoutBlock(img, ctx, opts(400));
+    const cmd = frags[0]!.commands[0]!;
+    expect(cmd.op).toBe('image');
+    if (cmd.op === 'image') {
+      expect(cmd.x).toBeCloseTo(150, 3); // (400 - 100) / 2
+      expect(cmd.w).toBeCloseTo(100, 3);
+      expect(cmd.h).toBeCloseTo(100, 3);
+    }
   });
 });
 

@@ -136,6 +136,25 @@ const pdf = await renderToBuffer(report, { fonts });
 // `pdf` is a Buffer of the complete PDF; write it or stream it.
 ```
 
+Images — offline sources are handled by `createReport`; online `http(s)` sources are fetched by
+`renderToBuffer`'s pre-pass (control it with the `images` option, or inject your own loader):
+
+```ts
+const report: ReportDoc = {
+  body: [
+    { type: 'image', src: 'assets/logo.png' },                 // local path (relative to baseDir)
+    { type: 'image', src: 'data:image/png;base64,iVBORw0...' }, // inline bytes
+    { type: 'image', src: 'https://cdn.example.com/chart.png', width: 300 }, // online
+  ],
+};
+
+// Downloads each URL once, then lays out offline. Disable with fetchRemote:false,
+// or route through a proxy/auth with resolveImage(url).
+const pdf = await renderToBuffer(report, {
+  images: { timeoutMs: 10_000, maxBytes: 5_000_000, onError: 'skip' },
+});
+```
+
 See `src/cli/demo.ts` for a complete, runnable example (grouping, subtotals, running
 tokens, embedded fonts with a base-14 fallback).
 
@@ -192,6 +211,21 @@ const pdf = await renderToBuffer(report, { fonts: await readFontFiles([
   leaf binds that node's text to an expression instead of its literal content.
 - **Bands:** an element with `data-band="pageHeader | pageFooter | title | summary | background"`
   is lifted out of the body flow into a **repeated page band**, painted on every page.
+- **Images:** a block-level `<img src="..." width="..." height="...">` embeds a real PDF image
+  object (PNG / JPEG / GIF / BMP). `src` may be a **local file path**, a **`data:` URI**, raw
+  **bytes** (`Uint8Array`), or an **online `http(s)` URL** — all supported. Relative local paths
+  are resolved against the adapter's `baseDir` (the CLI passes the HTML file's folder). Give both
+  dimensions, or just one and the engine fills in the other from the image's intrinsic aspect
+  ratio. Images align via `text-align`, can carry a `border`/`padding`, never split across a page,
+  and work inside repeated bands (e.g. a letterhead logo).
+  - **Offline** (path / `data:` / bytes): handled synchronously by `createReport`.
+  - **Online** (`http(s)`): fetched by the async `renderToBuffer`, which runs a pre-pass
+    (`resolveRemoteImages`) that downloads each remote image once (per-render cache), converts it
+    to bytes and infers its size — then layout/pagination stay offline. Tune with `images`:
+    `{ fetchRemote, timeoutMs, maxBytes, resolveImage, onError }`. Set `fetchRemote: false` for
+    air-gapped builds, or supply `resolveImage(url)` to inject a proxy/auth/custom loader. The CLI
+    fetches remote images by default. In the IR, use `ImageBlock`
+    (`{ type: 'image', src, width?, height?, intrinsic?, alt? }`).
 
 You can also parse without converting: `parseHtml(html)` returns the element tree.
 
@@ -247,6 +281,14 @@ The `samples/` folder demonstrates the supported subset:
 - `merge-cells.html` — **merged cells**: a `rowspan` table (a label centered over several rows),
   a `colspan` table (a subtotal spanning columns plus a full-width banner), and a third table
   that **combines** both merges in one grid.
+- `image.html` (+ `assets/logo.png`) — **images**: intrinsic-size placement, width-only
+  aspect scaling, alignment, a bordered box, and a letterhead logo repeated in a `pageHeader`
+  band. `assets/logo.png` is a generated placeholder — regenerate it with
+  `node scripts/gen-logo.mjs`, or drop in your own `assets/logo.png`.
+- `image-online.html` — **online images**: the same layout features, but every `src` is an
+  `https` URL (from `picsum.photos`) that the engine downloads at render time. Requires an
+  internet connection: run `html-to-pdf samples/image-online.html` on a connected machine. It
+  also reuses one URL twice to show the per-render fetch cache.
 - `annual-report.html` + `annual-report.data.json` — the flagship **multi-page** report: a
   colored cover band, KPI "cards", a pull-quote, a regional **heatmap** (value-shaded
   cells), a data-bound 36-row ledger whose **column header repeats on every page**, and
@@ -323,7 +365,7 @@ From the package root (`pdf-report-engine`):
 | --- | --- |
 | `createReport(report, options?)` | Build the `pdfkit` doc + paginated `pages`; returns `{ doc, pages, registry }`. |
 | `renderToBuffer(report, options?)` | `createReport` + collect to a `Buffer`. |
-| `RenderOptions` | `{ fonts?: FontSource[], now?: () => Date, baseStyle?: Partial<StyleProps> }`. |
+| `RenderOptions` | `{ fonts?: FontSource[], now?: () => Date, baseStyle?: Partial<StyleProps>, images?: ImageResolveOptions }`. |
 | `htmlToReportDoc(html, options?)` | HTML subset → `ReportDoc`. |
 | `parseHtml(html)` | HTML subset → element tree (`HElement`). |
 | `readFontFiles(entries)` | Load `FontFileEntry[]` (paths or bytes) → `FontSource[]`. |

@@ -18,7 +18,8 @@ export type DrawCommand =
   | { op: 'strokeRect'; x: number; y: number; w: number; h: number; color: RGB; lineWidth: number; dash?: DashPattern }
   | { op: 'line'; x1: number; y1: number; x2: number; y2: number; color: RGB; lineWidth: number; dash?: DashPattern }
   | { op: 'text'; x: number; baselineY: number; runs: PositionedRun[]; gapWidth: number; decorations: Decoration[] }
-  | { op: 'underline'; x1: number; y1: number; x2: number; color: RGB; lineWidth: number; lineThrough?: boolean };
+  | { op: 'underline'; x1: number; y1: number; x2: number; color: RGB; lineWidth: number; lineThrough?: boolean }
+  | { op: 'image'; x: number; y: number; w: number; h: number; src: string | Uint8Array };
 
 export interface Decoration {
   kind: 'underline' | 'line-through';

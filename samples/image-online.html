@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Online Images in Reports</title>
+    <style>
+      body { font-family: Arial; font-size: 11pt; color: #1f2933; line-height: 1.5; }
+      h1 { font-size: 20pt; color: #0f2f57; margin-bottom: 2pt; }
+      h2 { font-size: 13pt; color: #0f2f57; margin-top: 18pt; margin-bottom: 6pt;
+           border-bottom: 2px solid #e08a1e; padding-bottom: 3pt; }
+      p.lead { color: #52606d; font-size: 9.5pt; margin: 0 0 10pt 0; }
+      .cap { font-size: 8pt; color: #7b8794; margin: 4pt 0 16pt 0; word-break: break-all; }
+      .note { background: #fff7e6; border: 1px solid #e08a1e; padding: 8pt 10pt;
+              font-size: 9.5pt; color: #6b4e16; }
+    </style>
+  </head>
+  <body>
+    <!--
+      ONLINE image sample. Identical to samples/image.html except the `src` values are
+      http(s) URLs. Remote images are fetched during renderToBuffer's pre-pass (the CLI
+      does this by default), converted to bytes, and laid out offline from there.
+      Requires an internet connection to render. URL here: https://picsum.photos serves
+      deterministic JPEGs for a given seed; Wikimedia Commons hosts the logo.
+    -->
+    <div class="note">
+      This sample loads its images <strong>over the network</strong>. Run it with the CLI
+      (<code>html-to-pdf samples/image-online.html</code>) on a machine with internet access.
+      The engine downloads each URL once, reads its intrinsic size, then paginates offline.
+    </div>
+
+    <!-- A remote logo in a repeated pageHeader band paints on every page. -->
+    <header data-band="pageHeader" style="height: 40pt; border-bottom: 1px solid #dbe2ea">
+      <img src="https://picsum.photos/seed/pdfreportlogo/240/80" width="96" style="text-align: right" alt="Online logo" />
+    </header>
+    <footer data-band="pageFooter" style="height: 20pt; font-size: 8.5pt; color: #7b8794">
+      <table>
+        <tr>
+          <td style="width: 300pt">pdf-report-engine &mdash; online image support</td>
+          <td style="text-align: right">Page {PAGE} of {TOTAL}</td>
+        </tr>
+      </table>
+    </footer>
+
+    <h1>Online Images</h1>
+    <p class="lead">
+      The <code>src</code> below points at remote <code>https</code> URLs. Everything else &mdash;
+      aspect-ratio sizing, alignment, borders, band repetition &mdash; behaves exactly like local
+      images. Each distinct URL is downloaded once per render (a per-render cache), so reusing a URL
+      is free.
+    </p>
+
+    <h2>1. Full intrinsic size (auto-capped to the page)</h2>
+    <p class="lead">No <code>width</code>/<code>height</code>: the image renders at its native aspect, shrunk to the content width.</p>
+    <img src="https://picsum.photos/seed/natural/600/260" alt="natural size" />
+    <p class="cap">&lt;img src="https://picsum.photos/seed/natural/600/260"&gt;</p>
+
+    <h2>2. Width only &mdash; height follows the aspect ratio</h2>
+    <p class="lead">Give only <code>width="240"</code>; the height is derived from the fetched image's intrinsic 600&times;300 ratio.</p>
+    <img src="https://picsum.photos/seed/aspect/600/300" width="240" alt="width only" />
+    <p class="cap">&lt;img src="https://picsum.photos/seed/aspect/600/300" width="240"&gt;</p>
+
+    <h2>3. Alignment</h2>
+    <p class="lead">A block image honours its own <code>text-align</code> within the content area.</p>
+    <img src="https://picsum.photos/seed/center/320/120" width="160" style="text-align: center" alt="centered" />
+    <img src="https://picsum.photos/seed/right/320/120" width="120" style="text-align: right" alt="right aligned" />
+    <p class="cap">a centered and a right-aligned remote copy</p>
+
+    <h2>4. Border and explicit box</h2>
+    <p class="lead">Both dimensions fixed, with a ruled frame drawn around the downloaded image.</p>
+    <img src="https://picsum.photos/seed/framed/440/160" width="220" height="80" style="border: 1px solid #b8c4d4; padding: 4pt; text-align: center" alt="framed" />
+    <p class="cap">a bordered placement at 220&times;80 pt, loaded over the network</p>
+
+    <p style="break-before: page; font-size: 8pt; color: #94a3b8; letter-spacing: 1pt; text-transform: uppercase">Second page</p>
+    <p>
+      The page-header logo repeats here, fetched once and reused across pages. Remote images
+      work inside repeated bands just like local ones; body content flows around them and
+      paginates normally.
+    </p>
+    <img src="https://picsum.photos/seed/aspect/600/300" width="180" alt="repeated url" />
+    <p class="cap">this reuses the section-2 URL &mdash; the cache means it is downloaded only once.</p>
+  </body>
+</html>

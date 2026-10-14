@@ -9,6 +9,8 @@
  */
 export { createReport, renderToBuffer, type RenderOptions, type RenderResult } from './render.js';
 
+export { resolveRemoteImages, type ImageResolveOptions } from './core/remote-image.js';
+
 export { htmlToReportDoc, parseHtml, type HtmlOptions, type HElement, type HNode, type HText } from './adapter/html.js';
 
 export { readFontFiles, FontRegistry, type FontSource, type FontFileEntry, type FontHandle } from './fonts/registry.js';
@@ -21,6 +23,7 @@ export type {
   TableBlock,
   SpacerBlock,
   PageBreakBlock,
+  ImageBlock,
   BandContent,
   BandType,
   StyleProps,

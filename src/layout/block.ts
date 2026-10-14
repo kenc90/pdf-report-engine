@@ -15,11 +15,13 @@ import type {
   ParagraphBlock,
   HeadingBlock,
   SpacerBlock,
+  ImageBlock,
   Content,
 } from '../ir/schema.js';
 import type { ExprContext } from '../expr/eval.js';
 import { toPt } from '../core/units.js';
 import { toRGB } from '../core/color.js';
+import { probeImageSize, pxToPt } from '../core/image.js';
 import { resolveContent, type LayoutContext } from './context.js';
 import { typeset, type Line } from '../text/typeset.js';
 import type { ResolvedStyle } from '../text/style.js';
@@ -48,6 +50,8 @@ export function layoutBlock(block: Block, ctx: LayoutContext, opts: BlockLayoutO
       return layoutHeading(block, ctx, opts, inherited);
     case 'spacer':
       return layoutSpacer(block, ctx, opts, inherited);
+    case 'image':
+      return layoutImage(block, ctx, opts, inherited);
     case 'pageBreak':
       return [{ height: 0, before: 0, after: 0, commands: [], isPageBreak: true, breakBefore: 'page' }];
     case 'table':
@@ -188,6 +192,69 @@ function layoutSpacer(block: SpacerBlock, ctx: LayoutContext, opts: BlockLayoutO
   const { margin } = resolveBox(block);
   const size = toPt(block.size ?? inherited.fontSize, 0);
   return [{ height: Math.max(0, size), before: margin.top, after: margin.bottom, commands: [] }];
+}
+
+/**
+ * Lay out an image block: resolve display size (honouring explicit `width`/
+ * `height`, then the intrinsic aspect ratio probed from the file header), align
+ * it inside the content box, and reserve a single atomic fragment of that height.
+ */
+function layoutImage(block: ImageBlock, _ctx: LayoutContext, opts: BlockLayoutOptions, inherited: ResolvedStyle): Fragment[] {
+  const { margin } = resolveBox(block);
+  const contentW = Math.max(1, opts.contentWidth - margin.left - margin.right);
+
+  const intrinsic = block.intrinsic ?? probeImageSize(block.src);
+  const ratio = intrinsic && intrinsic.height > 0 ? intrinsic.width / intrinsic.height : undefined;
+  const intrinsicW = intrinsic ? pxToPt(intrinsic.width) : undefined;
+  const intrinsicH = intrinsic ? pxToPt(intrinsic.height) : undefined;
+
+  const declaredW = block.width !== undefined ? toPt(block.width) : undefined;
+  const declaredH = block.height !== undefined ? toPt(block.height) : undefined;
+
+  let w: number;
+  let h: number;
+  if (declaredW !== undefined && declaredH !== undefined) {
+    w = declaredW;
+    h = declaredH;
+  } else if (declaredW !== undefined) {
+    w = declaredW;
+    h = ratio ? declaredW / ratio : intrinsicH ?? declaredW;
+  } else if (declaredH !== undefined) {
+    h = declaredH;
+    w = ratio ? declaredH * ratio : intrinsicW ?? declaredH;
+  } else {
+    w = Math.min(intrinsicW ?? contentW, contentW);
+    h = ratio ? w / ratio : intrinsicH ?? w;
+  }
+  // Never let an image bleed past the content box.
+  if (w > contentW) {
+    h = (h * contentW) / w;
+    w = contentW;
+  }
+  w = Math.max(1, w);
+  h = Math.max(1, h);
+
+  const align = block.align ?? inherited.align ?? 'left';
+  const x = margin.left + (align === 'center' ? (contentW - w) / 2 : align === 'right' ? contentW - w : 0);
+
+  const commands: DrawCommand[] = [{ op: 'image', x, y: 0, w, h, src: block.src }];
+  const borders = resolveBorders(block);
+  if (borders.top || borders.bottom || borders.left || borders.right) {
+    drawBorders(commands, borders, x, 0, w, h, true, true, false);
+  }
+
+  return [
+    {
+      height: h,
+      before: margin.top,
+      after: margin.bottom,
+      commands,
+      avoidSplit: true,
+      breakBefore: block.breakBefore,
+      breakAfter: block.breakAfter,
+      keepWithNext: block.keepWithNext,
+    },
+  ];
 }
 
 function emptyFragment(style: ResolvedStyle, margin: EdgeInsets, padding: EdgeInsets, contentWidth: number): Fragment[] {

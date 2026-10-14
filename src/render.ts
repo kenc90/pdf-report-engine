@@ -14,6 +14,7 @@ import { ExprCompiler } from './expr/eval.js';
 import { createFunctions } from './expr/functions.js';
 import { paginate, type Page } from './pagination/engine.js';
 import { writePage } from './writer/pdfkit-writer.js';
+import { resolveRemoteImages, type ImageResolveOptions } from './core/remote-image.js';
 import type { ReportDoc, StyleProps } from './ir/schema.js';
 import type { ResolvedStyle } from './text/style.js';
 import type { ExprContext } from './expr/eval.js';
@@ -27,6 +28,8 @@ export interface RenderOptions {
   now?: () => Date;
   /** Overrides the document's base style before inheritance. */
   baseStyle?: Partial<StyleProps>;
+  /** How `http(s)` image sources are handled (used by the async {@link renderToBuffer}). */
+  images?: ImageResolveOptions;
 }
 
 export interface RenderResult {
@@ -89,9 +92,10 @@ export function createReport(report: ReportDoc, options: RenderOptions = {}): Re
   return { doc, pages, registry };
 }
 
-/** Render to a Buffer (collects the stream). */
-export function renderToBuffer(report: ReportDoc, options: RenderOptions = {}): Promise<Buffer> {
-  const { doc } = createReport(report, options);
+/** Render to a Buffer (collects the stream). Resolves any remote images first. */
+export async function renderToBuffer(report: ReportDoc, options: RenderOptions = {}): Promise<Buffer> {
+  const resolved = await resolveRemoteImages(report, options.images);
+  const { doc } = createReport(resolved, options);
   doc.end();
   return new Promise<Buffer>((resolve, reject) => {
     const chunks: Buffer[] = [];

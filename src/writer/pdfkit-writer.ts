@@ -57,6 +57,14 @@ function drawCommand(doc: PDFDocument, cmd: DrawCommand, x: number, y: number): 
     case 'text':
       drawText(doc, cmd, x, y);
       return;
+    case 'image': {
+      // Layout already resolved a width+height that preserve the aspect ratio,
+      // so pass both. `doc.image` accepts a path, a `data:` URI, or raw bytes;
+      // pdfkit wants a Node Buffer for byte data, so coerce a plain Uint8Array.
+      const src = typeof cmd.src === 'string' ? cmd.src : Buffer.from(cmd.src);
+      doc.image(src, x + cmd.x, y + cmd.y, { width: cmd.w, height: cmd.h });
+      return;
+    }
     case 'underline':
       doc.save();
       doc.lineWidth(cmd.lineWidth).strokeColor(css(cmd.color));
