@@ -18,6 +18,12 @@
  *                       `<path>` (family inferred from the filename) or
  *                       `<family>=<path>` with an optional `:weight` suffix,
  *                       e.g. `--font Arial=C:/Windows/Fonts/arialbd.ttf:700`.
+ *                       For TrueType collections (.ttc) append `#<PostScriptName>`
+ *                       to select a face, e.g.
+ *                       `--font "PMingLiU=C:/Windows/Fonts/mingliu.ttc#PMingLiU"`.
+ *                       Explicit fonts are added to (and override per family+weight)
+ *                       the auto-loaded system fonts unless `--no-auto-fonts` is set,
+ *                       so adding e.g. Times New Roman keeps the CJK face available.
  *   --no-auto-fonts     Do not try to load common system fonts automatically.
  *   --page <spec>       Base font size in points for the document (default 11).
  *   -h, --help          Show this help.
@@ -47,7 +53,8 @@ Usage: html-to-pdf <input...> [options]
   -o, --out <path>    Output file or directory (default: alongside each input)
   -d, --data <file>   JSON data root for data-each / data-bind tables
                       (default: an adjacent <name>.data.json, if present)
-  -f, --font <spec>    Embed a font: <path> or <family>=<path>[:weight] (repeatable)
+  -f, --font <spec>    Embed a font: <path> or <family>=<path>[:weight][#psName]
+                      (repeatable; added to auto-fonts unless --no-auto-fonts)
       --page <pt>     Base font size in points (default 11)
       --no-auto-fonts Skip automatic system-font loading
   -h, --help          Show this help
@@ -144,16 +151,33 @@ function parseFontSpec(spec: string): FontFileEntry {
       rest = rest.slice(0, colon);
     }
   }
+  // TrueType collections (.ttc) hold several faces; select one by its PostScript
+  // name with a `#` suffix, e.g. `mingliu.ttc#PMingLiU`.
+  let postscriptName: string | undefined;
+  const hash = rest.indexOf('#');
+  if (hash >= 0) {
+    postscriptName = rest.slice(hash + 1).trim() || undefined;
+    rest = rest.slice(0, hash);
+  }
   const fontPath = rest;
   if (!fs.existsSync(fontPath)) throw new Error(`Font file not found: ${fontPath}`);
   const inferredFamily = family || path.basename(fontPath).replace(/\.[^.]+$/, '');
-  return { family: inferredFamily, path: fontPath, weight };
+  return { family: inferredFamily, path: fontPath, weight, postscriptName };
 }
 
 function resolveFonts(opts: CliOptions): FontFileEntry[] {
-  const entries: FontFileEntry[] = opts.fontSpecs.map(parseFontSpec);
-  if (opts.autoFonts && entries.length === 0) {
-    entries.push(...AUTO_FONTS.filter((f) => f.path && fs.existsSync(f.path)));
+  const explicit = opts.fontSpecs.map(parseFontSpec);
+  const entries: FontFileEntry[] = [...explicit];
+  // Auto-loaded system fonts are additive: they fill in families the user did not
+  // override (notably the CJK face), so `--font Times…` still keeps YaHei available.
+  if (opts.autoFonts) {
+    for (const auto of AUTO_FONTS) {
+      if (!auto.path || !fs.existsSync(auto.path)) continue;
+      const overridden = explicit.some(
+        (e) => e.family.toLowerCase() === auto.family.toLowerCase() && (e.weight ?? 400) === (auto.weight ?? 400),
+      );
+      if (!overridden) entries.push(auto);
+    }
   }
   return entries;
 }

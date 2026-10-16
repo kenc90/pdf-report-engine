@@ -278,8 +278,17 @@ npm run html:pdf -- samples/roster.html --data samples/roster.data.json -o outpu
 # Convert every *.html in a folder into an output directory:
 npm run html:pdf -- samples/ -o output/
 
-# Embed a specific font (repeatable), instead of the auto-detected system fonts:
+# Embed specific fonts (repeatable). These ADD to the auto-detected system fonts,
+# so the CJK face stays available even when you specify your own:
 npm run html:pdf -- samples/invoice.html -f "Arial=C:/Windows/Fonts/arialbd.ttf:700"
+
+# Render a report in real Times New Roman while keeping Chinese glyph support:
+npm run html:pdf -- samples/testimonial.html -o output/testimonial.pdf \
+  -f "Times New Roman=C:/Windows/Fonts/times.ttf:400" \
+  -f "Times New Roman=C:/Windows/Fonts/timesbd.ttf:700"
+
+# Select a face inside a TrueType collection (.ttc) with a `#PostScriptName`:
+npm run html:pdf -- samples/testimonial.html -f "PMingLiU=C:/Windows/Fonts/mingliu.ttc#PMingLiU"
 ```
 
 Options:
@@ -288,13 +297,16 @@ Options:
 | --- | --- |
 | `-o, --out <path>` | Output `.pdf` path (single input) or directory (default: alongside each input). |
 | `-d, --data <file>` | JSON object made available as the report `data` root for `data-each` / `data-bind`. Defaults to an adjacent `<name>.data.json` when present. |
-| `-f, --font <spec>` | Embed a font: `<path>` or `<family>=<path>[:weight]`. Repeatable. |
+| `-f, --font <spec>` | Embed a font: `<path>` or `<family>=<path>[:weight][#PostScriptName]`. Repeatable. Added on top of (and overrides per family+weight) the auto-loaded fonts. Use `#…` to pick a face inside a `.ttc` collection. |
 | `--page <pt>` | Base font size in points (default `11`). |
-| `--no-auto-fonts` | Skip automatic system-font detection (falls back to base-14). |
+| `--no-auto-fonts` | Skip automatic system-font detection entirely (then only `--font` entries load; falls back to base-14 if none). |
 | `-h, --help` | Show usage. |
 
-With no `--font` it opportunistically loads Arial / Georgia / Microsoft YaHei from
-`C:/Windows/Fonts` when present; otherwise it renders with the standard PDF base-14 fonts.
+By default it opportunistically loads Arial / Georgia / Microsoft YaHei from
+`C:/Windows/Fonts` when present (YaHei provides CJK coverage). Explicit `--font` entries are
+merged **with** these, so you can add a family (e.g. Times New Roman) without losing the CJK
+font. With `--no-auto-fonts`, or when nothing is found, it renders with the standard PDF base-14
+fonts (Latin-1 only — CJK will not render).
 
 #### Sample HTML
 
@@ -325,6 +337,11 @@ The `samples/` folder demonstrates the supported subset:
   cells), a data-bound 36-row ledger whose **column header repeats on every page**, and
   **`data-band` page header/footer** with correctly-resolved `Page N of M` numbering.
   `npm run html:pdf -- samples/annual-report.html -o output/` (data auto-pairs).
+- `testimonial.html` — a **formal certificate / Jasper-style testimonial** replica: a repeating
+  `data-band` header (institution crest slot + title) and footer (`Page N of M` + a reference
+  number), serif body text, and label/value section tables. It also demonstrates **CJK** (a
+  Chinese name) and **figure alignment** — render it with real Times New Roman (lining figures)
+  via the `-f` flags shown above so digits line up with capitals.
 
 ## Fonts
 

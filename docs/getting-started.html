@@ -185,8 +185,26 @@ const pdf = await renderToBuffer(report, {
       <pre data-copy><code># HTML -> PDF (relative image paths resolve against the HTML file's folder)
 npx tsx src/cli/html-to-pdf.ts samples/annual-report.html -o output/
 
+# Embed specific fonts with -f/--font (repeatable). These ADD to the auto-detected
+# system fonts, so the CJK face stays available even when you specify your own:
+npx tsx src/cli/html-to-pdf.ts samples/testimonial.html -o output/testimonial.pdf \
+  -f "Times New Roman=C:/Windows/Fonts/times.ttf:400" \
+  -f "Times New Roman=C:/Windows/Fonts/timesbd.ttf:700"
+
+# Pick a face inside a TrueType collection (.ttc) with a `#PostScriptName`:
+npx tsx src/cli/html-to-pdf.ts samples/testimonial.html \
+  -f "PMingLiU=C:/Windows/Fonts/mingliu.ttc#PMingLiU"
+
 # Build the sample multi-page report -> output/demo.pdf
 npm run demo</code></pre>
+      <p>
+        By default the CLI loads Arial / Georgia / Microsoft YaHei from
+        <code>C:/Windows/Fonts</code> when present (YaHei covers CJK). Explicit <code>-f</code>
+        fonts are merged <em>with</em> those, so adding a family does not drop CJK support. Use
+        <code>--no-auto-fonts</code> to load <em>only</em> your <code>-f</code> fonts. Note that
+        Georgia uses <strong>old-style figures</strong> (digits of mixed height); choose a
+        lining-figure font such as Times New Roman or Arial if numerals must align with capitals.
+      </p>
       <p>Then explore the runnable library scripts in the <a href="examples.html">Examples</a> page,
       or read the full surface on the <a href="api.html">API reference</a>.</p>
     </section>
