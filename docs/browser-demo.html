@@ -4,26 +4,50 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Browser demo · pdf-report-engine</title>
-  <meta name="description" content="Edit constrained HTML, embed fonts from your machine, and render a real vector PDF entirely in the browser with pdf-report-engine." />
+  <meta name="description" content="Edit constrained HTML, embed fonts, and render a real vector PDF entirely in the browser with pdf-report-engine." />
   <link rel="stylesheet" href="assets/styles.css" />
   <style>
-    .demo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-    @media (max-width: 900px) { .demo-grid { grid-template-columns: 1fr; } }
-    .pane-title { font-weight: 600; font-size: 14px; margin: 0 0 8px; color: var(--ink, #1f2733); }
-    #editor {
-      width: 100%; min-height: 380px; box-sizing: border-box; resize: vertical;
-      font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      padding: 12px; border: 1px solid #c9d2df; border-radius: 8px; color: #1f2733; background: #fbfcfe;
+    /* ---- tabbed workbench: editor + preview share one large panel ---- */
+    .workbench {
+      border: 1px solid #c9d2df; border-radius: 10px; background: #fff;
+      overflow: hidden; box-shadow: 0 1px 3px rgba(16,24,40,.06);
     }
-    #editor:focus { outline: 2px solid #2f6df6; border-color: transparent; }
+    .tabs { display: flex; gap: 4px; background: #eef2f8; padding: 6px 8px 0; border-bottom: 1px solid #c9d2df; }
+    .tab {
+      border: 1px solid transparent; border-bottom: none; background: transparent;
+      padding: 8px 18px; border-radius: 8px 8px 0 0; cursor: pointer;
+      font: 600 13px/1 inherit; color: #5b6b8c;
+    }
+    .tab:hover { color: #1f2733; background: rgba(255,255,255,.55); }
+    .tab.active { background: #fff; color: #1a3d6d; border-color: #c9d2df; position: relative; top: 1px; }
+    .tab .badge { margin-left: 8px; background: #1b7f4b; color: #fff; border-radius: 999px; padding: 1px 7px; font-size: 11px; font-weight: 700; }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    #editor, #preview { display: block; width: 100%; height: 70vh; min-height: 440px; border: 0; }
+    #editor {
+      box-sizing: border-box; resize: vertical;
+      font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      padding: 14px; color: #1f2733; background: #fbfcfe;
+    }
+    #editor:focus { outline: 2px solid #2f6df6; outline-offset: -2px; }
+    #preview { background: #e9edf3; }
+
+    /* ---- toolbar ---- */
     .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 14px 0 4px; }
     .toolbar .spacer { flex: 1 1 auto; }
+    /* Unify the box model so the <a> "Download" and the <button>s are identical heights:
+       buttons don't inherit font-family (UA form font) and have their own line metrics,
+       so pin display/line-height/font/box-sizing here. */
+    #workbench .btn { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; font-family: inherit; font-weight: 700; line-height: 1; padding: 9px 16px; font-size: 13px; border-radius: 8px; cursor: pointer; text-decoration: none; }
+    #workbench .btn:not(.ghost) { background: var(--accent, #e08a1e); color: #24160a; border: 1.5px solid transparent; }
+    /* Fix: the shared .btn.ghost is white-on-white on this light page — make it legible here. */
+    #workbench .btn.ghost { background: #fff; color: #1a3d6d; border: 1.5px solid #b8c4d6; }
+    #workbench .btn.ghost:hover { background: #eef2f8; }
     .field { display: inline-flex; flex-direction: column; gap: 4px; font-size: 12px; color: #5b6b8c; }
     .fonts-list { font-size: 12px; color: #5b6b8c; margin: 6px 0 0; }
     .fonts-list code { background: #eef2f8; padding: 1px 6px; border-radius: 5px; }
     #status { font-size: 13px; margin: 10px 0 0; min-height: 20px; color: #3a4658; }
     #status.error { color: #b4232a; }
-    #preview { width: 100%; height: 620px; border: 1px solid #c9d2df; border-radius: 8px; background: #e9edf3; }
     .hint { font-size: 12px; color: #5b6b8c; }
   </style>
 </head>
@@ -47,26 +71,32 @@
       <p>
         This page loads the engine as a single pre-bundled ES module
         (<code>browser/pdf-report-engine.js</code> — pdfkit's self-contained browser build baked in).
-        Edit the constrained HTML on the left, press <strong>Generate PDF</strong>, and the real,
-        vector, selectable-text PDF renders on the right — no server, no Chromium.
+        Edit the constrained HTML, press <strong>Generate PDF</strong>, then flip to the
+        <strong>PDF preview</strong> tab — a real, vector, selectable-text PDF rendered on the
+        same page, no server and no Chromium. The sample below showcases most of the library's
+        authoring features; edit freely.
       </p>
       <div class="note">
-        Fonts are <strong>not</strong> required for Latin text: with none selected the engine falls back
-        to the standard PDF base-14 fonts. To test embedding or <strong>per-glyph CJK fallback</strong>,
-        load a Latin <code>.ttf/.otf</code> <em>and</em> a CJK <code>.ttf/.otf</code> from your machine below,
-        then type mixed text such as <code>何小鵬 test</code>. (A browser cannot read your installed system
-        fonts, so you choose the files yourself.)
+        Fonts are <strong>not</strong> required for Latin text: the sample pulls
+        <strong>Google Fonts</strong> straight from the HTML (fetched and embedded on the client),
+        and text with no font falls back to the standard PDF base-14 fonts. To test embedding or
+        <strong>per-glyph CJK fallback</strong>, load a Latin <code>.ttf/.otf</code> <em>and</em> a
+        CJK <code>.ttf/.otf</code> from your machine below, then type mixed text such as
+        <code>陳大文 test</code>. (A browser cannot read your installed system fonts, so you choose
+        the files yourself.)
       </div>
     </section>
 
     <section id="workbench">
-      <div class="demo-grid">
-        <div>
-          <p class="pane-title">HTML report (edit me)</p>
+      <div class="workbench">
+        <div class="tabs" role="tablist" aria-label="Editor and preview">
+          <button class="tab active" id="tab-editor" role="tab" aria-selected="true" aria-controls="panel-editor" type="button">HTML editor</button>
+          <button class="tab" id="tab-preview" role="tab" aria-selected="false" aria-controls="panel-preview" type="button">PDF preview <span class="badge" id="pagecount" hidden></span></button>
+        </div>
+        <div class="panel active" id="panel-editor" role="tabpanel" aria-labelledby="tab-editor">
           <textarea id="editor" spellcheck="false" aria-label="HTML report source"></textarea>
         </div>
-        <div>
-          <p class="pane-title">PDF preview</p>
+        <div class="panel" id="panel-preview" role="tabpanel" aria-labelledby="tab-preview">
           <iframe id="preview" title="Generated PDF preview"></iframe>
         </div>
       </div>
@@ -82,7 +112,7 @@
         </label>
         <button class="btn ghost" id="clearfonts" type="button" title="Forget selected fonts">Clear fonts</button>
       </div>
-      <p class="fonts-list" id="fontlist">No fonts selected — using base-14 (Latin-1).</p>
+      <p class="fonts-list" id="fontlist">No fonts selected — using base-14 (Latin-1) plus any Google Fonts in the HTML.</p>
       <p class="hint">
         A <code>.ttc</code> collection needs a face chosen via a PostScript name, which this picker cannot
         supply — use a single-face <code>.ttf/.otf</code> here, or the CLI's <code>path#PostScriptName</code>.

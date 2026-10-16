@@ -15,6 +15,7 @@ import { createFunctions } from './expr/functions.js';
 import { paginate, type Page } from './pagination/engine.js';
 import { writePage } from './writer/pdfkit-writer.js';
 import { resolveRemoteImages, type ImageResolveOptions } from './core/remote-image.js';
+import { resolveRemoteFonts, type FontResolveOptions } from './fonts/remote.js';
 import type { ReportDoc, StyleProps } from './ir/schema.js';
 import type { ResolvedStyle } from './text/style.js';
 import type { ExprContext } from './expr/eval.js';
@@ -30,6 +31,13 @@ export interface RenderOptions {
   baseStyle?: Partial<StyleProps>;
   /** How `http(s)` image sources are handled (used by the async {@link renderToBuffer}). */
   images?: ImageResolveOptions;
+  /**
+   * How remote font references (`report.fonts`: Google Fonts links, `@font-face`,
+   * font URLs) are resolved into embedded faces. Used by the async
+   * {@link renderToBuffer}; ignored by the synchronous {@link createReport} — call
+   * `resolveRemoteFonts` yourself and pass the result in `fonts` when streaming.
+   */
+  resolveFonts?: FontResolveOptions;
 }
 
 export interface RenderResult {
@@ -92,10 +100,18 @@ export function createReport(report: ReportDoc, options: RenderOptions = {}): Re
   return { doc, pages, registry };
 }
 
-/** Render to bytes (collects the stream). Resolves any remote images first. */
+/** Render to bytes (collects the stream). Resolves remote images and fonts first. */
 export async function renderToBuffer(report: ReportDoc, options: RenderOptions = {}): Promise<Buffer> {
   const resolved = await resolveRemoteImages(report, options.images);
-  const { doc } = createReport(resolved, options);
+  // Turn declarative font references (Google `<link>`/`@import`, `@font-face`,
+  // font URLs) into embedded faces and append them to any explicitly supplied
+  // `fonts`. A failed remote font is skipped (not fatal) by default.
+  let effective = options;
+  if (report.fonts?.length) {
+    const remoteFonts = await resolveRemoteFonts(resolved, options.resolveFonts);
+    if (remoteFonts.length) effective = { ...options, fonts: [...(options.fonts ?? []), ...remoteFonts] };
+  }
+  const { doc } = createReport(resolved, effective);
   doc.end();
   return new Promise<Buffer>((resolve, reject) => {
     const chunks: Uint8Array[] = [];

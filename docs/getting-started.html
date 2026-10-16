@@ -87,7 +87,7 @@ const pdf = await renderToBuffer(report, { fonts });</code></pre>
       <div class="note">
         <strong>Per-glyph fallback.</strong> Within a run, any character the resolved face has no
         glyph for is re-resolved against the other <em>registered</em> faces (nearest weight/style)
-        and painted in that font — so <code>何小鵬 test</code> in an <code>Arial</code> paragraph
+        and painted in that font — so <code>陳大文 test</code> in an <code>Arial</code> paragraph
         renders CJK via a registered CJK face and Latin via Arial, with no explicit
         <code>font-family</code> on the Chinese. The only requirement is that a covering font is
         registered (the CLI does this per platform; in the library add one via
@@ -101,8 +101,9 @@ const pdf = await renderToBuffer(report, { fonts });</code></pre>
       has <strong>no top-level <code>node:*</code> imports</strong>. Two constraints remain:
       <code>pdfkit</code> itself needs <code>Buffer</code>/streams, so build with a Node-polyfill
       plugin (Vite: <code>vite-plugin-node-polyfills</code>; webpack: <code>resolve.fallback</code>);
-      and a browser cannot read installed system fonts, so you <em>fetch the font bytes yourself</em>
-      (TTF/OTF/TTC — WOFF/WOFF2 are not supported by the font engine).</p>
+      and a browser cannot read installed system fonts, so you either <em>fetch the font bytes yourself</em>
+      (TTF/OTF/TTC) or just link a web font and let the engine resolve it — see
+      <a href="#web-fonts">Web fonts &amp; Google Fonts</a>.</p>
       <pre data-copy><code>import { renderToBuffer } from 'pdf-report-engine';
 
 const font = async (url, family, weight) =&gt;
@@ -122,6 +123,32 @@ const url = URL.createObjectURL(new Blob([pdf], { type: 'application/pdf' }));</
         <code>http(s)</code> URL (a filesystem path has no intrinsic size here); and run large
         reports in a <strong>Web Worker</strong> so the UI thread is not blocked.
       </div>
+    </section>
+
+    <section id="web-fonts">
+      <h2>Web fonts &amp; Google Fonts</h2>
+      <p>You don't have to fetch bytes by hand. When the HTML references a web font, the engine
+      resolves and embeds it during <code>renderToBuffer</code> — the <strong>same code runs in Node
+      and in the browser</strong>. <code>htmlToReportDoc</code> collects Google Fonts
+      <code>&lt;link&gt;</code>/<code>@import</code> and inline <code>@font-face</code> rules into
+      <code>report.fonts</code>, and <code>resolveRemoteFonts</code> fetches the CSS, downloads every
+      font file and registers it under its family name. Then just use <code>font-family</code>:</p>
+      <pre data-copy><code>&lt;link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&amp;display=swap" rel="stylesheet"&gt;
+&lt;h1 style="font-family: 'Roboto'"&gt;Quarterly Report&lt;/h1&gt;   &lt;!-- embedded, selectable --&gt;</code></pre>
+      <div class="note">
+        Google serves fonts by User-Agent: Node's <code>fetch</code> is answered with <strong>TTF</strong>
+        (embedded directly), a browser is answered with <strong>WOFF2</strong> — which fontkit can't read,
+        so it is decoded to TTF in-process via the optional <code>wawoff2</code> WebAssembly module.
+        Google's per-script <code>unicode-range</code> subsets each become a face, reached by the same
+        per-glyph fallback used for CJK. Unreachable fonts are <strong>skipped by default</strong> so a
+        flaky CDN never fails the render.
+      </div>
+      <pre data-copy><code>import { htmlToReportDoc, renderToBuffer } from 'pdf-report-engine';
+
+const report = await htmlToReportDoc(html);            // report.fonts filled from the links/@font-face
+const pdf = await renderToBuffer(report, {
+  resolveFonts: { onError: 'throw', timeoutMs: 8000 },  // strict + bounded (e.g. in CI)
+});</code></pre>
     </section>
 
     <section id="data-table">

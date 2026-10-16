@@ -241,6 +241,16 @@ export interface BandContent {
   height?: number;
 }
 
+/** Declarative remote-font references collected from HTML. Resolved to embedded
+ *  faces by `resolveRemoteFonts()` before rendering. */
+export type FontReference =
+  /** A Google Fonts stylesheet URL (`fonts.googleapis.com/...css...`). */
+  | { type: 'google'; url: string }
+  /** Raw CSS text containing one or more `@font-face { src: url(...) }` rules. */
+  | { type: 'font-face'; css: string }
+  /** A direct font file URL (TTF/OTF/TTC/WOFF2), labelled with its family. */
+  | { type: 'url'; url: string; family: string; weight?: number; style?: 'normal' | 'italic'; postscriptName?: string };
+
 export interface ReportDoc {
   /** Optional free-form metadata; `title`/`author`/`subject`/`keywords` become PDF info. */
   info?: {
@@ -259,6 +269,8 @@ export interface ReportDoc {
   variables?: Record<string, unknown>;
   bands?: Partial<Record<BandType, BandContent>>;
   body?: Block[];
+  /** Remote font references (Google Fonts links, `@font-face`, font URLs). */
+  fonts?: FontReference[];
   outline?: boolean;
 }
 

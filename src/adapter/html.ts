@@ -32,6 +32,7 @@ import type {
   DataSource,
   BandContent,
   BandType,
+  FontReference,
 } from '../ir/schema.js';
 
 // --- tiny, forgiving HTML tokenizer/parser ---------------------------------
@@ -671,6 +672,49 @@ function findFirst(root: HElement, tag: string): HElement | undefined {
   return found;
 }
 
+/** CSS text inside a `<style>` element (its raw text children). */
+function styleText(el: HElement): string {
+  return el.children.map((c) => (c.type === 'text' ? c.text : '')).join('');
+}
+
+/**
+ * Walk the whole document (head + body) collecting remote-font references the
+ * renderer should resolve: Google Fonts `<link rel=stylesheet>` / `@import`,
+ * and inline `@font-face` blocks. `@import`-ing a Google stylesheet is treated
+ * exactly like the `<link>` form.
+ */
+function collectFontRefs(root: HElement): FontReference[] {
+  const refs: FontReference[] = [];
+  const seen = new Set<string>();
+  const push = (ref: FontReference): void => {
+    const k = JSON.stringify(ref);
+    if (seen.has(k)) return;
+    seen.add(k);
+    refs.push(ref);
+  };
+  const isGoogle = (u: string): boolean => /fonts\.(?:googleapis|gstatic)\.com\//i.test(u);
+  const walk = (el: HElement): void => {
+    if (el.tag === 'link') {
+      const rel = (el.attrs['rel'] ?? '').toLowerCase();
+      const href = el.attrs['href'] ?? '';
+      if (href && rel.includes('stylesheet') && isGoogle(href)) push({ type: 'google', url: href });
+    }
+    if (el.tag === 'style') {
+      const css = styleText(el);
+      const importRe = /@import\s+(?:url\()?['"]?([^'")\s]+)['"]?\s*\)?/gi;
+      let m: RegExpExecArray | null;
+      while ((m = importRe.exec(css))) {
+        const u = m[1];
+        if (u && isGoogle(u)) push({ type: 'google', url: u });
+      }
+      if (/@font-face/i.test(css)) push({ type: 'font-face', css });
+    }
+    for (const c of el.children) if (c.type === 'element') walk(c);
+  };
+  walk(root);
+  return refs;
+}
+
 /** Elements tagged `data-band="..."` become repeated page bands, not body flow. */
 const BAND_TYPES = new Set<BandType>(['pageHeader', 'pageFooter', 'title', 'summary', 'background']);
 
@@ -810,6 +854,7 @@ export function htmlToReportDoc(html: string, opts: HtmlOptions = {}): ReportDoc
   const htmlPage = pageSpecFromHtml(html, tree);
   const page = { ...htmlPage, ...pickDefined(opts.page) };
   const hasPage = Object.keys(page).length > 0;
+  const fonts = collectFontRefs(tree);
 
   return {
     info: opts.info,
@@ -818,5 +863,6 @@ export function htmlToReportDoc(html: string, opts: HtmlOptions = {}): ReportDoc
     ...(hasPage ? { page } : {}),
     ...(Object.keys(bands).length ? { bands } : {}),
     body: blocks,
+    ...(fonts.length ? { fonts } : {}),
   };
 }

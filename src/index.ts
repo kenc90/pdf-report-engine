@@ -17,6 +17,8 @@ export { htmlToReportDoc, parseHtml, type HtmlOptions, type HElement, type HNode
 
 export { readFontFiles, FontRegistry, type FontSource, type FontFileEntry, type FontHandle } from './fonts/registry.js';
 
+export { resolveRemoteFonts, parseFontFace, type FontResolveOptions } from './fonts/remote.js';
+
 export type {
   ReportDoc,
   Block,
@@ -38,6 +40,7 @@ export type {
   GroupNode,
   DataSource,
   Expr,
+  FontReference,
 } from './ir/schema.js';
 
 export { resolvePage, type ResolvedPage, type PageSpec } from './core/page.js';

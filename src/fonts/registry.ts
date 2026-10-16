@@ -77,6 +77,14 @@ export interface FontSource {
    * Required for collections; pdfkit selects by name.
    */
   postscriptName?: string;
+  /**
+   * Distinguishes several faces that share a family/weight/style but cover
+   * different `unicode-range`s — the way Google Fonts ships one file per script
+   * (latin, latin-ext, cyrillic, ...). Each subset gets its own `instance` so
+   * they coexist in the registry: the first registered is `resolve()`'s target
+   * and the others are reached through per-glyph fallback.
+   */
+  instance?: string;
 }
 
 export interface FontHandle {
@@ -261,9 +269,15 @@ export class FontRegistry {
     const style = source.style ?? 'normal';
     const key = faceKey(source.family, weight, style);
     const existing = this.byKey.get(key);
-    if (existing) return existing;
+    // A plain source dedupes by family|weight|style. Subsetted sources (an
+    // `instance` tag, e.g. Google Fonts' per-script files) each need their own
+    // face, so they are always registered; the first for a given key is what
+    // `resolve()` returns and the rest are found via per-glyph fallback.
+    if (existing && !source.instance) return existing;
 
-    const registeredName = `${source.family}|${weight}|${style}`;
+    const registeredName = source.instance
+      ? `${source.family}|${weight}|${style}|${source.instance}`
+      : `${source.family}|${weight}|${style}`;
     const bytes = asBytes(source.buffer);
     if (source.postscriptName) doc.registerFont(registeredName, bytes as unknown as Buffer, source.postscriptName);
     else doc.registerFont(registeredName, bytes as unknown as Buffer);
@@ -275,7 +289,7 @@ export class FontRegistry {
 
     const handle = new PdfFontHandle(key, source.family, weight, style, pdfFont, registeredName);
     this.faces.push(handle);
-    this.byKey.set(key, handle);
+    if (!existing) this.byKey.set(key, handle);
     return handle;
   }
 
@@ -351,7 +365,12 @@ export class FontRegistry {
     let best: { handle: FontHandle; score: number } | undefined;
     for (const face of this.faces) {
       if (face === primary || !face.coversCodePoint(cp)) continue;
-      const score = Math.abs(face.weight - weight) * 10 + (face.style === style ? 0 : 300);
+      // Prefer a face of the same family (Google Fonts ships each script as a
+      // separate subset of the same family) over any other family that merely
+      // also covers the code point — matching how a browser resolves
+      // `unicode-range`. Then nearest weight, then style.
+      const sameFamily = face.family.toLowerCase() === primary.family.toLowerCase() ? 0 : 2000;
+      const score = sameFamily + Math.abs(face.weight - weight) * 10 + (face.style === style ? 0 : 300);
       if (!best || score < best.score) best = { handle: face, score };
     }
     const chosen = best ? best.handle : primary;

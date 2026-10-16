@@ -28,11 +28,13 @@
         <thead><tr><th>Export</th><th>Purpose</th></tr></thead>
         <tbody>
           <tr><td><code>createReport(report, options?)</code></td><td>Build the pdfkit doc + paginated <code>pages</code>; returns <code>{ doc, pages, registry }</code>. Synchronous; offline only.</td></tr>
-          <tr><td><code>renderToBuffer(report, options?)</code></td><td><code>createReport</code> + collect to a <code>Buffer</code>. Async; resolves remote images first.</td></tr>
+          <tr><td><code>renderToBuffer(report, options?)</code></td><td><code>createReport</code> + collect to a <code>Buffer</code>. Async; resolves remote images and web fonts first.</td></tr>
           <tr><td><code>htmlToReportDoc(html, options?)</code></td><td>HTML subset → <code>ReportDoc</code>.</td></tr>
           <tr><td><code>parseHtml(html)</code></td><td>HTML subset → element tree (<code>HElement</code>) without converting.</td></tr>
           <tr><td><code>readFontFiles(entries)</code></td><td>Load <code>FontFileEntry[]</code> (paths or bytes) → <code>FontSource[]</code>.</td></tr>
-          <tr><td><code>resolveRemoteImages(report, opts)</code></td><td>Run the URL→bytes pre-pass yourself (advanced).</td></tr>
+          <tr><td><code>resolveRemoteImages(report, opts)</code></td><td>Run the URL→bytes image pre-pass yourself (advanced).</td></tr>
+          <tr><td><code>resolveRemoteFonts(report, opts)</code></td><td>Turn <code>report.fonts</code> (Google <code>&lt;link&gt;</code>/<code>@import</code>, <code>@font-face</code>, font URLs) into embedded <code>FontSource[]</code> — decodes WOFF2 when needed.</td></tr>
+          <tr><td><code>parseFontFace(css)</code></td><td>Parse <code>@font-face</code> rules out of a CSS string.</td></tr>
           <tr><td><code>FontRegistry</code></td><td>Lower-level face registration / measurement.</td></tr>
           <tr><td><code>paginate</code></td><td>Drive the pagination engine directly against your own fragments.</td></tr>
           <tr><td><code>resolvePage</code>, <code>toPt</code>, <code>expandBox</code>, <code>MM_TO_PT</code>, <code>CM_TO_PT</code>, <code>IN_TO_PT</code>, <code>PX_TO_PT</code></td><td>Page-size &amp; unit helpers (lengths default to points).</td></tr>
@@ -47,6 +49,7 @@
   now?: () => Date;                           // injectable clock (deterministic tests)
   baseStyle?: Partial&lt;StyleProps&gt;;            // applied before IR style inheritance
   images?: ImageResolveOptions;               // remote image handling (renderToBuffer only)
+  resolveFonts?: FontResolveOptions;          // remote/web-font handling (renderToBuffer only)
 }</code></pre>
       <h3><code>ImageResolveOptions</code></h3>
       <pre data-copy><code>{
@@ -55,6 +58,17 @@
   maxBytes?: number;                          // default 25 MiB
   resolveImage?: (url) => Promise&lt;Uint8Array | null&gt;; // proxy / auth / cache / fixtures
   onError?: 'throw' | 'skip';                 // default 'throw'
+}</code></pre>
+      <h3><code>FontResolveOptions</code></h3>
+      <pre data-copy><code>{
+  fetchRemote?: boolean;                      // default true
+  timeoutMs?: number;                         // default 15000
+  maxBytes?: number;                          // default 25 MiB per file
+  maxFaces?: number;                          // cap faces per call (default 64)
+  resolveFont?: (url) => Promise&lt;Uint8Array | null&gt;; // proxy / auth / cache / fixtures
+  resolveText?: (url) => Promise&lt;string | null&gt;;     // override CSS stylesheet fetch
+  decodeWoff2?: (bytes) => Promise&lt;Uint8Array&gt;;      // override the WOFF2 → TTF decoder
+  onError?: 'throw' | 'skip';                 // default 'skip' — a missing web font is non-fatal
 }</code></pre>
     </section>
 
@@ -69,6 +83,7 @@
   variables?: Record&lt;string, unknown&gt;,         // $vars (precomputed totals)
   bands?:   { title?, pageHeader?, pageFooter?, summary?, background? },
   body?:    Block[],
+  fonts?:   FontReference[],                   // Google <link>/@import, @font-face, font URLs
 }</code></pre>
 
       <h3>Blocks</h3>
@@ -105,7 +120,8 @@ CellNode:   { content?, colSpan?, rowSpan?, align?, verticalAlign?, style?,
         <code>BandContent</code>, <code>BandType</code>, <code>StyleProps</code>, <code>BoxProps</code>,
         <code>Content</code>, <code>ContentSpan</code>, <code>ColumnNode</code>, <code>RowNode</code>,
         <code>CellNode</code>, <code>GroupNode</code>, <code>DataSource</code>, <code>Expr</code>,
-        <code>RenderOptions</code>, <code>ImageResolveOptions</code>.
+        <code>FontReference</code>, <code>RenderOptions</code>, <code>ImageResolveOptions</code>,
+        <code>FontResolveOptions</code>.
       </p>
     </section>
 

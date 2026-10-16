@@ -387,7 +387,7 @@ faces, and the run is split so each segment is measured and painted in the font 
 it. The substitution keeps the nearest `weight`/`style`, and text that genuinely has no
 covering face renders as `.notdef` rather than vanishing.
 
-This means **mixed-script text "just works"** — e.g. `何小鵬 test` in an `Arial` paragraph
+This means **mixed-script text "just works"** — e.g. `陳大文 test` in an `Arial` paragraph
 renders the CJK via a registered CJK face and the Latin via Arial, with no explicit
 `font-family` on the Chinese. The one requirement (as with any engine) is that a font
 covering the script is *registered*: the CLI auto-loads a CJK face per platform, and in the
@@ -409,9 +409,11 @@ because of `pdfkit` itself:
    `vite-plugin-node-polyfills` (Vite) or `resolve.fallback = { buffer: 'buffer/', stream: 'stream-browserify', … }`
    (webpack). There is no meaningful "no-build-step" browser use — that is a pdfkit constraint,
    not an engine one.
-2. **You supply the font bytes.** A browser cannot read installed system fonts, so `fetch`
-   TTF/OTF/TTC bytes yourself and pass them in (WOFF/WOFF2 are **not** supported by the font
-   engine — serve raw TTF/OTF):
+2. **You supply the font bytes** (unless you use [web-font auto-resolution](#web-fonts--google-fonts)).
+   A browser cannot read installed system fonts, so `fetch` TTF/OTF/TTC bytes yourself and pass
+   them in. The font engine embeds TTF/OTF/TTC directly; **WOFF2 is auto-decoded** for you when it
+   arrives via a Google Fonts link or an `@font-face` (see below), but if you hand it bytes
+   directly, give it raw TTF/OTF:
 
 ```ts
 import { renderToBuffer, type ReportDoc, type FontSource } from 'pdf-report-engine';
@@ -439,6 +441,49 @@ Browser-specific rules:
   filesystem path returns `null` for intrinsic size, so give path-less bytes or set explicit
   `width`/`height`. `setImageFileReader` exists for Node hosts; ignore it in the browser.
 - Heavy reports block the UI — run `renderToBuffer` in a **Web Worker** and transfer the bytes.
+
+## Web fonts & Google Fonts
+
+You don't have to fetch font bytes yourself. If the HTML references a web font, the engine
+resolves and embeds it during `renderToBuffer` — **in Node and in the browser, identically**:
+
+```html
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display&display=swap');
+  @font-face { font-family: 'Brand'; src: url('https://cdn.example/brand.woff2'); }
+</style>
+<h1 style="font-family: 'Roboto'">Quarterly Report</h1>   <!-- embedded, selectable -->
+```
+
+`htmlToReportDoc` collects those references into `report.fonts`, and an async pre-pass —
+`resolveRemoteFonts`, mirroring the remote-image one — fetches the CSS, parses every
+`@font-face`, downloads the files and registers them under their family name. Just write
+`font-family: 'Roboto'` and it embeds.
+
+**How it copes with formats.** Google's CSS endpoint is User-Agent driven: a Node `fetch`
+(non-browser UA) is served **TTF** and embedded directly; a browser (UA cannot be overridden) is
+served **WOFF2**, which fontkit/pdfkit cannot read — so we decode WOFF2 → TTF in-process. That
+needs the optional [`wawoff2`](https://www.npmjs.com/package/wawoff2) WebAssembly module (already a
+dependency here): if it's missing, WOFF2 references are skipped (or throw with `onError: 'throw'`)
+while TTF/OTF paths keep working. Google ships one file per script (`unicode-range`: latin,
+latin-ext, cyrillic, …); each subset becomes its own face and per-glyph fallback picks the one
+covering each code point — the same mechanism used for CJK.
+
+`report.fonts` is also settable directly (no HTML), and `renderToBuffer(report, { resolveFonts })`
+takes controls (`fetchRemote`, `timeoutMs`, `onError: 'throw' | 'skip'`, `resolveFont` /
+`resolveText` for a proxy or cache, `decodeWoff2`). Failed fonts are **skipped by default** so a
+flaky CDN never kills a render:
+
+```ts
+const report = htmlToReportDoc(html);                 // report.fonts populated from <link>/@font-face
+const pdf = await renderToBuffer(report, {
+  resolveFonts: { onError: 'throw', timeoutMs: 8000 }, // strict, for CI
+});
+```
+
+> Auto-fetched fonts touch the network, so pin/cache them (`resolveFont`) if you need byte-exact
+> reproducible PDFs — the same caveat as relying on any remote asset.
 
 ## Expressions & running tokens
 
