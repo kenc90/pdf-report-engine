@@ -17,10 +17,18 @@
  */
 import { findBreaks, type BreakToken } from './linebreak.js';
 import type { ResolvedStyle } from './style.js';
+import type { FontHandle } from '../fonts/registry.js';
 
 export interface InlineSource {
   text: string;
   style: ResolvedStyle;
+  /**
+   * Per-glyph fallback: given a code point, return the face that should render it
+   * (the primary when it covers the glyph, else a registered substitute). When
+   * absent every code point uses `style.handle` (the pre-fallback behaviour, and
+   * what deterministic tests rely on).
+   */
+  fallback?: (ch: string) => FontHandle;
 }
 
 export interface PositionedRun {
@@ -96,22 +104,29 @@ function descentOf(s: ResolvedStyle): number {
   return -(s.handle.descender / s.handle.unitsPerEm) * s.fontSize;
 }
 
-/** Width of a slice of tagged code points, summed per owning inline. */
+/** The face a single code point should render in, honouring per-glyph fallback. */
+function runHandle(src: InlineSource, ch: string): FontHandle {
+  return src.fallback ? src.fallback(ch) : src.style.handle;
+}
+
+/** Width of a slice of tagged code points, summed per owning inline *and* face. */
 function measureChars(chars: CharRef[], inlines: InlineSource[]): number {
   let total = 0;
   let i = 0;
   while (i < chars.length) {
     const run = chars[i]!.run;
+    const src = inlines[run]!;
+    const face = runHandle(src, chars[i]!.ch);
+    const style = src.style;
     let sub = '';
     let count = 0;
     let j = i;
-    while (j < chars.length && chars[j]!.run === run) {
+    while (j < chars.length && chars[j]!.run === run && runHandle(src, chars[j]!.ch) === face) {
       sub += chars[j]!.ch;
       count += 1;
       j += 1;
     }
-    const style = inlines[run]!.style;
-    total += style.handle.widthOf(sub, style.fontSize, style.features) + style.letterSpacing * count;
+    total += face.widthOf(sub, style.fontSize, style.features) + style.letterSpacing * count;
     i = j;
   }
   return total;
@@ -187,8 +202,10 @@ function emergencySplit(mt: MeasuredToken, maxWidth: number, inlines: InlineSour
   let bucket: CharRef[] = [];
   let w = 0;
   for (const ref of mt.chars) {
-    const style = inlines[ref.run]!.style;
-    const cw = style.handle.widthOf(ref.ch, style.fontSize, style.features) + style.letterSpacing;
+    const src = inlines[ref.run]!;
+    const style = src.style;
+    const face = runHandle(src, ref.ch);
+    const cw = face.widthOf(ref.ch, style.fontSize, style.features) + style.letterSpacing;
     if (bucket.length && w + cw > maxWidth) {
       pieces.push({ token: mt.token, chars: bucket, width: w });
       bucket = [];
@@ -245,18 +262,28 @@ function flush(input: FlushInput): Line {
   let i = 0;
   while (i < printable.length) {
     const run = printable[i]!.run;
+    const src = inlines[run]!;
     const isSpace = printable[i]!.ch === ' ';
+    const face = runHandle(src, printable[i]!.ch);
     let text = '';
     let count = 0;
     let j = i;
-    while (j < printable.length && printable[j]!.run === run && (printable[j]!.ch === ' ') === isSpace) {
+    while (
+      j < printable.length &&
+      printable[j]!.run === run &&
+      (printable[j]!.ch === ' ') === isSpace &&
+      runHandle(src, printable[j]!.ch) === face
+    ) {
       text += printable[j]!.ch;
       count += 1;
       j += 1;
     }
-    const style = inlines[run]!.style;
-    const width = style.handle.widthOf(text, style.fontSize, style.features) + style.letterSpacing * count;
-    runs.push({ text, style, x, width, space: isSpace });
+    const style = src.style;
+    const width = face.widthOf(text, style.fontSize, style.features) + style.letterSpacing * count;
+    // Carry the chosen face on a cloned style so the writer measures and paints
+    // this sub-run with the very font used here (measurement == rendering).
+    const runStyle: ResolvedStyle = face === style.handle ? style : { ...style, handle: face };
+    runs.push({ text, style: runStyle, x, width, space: isSpace });
     x += width;
     i = j;
   }

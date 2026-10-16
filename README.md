@@ -348,9 +348,9 @@ The `samples/` folder demonstrates the supported subset:
   `npm run html:pdf -- samples/annual-report.html -o output/` (data auto-pairs).
 - `testimonial.html` — a **formal certificate / Jasper-style testimonial** replica: a repeating
   `data-band` header (institution crest slot + title) and footer (`Page N of M` + a reference
-  number), serif body text, and label/value section tables. It also demonstrates **CJK** (a
-  Chinese name) and **figure alignment** — render it with real Times New Roman (lining figures)
-  via the `-f` flags shown above so digits line up with capitals.
+  number), serif body text, and label/value section tables. It renders **out of the box** — the
+  CLI auto-detects Times New Roman (lining figures, so digits align with capitals) and, via
+  per-glyph fallback, a CJK face for the Chinese name — with no `-f` flags required.
 
 ## Fonts
 
@@ -378,6 +378,21 @@ const pdf = await renderToBuffer(report, { fonts });
   (default `'normal'`) select the face.
 - `.ttc` collections require `postscriptName` to pick the face inside the collection.
 - Give each weight/style you want to use (regular, bold, italic) its own entry.
+
+### Per-glyph font fallback
+
+Like a browser or Java2D, the engine falls back **per character**: within a single run, any
+code point the resolved face has no glyph for is re-resolved against the other *registered*
+faces, and the run is split so each segment is measured and painted in the font that covers
+it. The substitution keeps the nearest `weight`/`style`, and text that genuinely has no
+covering face renders as `.notdef` rather than vanishing.
+
+This means **mixed-script text "just works"** — e.g. `何小鵬 test` in an `Arial` paragraph
+renders the CJK via a registered CJK face and the Latin via Arial, with no explicit
+`font-family` on the Chinese. The one requirement (as with any engine) is that a font
+covering the script is *registered*: the CLI auto-loads a CJK face per platform, and in the
+library you add one via `readFontFiles`. Fallback only reaches registered faces, so output
+stays deterministic across machines rather than dipping into whatever the OS happens to have.
 
 ## Expressions & running tokens
 

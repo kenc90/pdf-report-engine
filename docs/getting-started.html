@@ -83,6 +83,15 @@ const pdf = await renderToBuffer(report, { fonts });</code></pre>
         <code>fonts: []</code> when none are found — the base-14 fonts still render, so the report
         never hard-fails on a machine with no system fonts.
       </div>
+      <div class="note">
+        <strong>Per-glyph fallback.</strong> Within a run, any character the resolved face has no
+        glyph for is re-resolved against the other <em>registered</em> faces (nearest weight/style)
+        and painted in that font — so <code>何小鵬 test</code> in an <code>Arial</code> paragraph
+        renders CJK via a registered CJK face and Latin via Arial, with no explicit
+        <code>font-family</code> on the Chinese. The only requirement is that a covering font is
+        registered (the CLI does this per platform; in the library add one via
+        <code>readFontFiles</code>). It reaches only registered faces, keeping output deterministic.
+      </div>
     </section>
 
     <section id="data-table">

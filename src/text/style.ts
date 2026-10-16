@@ -13,6 +13,11 @@ import { FontRegistry } from '../fonts/registry.js';
 
 export interface ResolvedStyle {
   handle: FontHandle;
+  /**
+   * The `font-family` stack (or inherited family) that produced {@link handle},
+   * kept so per-glyph fallback can re-resolve a code point against the same stack.
+   */
+  fontStack?: string | string[];
   fontSize: number;
   /** Absolute line height in points. */
   lineHeight: number;
@@ -113,6 +118,7 @@ export function resolveStyle(
 
   return {
     handle,
+    fontStack: stack as string | string[] | undefined,
     fontSize,
     lineHeight,
     lineHeightInput: lhInput,

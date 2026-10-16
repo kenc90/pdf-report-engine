@@ -14,7 +14,7 @@ import { ExprCompiler, exprSource, type ExprContext } from '../expr/eval.js';
 import { createFunctions } from '../expr/functions.js';
 import { formatNumber, formatDate } from '../expr/format.js';
 import { getPath } from '../expr/functions.js';
-import { FontRegistry } from '../fonts/registry.js';
+import { FontRegistry, type FontHandle } from '../fonts/registry.js';
 import { resolveStyle, type ResolvedStyle } from '../text/style.js';
 import type { InlineSource } from '../text/typeset.js';
 
@@ -112,14 +112,14 @@ export function resolveContent(
   };
   const walkChild = (piece: string | number | ContentSpan, style: ResolvedStyle): void => {
     if (typeof piece === 'string' || typeof piece === 'number') {
-      out.push({ text: String(piece), style });
+      out.push({ text: String(piece), style, fallback: makeFallback(ctx, style) });
       return;
     }
     if (!isSpan(piece)) return;
     const spanStyle = ctx.style(piece.style, style);
     if (piece.bind !== undefined) {
       const raw = resolveBind(piece.bind, ctx, scope);
-      out.push({ text: ctx.resolve(raw, piece.format, scope), style: spanStyle });
+      out.push({ text: ctx.resolve(raw, piece.format, scope), style: spanStyle, fallback: makeFallback(ctx, spanStyle) });
     } else if (piece.text !== undefined) {
       walk(piece.text, spanStyle);
     } else if (piece.children !== undefined) {
@@ -128,6 +128,19 @@ export function resolveContent(
   };
   walk(content, inherited);
   return out;
+}
+
+/**
+ * Build a per-glyph fallback bound to a style's resolved stack, so a run whose
+ * primary face lacks a glyph (e.g. CJK in a Latin font) spills into a registered
+ * substitute at typeset time. The registry short-circuits back to the primary when
+ * it already covers the code point, so this is a no-op for well-covered text.
+ */
+function makeFallback(ctx: LayoutContext, style: ResolvedStyle): (ch: string) => FontHandle {
+  const stack = style.fontStack ?? style.handle.family;
+  const weight = style.handle.weight;
+  const fontStyle = style.handle.style;
+  return (ch: string) => ctx.registry.resolveWithFallback(ch, stack, weight, fontStyle);
 }
 
 function resolveBind(bind: string | { expr: string }, ctx: LayoutContext, scope: ExprContext): unknown {

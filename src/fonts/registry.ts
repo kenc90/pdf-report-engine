@@ -96,6 +96,8 @@ export interface FontHandle {
   readonly embeddedName?: string;
   widthOf(text: string, size: number, features?: Record<string, boolean>): number;
   hasGlyphsFor(text: string): boolean;
+  /** True when a single code point has a glyph in this face (drives per-glyph fallback). */
+  coversCodePoint(cp: number): boolean;
   /** Layout metrics table for the writer (`W`/`DW` entries in the CIDFont). */
   readonly pdfFont?: PdfFontLike;
 }
@@ -144,20 +146,19 @@ class PdfFontHandle implements FontHandle {
     return width;
   }
 
-  hasGlyphsFor(text: string): boolean {
+  coversCodePoint(cp: number): boolean {
+    if (cp === 0x20 || cp === 0x0a) return true;
     const raw = this.pdfFont.font;
     if (!raw?.hasGlyphForCodePoint) return true;
     // `characterSet` is a plain sorted array on fontkit's TTF; building a Set once
     // is much cheaper than 30k linear scans for a CJK face.
     if (!this.coverage && Array.isArray(raw.characterSet)) this.coverage = new Set(raw.characterSet);
+    return this.coverage ? this.coverage.has(cp) : raw.hasGlyphForCodePoint(cp);
+  }
+
+  hasGlyphsFor(text: string): boolean {
     for (const ch of text) {
-      const cp = ch.codePointAt(0)!;
-      if (cp === 0x20 || cp === 0x0a) continue;
-      if (this.coverage) {
-        if (!this.coverage.has(cp)) return false;
-      } else if (!raw.hasGlyphForCodePoint(cp)) {
-        return false;
-      }
+      if (!this.coversCodePoint(ch.codePointAt(0)!)) return false;
     }
     return true;
   }
@@ -200,6 +201,9 @@ export class HeuristicFontHandle implements FontHandle {
   hasGlyphsFor(): boolean {
     return true;
   }
+  coversCodePoint(): boolean {
+    return true;
+  }
 }
 
 function isWide(cp: number): boolean {
@@ -235,8 +239,10 @@ export interface FontRegistryOptions {
 }
 
 export class FontRegistry {
-  private readonly faces: PdfFontHandle[] = [];
+  private readonly faces: FontHandle[] = [];
   private readonly byKey = new Map<string, FontHandle>();
+  /** Per-codepoint fallback decisions, keyed by `primary.key|cp`. */
+  private readonly glyphCache = new Map<string, FontHandle>();
   /** Family stacks referenced by a template but never registered. */
   readonly unmatched = new Set<string>();
   private readonly fallbackFamily: string;
@@ -275,7 +281,9 @@ export class FontRegistry {
 
   /** Inject a handle directly (tests, or a custom writer with its own font object). */
   addHandle(handle: FontHandle): this {
-    this.byKey.set(faceKey(handle.family, handle.weight, handle.style), handle);
+    const key = faceKey(handle.family, handle.weight, handle.style);
+    if (!this.byKey.has(key)) this.faces.push(handle);
+    this.byKey.set(key, handle);
     return this;
   }
 
@@ -295,7 +303,7 @@ export class FontRegistry {
       .filter(Boolean);
 
     for (const family of families) {
-      let best: { handle: PdfFontHandle; score: number } | undefined;
+      let best: { handle: FontHandle; score: number } | undefined;
       for (const face of this.faces) {
         if (face.family.toLowerCase() !== family.toLowerCase()) continue;
         const stylePenalty = face.style === style ? 0 : 300;
@@ -308,7 +316,7 @@ export class FontRegistry {
       if (best) return best.handle;
     }
 
-    let nearest: { handle: PdfFontHandle; score: number } | undefined;
+    let nearest: { handle: FontHandle; score: number } | undefined;
     for (const face of this.faces) {
       const score = Math.abs(face.weight - weight) * 10 + (face.style === style ? 0 : 300);
       if (!nearest || score < nearest.score) nearest = { handle: face, score };
@@ -318,6 +326,37 @@ export class FontRegistry {
     const wanted = families.join(', ');
     if (wanted) this.unmatched.add(wanted);
     return this.fallback(wanted || this.fallbackFamily, weight, style);
+  }
+
+  /**
+   * Per-glyph fallback: resolve `ch` against the stack, but if the resolved face
+   * has no glyph for it, pick the nearest registered face (by weight/style) that
+   * does. Returns the primary face when nothing covers the code point, so truly
+   * missing glyphs render as `.notdef` rather than vanishing silently. Idempotent
+   * and identity-stable (same input → same handle object) so typeset can group
+   * consecutive code points that share a face into one run.
+   */
+  resolveWithFallback(
+    ch: string,
+    stack: string | string[] | undefined,
+    weight = 400,
+    style: 'normal' | 'italic' = 'normal',
+  ): FontHandle {
+    const primary = this.resolve(stack, weight, style);
+    const cp = ch.codePointAt(0);
+    if (cp === undefined || primary.coversCodePoint(cp)) return primary;
+    const cacheKey = `${primary.key}|${cp}`;
+    const hit = this.glyphCache.get(cacheKey);
+    if (hit) return hit;
+    let best: { handle: FontHandle; score: number } | undefined;
+    for (const face of this.faces) {
+      if (face === primary || !face.coversCodePoint(cp)) continue;
+      const score = Math.abs(face.weight - weight) * 10 + (face.style === style ? 0 : 300);
+      if (!best || score < best.score) best = { handle: face, score };
+    }
+    const chosen = best ? best.handle : primary;
+    this.glyphCache.set(cacheKey, chosen);
+    return chosen;
   }
 
   private fallback(family: string, weight: number, style: 'normal' | 'italic'): FontHandle {
