@@ -28,23 +28,202 @@
  *   --page <spec>       Base font size in points for the document (default 11).
  *   -h, --help          Show this help.
  *
- * With no `--font` and auto-fonts enabled, it opportunistically loads Arial /
- * Georgia / Microsoft YaHei from the Windows font folder when present; otherwise
- * it falls back to the standard PDF base-14 fonts (Latin-1, not embedded).
+ * When no `--font` is given (and auto-fonts are on), it detects fonts for the current
+ * platform: Windows (Arial/Georgia/Times + Microsoft YaHei from C:/Windows/Fonts),
+ * macOS (Arial/Georgia/Times from the Supplemental folder + Arial Unicode/PingFang for
+ * CJK), or Linux (via fontconfig `fc-match`/`fc-list`, falling back to scanning common
+ * font dirs for DejaVu/Liberation/Noto). A CJK-capable font is registered under common
+ * CJK aliases. If nothing is found it falls back to the standard PDF base-14 fonts
+ * (Latin-1, not embedded — CJK will not render).
  */
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
+import { spawnSync } from 'node:child_process';
 import { htmlToReportDoc, renderToBuffer, readFontFiles, type FontFileEntry } from '../index.js';
 
-const FONT_DIR = 'C:/Windows/Fonts';
-const AUTO_FONTS: FontFileEntry[] = [
-  { family: 'Arial', path: path.join(FONT_DIR, 'arial.ttf'), weight: 400 },
-  { family: 'Arial', path: path.join(FONT_DIR, 'arialbd.ttf'), weight: 700 },
-  { family: 'Arial', path: path.join(FONT_DIR, 'ariali.ttf'), weight: 400, style: 'italic' },
-  { family: 'Georgia', path: path.join(FONT_DIR, 'georgia.ttf'), weight: 400 },
-  { family: 'Microsoft YaHei', path: path.join(FONT_DIR, 'msyh.ttc'), postscriptName: 'MicrosoftYaHei' },
-];
+/**
+ * Cross-platform auto-detected system fonts. These are the fallback families used
+ * when the caller does not pass `--font`; explicit fonts are merged on top of them.
+ * Each entry registers a real font file under an *authoring* family name (e.g.
+ * 'Arial') so `font-family` stacks resolve to an embedded, metric-similar face, and
+ * a CJK-capable font is registered under common CJK aliases so Chinese/Japanese text
+ * renders without extra flags. When nothing is found we fall back to base-14 (Latin-1).
+ *
+ * Note: we deliberately do NOT import `fontkit` here (see fonts/registry.ts — a second
+ * fontkit instance breaks pdfkit's Buffer `instanceof` check). Collection (.ttc/.otc)
+ * face names are resolved via fontconfig on Linux, and hardcoded where known otherwise.
+ */
+const WIN_DIR = 'C:/Windows/Fonts';
+const CJK_ALIASES = ['Microsoft YaHei', 'PMingLiU', 'SimSun', 'PingFang SC', 'Noto Sans CJK SC'];
+
+const isFont = (e: FontFileEntry | undefined): e is FontFileEntry => !!e;
+
+/** Build a FontFileEntry, attaching a PostScript face name only for collections. */
+function mk(
+  family: string,
+  file: string | undefined,
+  opts: { weight?: number; style?: 'normal' | 'italic'; ps?: string } = {},
+): FontFileEntry | undefined {
+  if (!file || !fs.existsSync(file)) return undefined;
+  const e: FontFileEntry = { family, path: file, weight: opts.weight, style: opts.style };
+  if (/\.(ttc|otc)$/i.test(file) && opts.ps) e.postscriptName = opts.ps;
+  return e;
+}
+
+/** Run a fontconfig command; returns stdout lines, or [] if the tool is unavailable. */
+function fc(args: string[]): string[] {
+  try {
+    const r = spawnSync(args[0]!, args.slice(1), { encoding: 'utf8', timeout: 3000 });
+    if (r.status !== 0) return [];
+    return (r.stdout ?? '').split('\n').map((s) => s.trim()).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+/** Resolve a fontconfig pattern to its best-match file + PostScript name. */
+function fcMatch(query: string): { file?: string; ps?: string } {
+  const out = fc(['fc-match', '-f', '%{file}\n%{postscriptname}', query]);
+  const file = out[0] && fs.existsSync(out[0]) ? out[0] : undefined;
+  return { file, ps: out[1] || undefined };
+}
+
+/** Files that actually cover `lang` (e.g. 'zh'); empty when no such font is installed. */
+function fcLangFiles(lang: string): string[] {
+  return fc(['fc-list', '-f', '%{file}\n', `:lang=${lang}`]).filter((p) => fs.existsSync(p));
+}
+
+/** First PostScript name inside a font file (handles .ttc collections). */
+function fcFilePs(file: string): string | undefined {
+  return fc(['fc-query', '-f', '%{postscriptname}\n', file])[0];
+}
+
+function windowsFonts(): FontFileEntry[] {
+  return [
+    mk('Arial', path.join(WIN_DIR, 'arial.ttf'), { weight: 400 }),
+    mk('Arial', path.join(WIN_DIR, 'arialbd.ttf'), { weight: 700 }),
+    mk('Arial', path.join(WIN_DIR, 'ariali.ttf'), { weight: 400, style: 'italic' }),
+    mk('Georgia', path.join(WIN_DIR, 'georgia.ttf'), { weight: 400 }),
+    mk('Georgia', path.join(WIN_DIR, 'georgiab.ttf'), { weight: 700 }),
+    mk('Times New Roman', path.join(WIN_DIR, 'times.ttf'), { weight: 400 }),
+    mk('Times New Roman', path.join(WIN_DIR, 'timesbd.ttf'), { weight: 700 }),
+    mk('Microsoft YaHei', path.join(WIN_DIR, 'msyh.ttc'), { ps: 'MicrosoftYaHei' }),
+  ].filter(isFont);
+}
+
+function macFonts(): FontFileEntry[] {
+  const supp = '/System/Library/Fonts/Supplemental';
+  const sys = '/System/Library/Fonts';
+  const base = [
+    mk('Arial', path.join(supp, 'Arial.ttf'), { weight: 400 }),
+    mk('Arial', path.join(supp, 'Arial Bold.ttf'), { weight: 700 }),
+    mk('Arial', path.join(supp, 'Arial Italic.ttf'), { weight: 400, style: 'italic' }),
+    mk('Georgia', path.join(supp, 'Georgia.ttf'), { weight: 400 }),
+    mk('Georgia', path.join(supp, 'Georgia Bold.ttf'), { weight: 700 }),
+    mk('Times New Roman', path.join(supp, 'Times New Roman.ttf'), { weight: 400 }),
+    mk('Times New Roman', path.join(supp, 'Times New Roman Bold.ttf'), { weight: 700 }),
+  ].filter(isFont);
+  // Prefer a single-face CJK font; PingFang is a collection needing a face name.
+  const arialUnicode = mk('Microsoft YaHei', path.join(supp, 'Arial Unicode.ttf'));
+  if (arialUnicode) {
+    for (const alias of CJK_ALIASES) {
+      const e = mk(alias, path.join(supp, 'Arial Unicode.ttf'));
+      if (e) base.push(e);
+    }
+  } else {
+    for (const alias of CJK_ALIASES) {
+      const e = mk(alias, path.join(sys, 'PingFang.ttc'), { ps: 'PingFangSC-Regular' });
+      if (e) base.push(e);
+    }
+  }
+  return base;
+}
+
+function linuxFonts(): FontFileEntry[] {
+  const out: FontFileEntry[] = [];
+  const add = (family: string, query: string, weight?: number, style?: 'normal' | 'italic') => {
+    const m = fcMatch(query);
+    const e = mk(family, m.file, { weight, style, ps: m.ps });
+    if (e) out.push(e);
+  };
+  add('Arial', 'Arial', 400);
+  add('Arial', 'Arial:bold', 700);
+  add('Arial', 'Arial:italic', 400, 'italic');
+  add('Georgia', 'Georgia', 400);
+  add('Georgia', 'Georgia:bold', 700);
+  add('Times New Roman', 'Times New Roman', 400);
+  add('Times New Roman', 'Times New Roman:bold', 700);
+  // A real zh-capable font (fc-list only returns genuine coverage), then its face name.
+  const cjk = fcLangFiles('zh')[0];
+  if (cjk) {
+    const ps = /\.(ttc|otc)$/i.test(cjk) ? fcFilePs(cjk) : undefined;
+    for (const alias of CJK_ALIASES) {
+      const e = mk(alias, cjk, { ps });
+      if (e) out.push(e);
+    }
+  }
+  return out.length ? out : scanLinuxFontDirs();
+}
+
+/** Fallback when fontconfig is unavailable: walk known font dirs for common files. */
+function scanLinuxFontDirs(): FontFileEntry[] {
+  const roots = [
+    '/usr/share/fonts', '/usr/local/share/fonts',
+    path.join(os.homedir(), '.fonts'), path.join(os.homedir(), '.local/share/fonts'),
+  ];
+  const files: string[] = [];
+  for (const root of roots) walkFonts(root, 6, files);
+  const pick = (re: RegExp) => files.find((f) => re.test(path.basename(f)));
+  const out: FontFileEntry[] = [];
+  const add = (family: string, res: RegExp[], weight?: number, style?: 'normal' | 'italic') => {
+    for (const re of res) {
+      const e = mk(family, pick(re), { weight, style });
+      if (e) { out.push(e); return; }
+    }
+  };
+  add('Arial', [/^LiberationSans-Regular\./i, /^DejaVuSans\./i], 400);
+  add('Arial', [/^LiberationSans-Bold\./i, /^DejaVuSans-Bold\./i], 700);
+  add('Georgia', [/^LiberationSerif-Regular\./i, /^DejaVuSerif\./i], 400);
+  add('Times New Roman', [/^LiberationSerif-Regular\./i, /^DejaVuSerif\./i], 400);
+  add('Times New Roman', [/^LiberationSerif-Bold\./i, /^DejaVuSerif-Bold\./i], 700);
+  const cjkFile = pick(/NotoSansCJK/i) || pick(/NotoSerifCJK/i) || pick(/SourceHanSans/i) || pick(/wqy-zenhei/i) || pick(/wqy-microhei/i);
+  if (cjkFile) {
+    const ps = /\.(ttc|otc)$/i.test(cjkFile) ? fcFilePs(cjkFile) : undefined;
+    for (const alias of CJK_ALIASES) {
+      const e = mk(alias, cjkFile, { ps });
+      if (e) out.push(e);
+    }
+  }
+  return out;
+}
+
+function walkFonts(dir: string, depth: number, acc: string[]): void {
+  if (depth < 0) return;
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const ent of entries) {
+    const full = path.join(dir, ent.name);
+    if (ent.isDirectory()) walkFonts(full, depth - 1, acc);
+    else if (/\.(ttf|otf|ttc|otc)$/i.test(ent.name)) acc.push(full);
+  }
+}
+
+function platformAutoFonts(): FontFileEntry[] {
+  switch (process.platform) {
+    case 'win32':
+      return windowsFonts();
+    case 'darwin':
+      return macFonts();
+    default:
+      return linuxFonts();
+  }
+}
 
 const HELP = `html-to-pdf — convert authoring HTML to a paginated PDF
 
@@ -168,11 +347,10 @@ function parseFontSpec(spec: string): FontFileEntry {
 function resolveFonts(opts: CliOptions): FontFileEntry[] {
   const explicit = opts.fontSpecs.map(parseFontSpec);
   const entries: FontFileEntry[] = [...explicit];
-  // Auto-loaded system fonts are additive: they fill in families the user did not
-  // override (notably the CJK face), so `--font Times…` still keeps YaHei available.
+  // Auto-detected system fonts are additive: they fill in families the user did not
+  // override (notably the CJK face), so `--font Times…` still keeps CJK available.
   if (opts.autoFonts) {
-    for (const auto of AUTO_FONTS) {
-      if (!auto.path || !fs.existsSync(auto.path)) continue;
+    for (const auto of platformAutoFonts()) {
       const overridden = explicit.some(
         (e) => e.family.toLowerCase() === auto.family.toLowerCase() && (e.weight ?? 400) === (auto.weight ?? 400),
       );

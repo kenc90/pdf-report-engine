@@ -282,10 +282,13 @@ npm run html:pdf -- samples/ -o output/
 # so the CJK face stays available even when you specify your own:
 npm run html:pdf -- samples/invoice.html -f "Arial=C:/Windows/Fonts/arialbd.ttf:700"
 
-# Render a report in real Times New Roman while keeping Chinese glyph support:
-npm run html:pdf -- samples/testimonial.html -o output/testimonial.pdf \
-  -f "Times New Roman=C:/Windows/Fonts/times.ttf:400" \
-  -f "Times New Roman=C:/Windows/Fonts/timesbd.ttf:700"
+# The testimonial sample renders out-of-the-box — Times New Roman (lining figures)
+# and a CJK face are auto-detected on Windows / macOS / Linux, no flags required:
+npm run html:pdf -- samples/testimonial.html -o output/testimonial.pdf
+
+# Force a specific font file (override/additive). Paths below are Linux examples:
+npm run html:pdf -- samples/testimonial.html \
+  -f "Times New Roman=/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf:400"
 
 # Select a face inside a TrueType collection (.ttc) with a `#PostScriptName`:
 npm run html:pdf -- samples/testimonial.html -f "PMingLiU=C:/Windows/Fonts/mingliu.ttc#PMingLiU"
@@ -302,11 +305,17 @@ Options:
 | `--no-auto-fonts` | Skip automatic system-font detection entirely (then only `--font` entries load; falls back to base-14 if none). |
 | `-h, --help` | Show usage. |
 
-By default it opportunistically loads Arial / Georgia / Microsoft YaHei from
-`C:/Windows/Fonts` when present (YaHei provides CJK coverage). Explicit `--font` entries are
-merged **with** these, so you can add a family (e.g. Times New Roman) without losing the CJK
-font. With `--no-auto-fonts`, or when nothing is found, it renders with the standard PDF base-14
-fonts (Latin-1 only — CJK will not render).
+By default it auto-detects fonts **for the current platform** and registers them under the
+authoring family names samples use:
+
+- **Windows** — Arial / Georgia / Times New Roman from `C:/Windows/Fonts`, plus Microsoft YaHei (CJK).
+- **macOS** — Arial / Georgia / Times New Roman from `/System/Library/Fonts/Supplemental`, plus Arial Unicode / PingFang (CJK).
+- **Linux** — via fontconfig (`fc-match` / `fc-list`), falling back to scanning common font
+  dirs for DejaVu / Liberation / Noto, with a `:lang=zh` font registered under CJK aliases.
+
+Explicit `--font` entries are merged **with** these, so you can add a family (e.g. Times New
+Roman) without losing the CJK font. If no fonts are found (or with `--no-auto-fonts` and no
+`--font`), it renders with the standard PDF base-14 fonts (Latin-1 only — CJK will not render).
 
 #### Sample HTML
 
