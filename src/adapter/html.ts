@@ -17,7 +17,6 @@
  */
 import { toPt } from '../core/units.js';
 import type { PageSpec } from '../core/page.js';
-import { isAbsolute, resolve } from 'node:path';
 import { exprSource } from '../expr/eval.js';
 import type {
   ReportDoc,
@@ -607,11 +606,50 @@ export interface HtmlOptions {
   info?: ReportDoc['info'];
 }
 
+/** Absolute filesystem path? (POSIX `/…`, Windows `C:\…` / `C:/…`). */
+function isAbsolutePath(p: string): boolean {
+  return /^([a-zA-Z]:[\\/]|[\\/])/.test(p);
+}
+
+/**
+ * Join a base directory and a relative image path without depending on `node:path`
+ * (so this module bundles for the browser). Handles POSIX, Windows, and URL bases
+ * and collapses `.`/`..` segments.
+ */
+function joinPath(base: string, rel: string): string {
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(rel)) return rel; // absolute URL always wins
+  const isUrlBase = /^[a-z][a-z0-9+.-]*:\/\//i.test(base);
+  const win = !isUrlBase && base.includes('\\') && !base.includes('/');
+  const sep = isUrlBase ? '/' : win ? '\\' : '/';
+  if (!isUrlBase && (rel.startsWith('/') || rel.startsWith('\\'))) return rel;
+
+  let prefix = '';
+  let segs: string[];
+  if (isUrlBase) {
+    const m = /^([a-z][a-z0-9+.-]*\/\/[^/]+)(\/[^?#]*)?/i.exec(base);
+    prefix = (m?.[1] ?? base) + '/';
+    segs = (m?.[2] ?? '').split('/').filter(Boolean);
+  } else {
+    const root = /^([a-zA-Z]:)/.exec(base)?.[1];
+    if (root) prefix = root + sep;
+    else if (!win && base.startsWith('/')) prefix = '/';
+    segs = base.replace(/^[a-zA-Z]:/, '').split(/[\\/]/).filter(Boolean);
+  }
+
+  const stack = [...segs];
+  for (const raw of rel.split(/[\\/]/)) {
+    if (!raw || raw === '.') continue;
+    if (raw === '..') stack.pop();
+    else stack.push(raw);
+  }
+  return prefix + stack.join(sep);
+}
+
 /** Resolve an `<img>` `src`: absolute paths, `data:` URIs and URLs pass through;
  *  relative paths are joined against `baseDir` when it is set. */
 function resolveImageSrc(src: string, opts: HtmlOptions): string {
-  if (!src || /^(data:|https?:|file:)/i.test(src) || isAbsolute(src)) return src;
-  return opts.baseDir ? resolve(opts.baseDir, src) : src;
+  if (!src || /^(data:|https?:|file:)/i.test(src) || isAbsolutePath(src)) return src;
+  return opts.baseDir ? joinPath(opts.baseDir, src) : src;
 }
 
 function findFirst(root: HElement, tag: string): HElement | undefined {

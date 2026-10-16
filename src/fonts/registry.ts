@@ -384,14 +384,17 @@ export type FontFileEntry = {
 
 /** Read font programs from disk or memory. Async so browsers can pass `fetch()` bytes. */
 export async function readFontFiles(entries: FontFileEntry[]): Promise<FontSource[]> {
-  const fs = await import('node:fs/promises');
   const out: FontSource[] = [];
+  // Only load `node:fs/promises` when a path actually needs reading, so a browser
+  // build that supplies `buffer` bytes never touches the Node module.
+  let fs: typeof import('node:fs/promises') | undefined;
   for (const entry of entries) {
     if (entry.buffer) {
       out.push({ ...entry, buffer: entry.buffer });
       continue;
     }
     if (!entry.path) throw new Error(`Font "${entry.family}": provide either path or buffer`);
+    fs ??= await import('node:fs/promises');
     out.push({ ...entry, buffer: new Uint8Array(await fs.readFile(entry.path)) });
   }
   return out;

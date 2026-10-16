@@ -92,17 +92,33 @@ export function createReport(report: ReportDoc, options: RenderOptions = {}): Re
   return { doc, pages, registry };
 }
 
-/** Render to a Buffer (collects the stream). Resolves any remote images first. */
+/** Render to bytes (collects the stream). Resolves any remote images first. */
 export async function renderToBuffer(report: ReportDoc, options: RenderOptions = {}): Promise<Buffer> {
   const resolved = await resolveRemoteImages(report, options.images);
   const { doc } = createReport(resolved, options);
   doc.end();
   return new Promise<Buffer>((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    doc.on('data', (c: Buffer) => chunks.push(c));
-    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    const chunks: Uint8Array[] = [];
+    doc.on('data', (c: Uint8Array) => chunks.push(c));
+    doc.on('end', () => resolve(concatChunks(chunks)));
     doc.on('error', reject);
   });
+}
+
+/**
+ * Join streamed chunks into one buffer. In Node this returns a real `Buffer`
+ * (so callers can `.toString('latin1')` etc.); in a browser bundle there is no
+ * global `Buffer`, so we fall back to plain `Uint8Array` bytes (wrap in a `Blob`).
+ */
+function concatChunks(chunks: Uint8Array[]): Buffer {
+  const g = (globalThis as { Buffer?: { concat: (c: Uint8Array[]) => Buffer } }).Buffer;
+  if (g && typeof g.concat === 'function') return g.concat(chunks);
+  let total = 0;
+  for (const c of chunks) total += c.length;
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) { out.set(c, off); off += c.length; }
+  return out as unknown as Buffer;
 }
 
 function toPdfInfo(report: ReportDoc): Record<string, string> {

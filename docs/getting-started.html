@@ -16,6 +16,7 @@
         <a href="getting-started.html">Getting started</a>
         <a href="examples.html">Examples</a>
         <a href="api.html">API</a>
+        <a href="browser-demo.html">Browser demo</a>
       </nav>
     </div>
   </header>
@@ -91,6 +92,35 @@ const pdf = await renderToBuffer(report, { fonts });</code></pre>
         <code>font-family</code> on the Chinese. The only requirement is that a covering font is
         registered (the CLI does this per platform; in the library add one via
         <code>readFontFiles</code>). It reaches only registered faces, keeping output deterministic.
+      </div>
+    </section>
+
+    <section id="browser">
+      <h2>Running in the browser</h2>
+      <p>The core engine is pure JavaScript and bundles for the browser — the library graph
+      has <strong>no top-level <code>node:*</code> imports</strong>. Two constraints remain:
+      <code>pdfkit</code> itself needs <code>Buffer</code>/streams, so build with a Node-polyfill
+      plugin (Vite: <code>vite-plugin-node-polyfills</code>; webpack: <code>resolve.fallback</code>);
+      and a browser cannot read installed system fonts, so you <em>fetch the font bytes yourself</em>
+      (TTF/OTF/TTC — WOFF/WOFF2 are not supported by the font engine).</p>
+      <pre data-copy><code>import { renderToBuffer } from 'pdf-report-engine';
+
+const font = async (url, family, weight) =&gt;
+  ({ family, weight, buffer: new Uint8Array(await (await fetch(url)).arrayBuffer()) });
+
+const fonts = await Promise.all([
+  font('/fonts/Inter-Regular.ttf', 'Inter', 400),
+  font('/fonts/Inter-Bold.ttf',    'Inter', 700),
+  font('/fonts/NotoSansSC.ttf',    'Microsoft YaHei'), // registered CJK face enables fallback
+]);
+
+const pdf = await renderToBuffer(report, { fonts });
+const url = URL.createObjectURL(new Blob([pdf], { type: 'application/pdf' }));</code></pre>
+      <div class="note">
+        In the browser: pass <code>buffer</code> bytes (never a <code>path</code> — that lazily
+        pulls in <code>node:fs/promises</code>); give images as bytes, a <code>data:</code> URI, or an
+        <code>http(s)</code> URL (a filesystem path has no intrinsic size here); and run large
+        reports in a <strong>Web Worker</strong> so the UI thread is not blocked.
       </div>
     </section>
 

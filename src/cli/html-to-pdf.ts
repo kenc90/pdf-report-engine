@@ -41,7 +41,7 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
-import { htmlToReportDoc, renderToBuffer, readFontFiles, type FontFileEntry } from '../index.js';
+import { htmlToReportDoc, renderToBuffer, readFontFiles, setImageFileReader, type FontFileEntry } from '../index.js';
 
 /**
  * Cross-platform auto-detected system fonts. These are the fallback families used
@@ -383,6 +383,11 @@ async function main(): Promise<void> {
     return;
   }
   const opts = parsed;
+
+  // The engine reads path-based images through an injected reader so its core stays
+  // free of a top-level `node:fs` import (browser-bundleable). In the Node CLI we wire
+  // it to the real synchronous filesystem read.
+  setImageFileReader((p) => new Uint8Array(fs.readFileSync(p)));
 
   const files = collectHtmlFiles(opts.inputs);
 

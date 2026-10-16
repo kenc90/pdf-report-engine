@@ -59,10 +59,8 @@ function drawCommand(doc: PDFDocument, cmd: DrawCommand, x: number, y: number): 
       return;
     case 'image': {
       // Layout already resolved a width+height that preserve the aspect ratio,
-      // so pass both. `doc.image` accepts a path, a `data:` URI, or raw bytes;
-      // pdfkit wants a Node Buffer for byte data, so coerce a plain Uint8Array.
-      const src = typeof cmd.src === 'string' ? cmd.src : Buffer.from(cmd.src);
-      doc.image(src, x + cmd.x, y + cmd.y, { width: cmd.w, height: cmd.h });
+      // so pass both. `doc.image` accepts a path, a `data:` URI, or raw bytes.
+      doc.image(imageSource(cmd.src), x + cmd.x, y + cmd.y, { width: cmd.w, height: cmd.h });
       return;
     }
     case 'underline':
@@ -72,6 +70,48 @@ function drawCommand(doc: PDFDocument, cmd: DrawCommand, x: number, y: number): 
       doc.restore();
       return;
   }
+}
+
+/**
+ * Coerce an image source to what pdfkit accepts across runtimes: a filesystem
+ * path or `data:` URI passes through; bytes become a Node Buffer where one exists,
+ * otherwise a base64 `data:` URI (a browser bundle has no global `Buffer`).
+ */
+function imageSource(src: string | Uint8Array): string | Buffer {
+  if (typeof src === 'string') return src;
+  const g = globalThis as { Buffer?: { from: (b: Uint8Array) => unknown } };
+  if (typeof g.Buffer?.from === 'function') return g.Buffer.from(src) as Buffer;
+  return `data:${sniffImageMime(src)};base64,${bytesToBase64(src)}`;
+}
+
+/** PNG or JPEG magic bytes → the mime pdfkit's data-URI decoder expects. */
+function sniffImageMime(b: Uint8Array): string {
+  if (b.length > 4 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return 'image/png';
+  if (b.length > 2 && b[0] === 0xff && b[1] === 0xd8) return 'image/jpeg';
+  return 'image/png';
+}
+
+/** Bytes → base64 without a global Buffer (browser fallback path). */
+function bytesToBase64(bytes: Uint8Array): string {
+  const btoaFn = (globalThis as { btoa?: (s: string) => string }).btoa;
+  if (typeof btoaFn === 'function') {
+    let bin = '';
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
+    }
+    return btoaFn(bin);
+  }
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let out = '';
+  for (let i = 0; i < bytes.length; i += 3) {
+    const b0 = bytes[i]!, b1 = bytes[i + 1], b2 = bytes[i + 2];
+    out += chars[b0 >> 2];
+    out += chars[((b0 & 3) << 4) | ((b1 ?? 0) >> 4)];
+    out += b1 === undefined ? '=' : chars[((b1 & 15) << 2) | ((b2 ?? 0) >> 6)];
+    out += b2 === undefined ? '=' : chars[b2 & 63];
+  }
+  return out;
 }
 
 function applyDash(doc: PDFDocument, dash: DashPattern): void {

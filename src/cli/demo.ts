@@ -8,7 +8,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { renderToBuffer, readFontFiles, type FontFileEntry, type ReportDoc } from '../index.js';
+import { renderToBuffer, readFontFiles, setImageFileReader, type FontFileEntry, type ReportDoc } from '../index.js';
 
 const FONT_DIR = 'C:/Windows/Fonts';
 
@@ -163,6 +163,7 @@ function buildReport(rows: SaleRow[]): ReportDoc {
 }
 
 async function main(): Promise<void> {
+  setImageFileReader((p) => new Uint8Array(fs.readFileSync(p)));
   const fonts = availableFonts();
   const sources = fonts.length ? await readFontFiles(fonts) : [];
   const report = buildReport(makeRows(48));

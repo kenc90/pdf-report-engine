@@ -4,14 +4,50 @@
  * header to learn the image's intrinsic pixel size and aspect ratio.
  *
  * `src` may be a filesystem path, a `data:` URI, or raw bytes. Remote `http(s)`
- * URLs are never fetched (the engine is offline); for those, supply explicit
- * `width`/`height` on the block.
+ * URLs are never fetched here (the layout pass is offline; see `remote-image.ts`
+ * for the online pre-pass); for those, supply explicit `width`/`height`.
+ *
+ * A filesystem path can only be read in Node, and only through an injected reader
+ * (`setImageFileReader`, wired by the CLI) or, where available, `process.getBuiltinModule`.
+ * In a browser neither exists, so a path source yields `null` — pass bytes, a
+ * `data:` URI, or an `http(s)` URL instead. This module deliberately avoids a
+ * top-level `node:fs` import so it can be bundled for the browser.
  */
-import { readFileSync } from 'node:fs';
 
 export interface ImageSize {
   width: number;
   height: number;
+}
+
+/** Pluggable synchronous file reader for path-based images (Node side). */
+export type ImageFileReader = (path: string) => Uint8Array;
+let imageFileReader: ImageFileReader | null = null;
+
+/**
+ * Register a reader so `probeImageSize`/`loadImageBytes` can open filesystem
+ * paths. The Node CLI calls this once at startup; browser callers can ignore it.
+ * Pass `null` to clear.
+ */
+export function setImageFileReader(reader: ImageFileReader | null): void {
+  imageFileReader = reader;
+}
+
+/**
+ * Resolve Node's `fs.readFileSync` synchronously *without* a static `node:fs`
+ * import, so bundlers don't try to resolve it for the browser. Relies on
+ * `process.getBuiltinModule` (Node ≥ 20.11 / 22.3); returns `null` elsewhere.
+ */
+function builtinReadFileSync(): ImageFileReader | null {
+  const proc = (globalThis as { process?: { getBuiltinModule?: (id: string) => unknown } }).process;
+  const get = proc?.getBuiltinModule;
+  if (typeof get !== 'function') return null;
+  try {
+    const fsMod = get.call(proc, 'node:fs') as { readFileSync?: (p: string) => ArrayLike<number> } | undefined;
+    const rf = fsMod?.readFileSync;
+    return typeof rf === 'function' ? (p: string) => new Uint8Array(rf(p)) : null;
+  } catch {
+    return null;
+  }
 }
 
 /** px → pt at a nominal 96 dpi (matches browser CSS pixels). */
@@ -23,6 +59,19 @@ function isHttp(src: string): boolean {
   return /^https?:\/\//i.test(src);
 }
 
+/** Base64 → bytes, using `Buffer` (Node) or `atob` (browser), whichever exists. */
+function base64ToBytes(body: string): Uint8Array {
+  const g = globalThis as { Buffer?: { from: (s: string, e: string) => ArrayLike<number> }; atob?: (s: string) => string };
+  if (typeof g.Buffer?.from === 'function') return new Uint8Array(g.Buffer.from(body, 'base64'));
+  if (typeof g.atob === 'function') {
+    const bin = g.atob(body);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  throw new Error('no base64 decoder available (need Buffer or atob)');
+}
+
 function decodeDataUri(src: string): Uint8Array | null {
   const comma = src.indexOf(',');
   if (comma < 0) return null;
@@ -30,7 +79,7 @@ function decodeDataUri(src: string): Uint8Array | null {
   const body = src.slice(comma + 1);
   if (!/;base64/i.test(meta)) return null;
   try {
-    return new Uint8Array(Buffer.from(body, 'base64'));
+    return base64ToBytes(body.replace(/\s+/g, ''));
   } catch {
     return null;
   }
@@ -42,7 +91,8 @@ export function loadImageBytes(src: string | Uint8Array): Uint8Array | null {
   if (src.startsWith('data:')) return decodeDataUri(src);
   if (isHttp(src)) return null;
   try {
-    return new Uint8Array(readFileSync(src));
+    const reader = imageFileReader ?? builtinReadFileSync();
+    return reader ? reader(src) : null;
   } catch {
     return null;
   }

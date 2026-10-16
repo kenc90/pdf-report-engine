@@ -394,6 +394,52 @@ covering the script is *registered*: the CLI auto-loads a CJK face per platform,
 library you add one via `readFontFiles`. Fallback only reaches registered faces, so output
 stays deterministic across machines rather than dipping into whatever the OS happens to have.
 
+## Running in the browser
+
+> A live, no-build demo is on the docs site: **`docs/browser-demo.html`** (edit HTML → Generate PDF,
+> with an optional local font picker). The bundle it loads is produced by `npm run build:browser`
+> (esbuild, with `pdfkit` routed to its self-contained browser build so no Node polyfill config is needed).
+
+The core engine (IR/HTML → paginated PDF) is pure JavaScript and runs in a browser bundle.
+It uses **no top-level `node:*` imports** in the library graph, so Vite / webpack / esbuild
+can bundle it without a Node polyfill *for our code*. Two things are still required, however,
+because of `pdfkit` itself:
+
+1. **A bundler with Node polyfills.** `pdfkit` relies on `Buffer` and streams, so enable
+   `vite-plugin-node-polyfills` (Vite) or `resolve.fallback = { buffer: 'buffer/', stream: 'stream-browserify', … }`
+   (webpack). There is no meaningful "no-build-step" browser use — that is a pdfkit constraint,
+   not an engine one.
+2. **You supply the font bytes.** A browser cannot read installed system fonts, so `fetch`
+   TTF/OTF/TTC bytes yourself and pass them in (WOFF/WOFF2 are **not** supported by the font
+   engine — serve raw TTF/OTF):
+
+```ts
+import { renderToBuffer, type ReportDoc, type FontSource } from 'pdf-report-engine';
+
+async function font(url: string, family: string, weight?: number): Promise<FontSource> {
+  const bytes = new Uint8Array(await (await fetch(url)).arrayBuffer());
+  return { family, weight, buffer: bytes };
+}
+
+const fonts = await Promise.all([
+  font('/fonts/Inter-Regular.ttf', 'Inter', 400),
+  font('/fonts/Inter-Bold.ttf',    'Inter', 700),
+  font('/fonts/NotoSansSC.ttf',    'Microsoft YaHei'), // a registered CJK face enables fallback
+]);
+
+const pdf = await renderToBuffer(report, { fonts });            // Uint8Array/Buffer
+await document.body.append(makeBlobPreview(pdf));               // wrap in a Blob(url, 'application/pdf')
+```
+
+Browser-specific rules:
+
+- Use `renderToBuffer(report, { fonts })` with **bytes**; do **not** call `readFontFiles` with a
+  `path` (that lazily imports `node:fs/promises`). Bytes-only `readFontFiles` entries are fine.
+- **Images** must be raw bytes, a `data:` URI, or an `http(s)` URL (resolved via `fetch`). A
+  filesystem path returns `null` for intrinsic size, so give path-less bytes or set explicit
+  `width`/`height`. `setImageFileReader` exists for Node hosts; ignore it in the browser.
+- Heavy reports block the UI — run `renderToBuffer` in a **Web Worker** and transfer the bytes.
+
 ## Expressions & running tokens
 
 Bindings are small expressions evaluated in a sandbox. They can be a plain field path

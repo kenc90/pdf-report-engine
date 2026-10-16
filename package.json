@@ -41,7 +41,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "demo": "tsx src/cli/demo.ts",
-    "html:pdf": "tsx src/cli/html-to-pdf.ts"
+    "html:pdf": "tsx src/cli/html-to-pdf.ts",
+    "build:browser": "esbuild src/index.ts --bundle --platform=browser --format=esm --target=es2020 --alias:pdfkit=./node_modules/pdfkit/js/pdfkit.standalone.js --external:node:fs/promises --minify --outfile=docs/browser/pdf-report-engine.js"
   },
   "engines": {
     "node": ">=18"

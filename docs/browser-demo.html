@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Browser demo · pdf-report-engine</title>
+  <meta name="description" content="Edit constrained HTML, embed fonts from your machine, and render a real vector PDF entirely in the browser with pdf-report-engine." />
+  <link rel="stylesheet" href="assets/styles.css" />
+  <style>
+    .demo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 900px) { .demo-grid { grid-template-columns: 1fr; } }
+    .pane-title { font-weight: 600; font-size: 14px; margin: 0 0 8px; color: var(--ink, #1f2733); }
+    #editor {
+      width: 100%; min-height: 380px; box-sizing: border-box; resize: vertical;
+      font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      padding: 12px; border: 1px solid #c9d2df; border-radius: 8px; color: #1f2733; background: #fbfcfe;
+    }
+    #editor:focus { outline: 2px solid #2f6df6; border-color: transparent; }
+    .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 14px 0 4px; }
+    .toolbar .spacer { flex: 1 1 auto; }
+    .field { display: inline-flex; flex-direction: column; gap: 4px; font-size: 12px; color: #5b6b8c; }
+    .fonts-list { font-size: 12px; color: #5b6b8c; margin: 6px 0 0; }
+    .fonts-list code { background: #eef2f8; padding: 1px 6px; border-radius: 5px; }
+    #status { font-size: 13px; margin: 10px 0 0; min-height: 20px; color: #3a4658; }
+    #status.error { color: #b4232a; }
+    #preview { width: 100%; height: 620px; border: 1px solid #c9d2df; border-radius: 8px; background: #e9edf3; }
+    .hint { font-size: 12px; color: #5b6b8c; }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <span class="brand">pdf-report-engine<span class="dot">.</span></span>
+      <nav class="nav">
+        <a href="index.html">Home</a>
+        <a href="getting-started.html">Getting started</a>
+        <a href="examples.html">Examples</a>
+        <a href="api.html">API</a>
+        <a href="browser-demo.html" class="active">Browser demo</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section id="intro">
+      <h2>Render a PDF in your browser</h2>
+      <p>
+        This page loads the engine as a single pre-bundled ES module
+        (<code>browser/pdf-report-engine.js</code> — pdfkit's self-contained browser build baked in).
+        Edit the constrained HTML on the left, press <strong>Generate PDF</strong>, and the real,
+        vector, selectable-text PDF renders on the right — no server, no Chromium.
+      </p>
+      <div class="note">
+        Fonts are <strong>not</strong> required for Latin text: with none selected the engine falls back
+        to the standard PDF base-14 fonts. To test embedding or <strong>per-glyph CJK fallback</strong>,
+        load a Latin <code>.ttf/.otf</code> <em>and</em> a CJK <code>.ttf/.otf</code> from your machine below,
+        then type mixed text such as <code>何小鵬 test</code>. (A browser cannot read your installed system
+        fonts, so you choose the files yourself.)
+      </div>
+    </section>
+
+    <section id="workbench">
+      <div class="demo-grid">
+        <div>
+          <p class="pane-title">HTML report (edit me)</p>
+          <textarea id="editor" spellcheck="false" aria-label="HTML report source"></textarea>
+        </div>
+        <div>
+          <p class="pane-title">PDF preview</p>
+          <iframe id="preview" title="Generated PDF preview"></iframe>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <button class="btn" id="generate" type="button">Generate PDF</button>
+        <a class="btn ghost" id="download" type="button" hidden download="report.pdf">Download</a>
+        <button class="btn ghost" id="reset" type="button">Reset HTML</button>
+        <span class="spacer"></span>
+        <label class="field">
+          Fonts (optional)
+          <input type="file" id="fonts" accept=".ttf,.otf,.ttc" multiple />
+        </label>
+        <button class="btn ghost" id="clearfonts" type="button" title="Forget selected fonts">Clear fonts</button>
+      </div>
+      <p class="fonts-list" id="fontlist">No fonts selected — using base-14 (Latin-1).</p>
+      <p class="hint">
+        A <code>.ttc</code> collection needs a face chosen via a PostScript name, which this picker cannot
+        supply — use a single-face <code>.ttf/.otf</code> here, or the CLI's <code>path#PostScriptName</code>.
+      </p>
+      <p id="status" role="status"></p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <span>pdf-report-engine — documentation site (static).</span>
+      <span>MIT License · pdfkit + fontkit</span>
+    </div>
+  </footer>
+
+  <script type="module" src="browser-demo.js"></script>
+</body>
+</html>
