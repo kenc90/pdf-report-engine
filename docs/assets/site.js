@@ -7,6 +7,11 @@
     if (target === here || (here === '' && target === 'index.html')) a.classList.add('active');
   });
 
+  // Keep the footer copyright year honest.
+  document.querySelectorAll('[data-year]').forEach(function (el) {
+    el.textContent = String(new Date().getFullYear());
+  });
+
   // Add a "copy" button to every code block that has a data-copy attribute.
   document.querySelectorAll('pre[data-copy]').forEach(function (pre) {
     var btn = document.createElement('button');

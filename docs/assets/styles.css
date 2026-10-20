@@ -50,7 +50,7 @@ a:hover { text-decoration: underline; }
   letter-spacing: 0.2px;
   color: #fff;
 }
-.brand .dot { color: var(--accent); }
+.brand .dot, .site-footer .fbrand .dot { color: var(--accent); }
 .nav { margin-left: auto; display: flex; gap: 4px; flex-wrap: wrap; }
 .nav a {
   color: #dbe6f2;
@@ -163,11 +163,66 @@ tr:hover td { background: #fafcfe; }
 }
 
 /* ---------- Footer ---------- */
+/* Three columns — a wide "about" block plus two link lists — over a slim bottom bar.
+   Mirrors the header (dark plate, accent rule) instead of floating two unaligned spans. */
 .site-footer {
   background: var(--bg);
   color: #9fb0c0;
-  padding: 26px 20px;
-  margin-top: 20px;
+  font-size: 0.92rem;
+  margin-top: 44px;
+  border-top: 3px solid var(--accent);
 }
-.site-footer .wrap { max-width: var(--maxw); margin: 0 auto; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.site-footer .wrap { max-width: var(--maxw); margin: 0 auto; padding: 34px 20px; }
+.site-footer > .wrap {
+  display: grid;
+  grid-template-columns: 1.9fr 1fr 1fr;
+  gap: 32px;
+  align-items: start;
+}
+.site-footer p { margin: 0 0 14px; }
+.site-footer h4 {
+  margin: 0 0 12px;
+  font-size: 0.76rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #7d90a4;
+}
 .site-footer a { color: #cdd9e5; }
+.site-footer a:hover { color: #fff; text-decoration: none; }
+.site-footer nav { display: flex; flex-direction: column; gap: 7px; }
+.site-footer .fbrand { display: block; margin-bottom: 10px; font-weight: 800; font-size: 1.05rem; color: #fff; }
+.site-footer .fbrand:hover { text-decoration: none; }
+.site-footer .fabout p { max-width: 46ch; }
+.site-footer .finstall {
+  margin: 0 0 16px;
+  /* extra right padding = room for the copy button site.js injects into pre[data-copy] */
+  padding: 8px 58px 8px 12px;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 8px;
+  color: #e6edf3;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow-x: auto;
+}
+.site-footer .fbadges { display: flex; gap: 8px; flex-wrap: wrap; margin: 0; }
+.fbar { border-top: 1px solid rgba(255,255,255,0.09); }
+.fbar .wrap {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 20px;
+  font-size: 0.85rem;
+  color: #7d90a4;
+}
+.fbar .totop { white-space: nowrap; }
+@media (max-width: 760px) {
+  .site-footer > .wrap { grid-template-columns: 1fr 1fr; }
+  .site-footer .fabout { grid-column: 1 / -1; }
+}
+@media (max-width: 480px) {
+  .site-footer > .wrap { grid-template-columns: 1fr; }
+}

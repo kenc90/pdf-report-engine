@@ -52,7 +52,7 @@
   </style>
 </head>
 <body>
-  <header class="site-header">
+  <header class="site-header" id="top">
     <div class="wrap">
       <span class="brand">pdf-report-engine<span class="dot">.</span></span>
       <nav class="nav">
@@ -124,11 +124,46 @@
 
   <footer class="site-footer">
     <div class="wrap">
-      <span>pdf-report-engine — documentation site (static).</span>
-      <span>MIT License · pdfkit + fontkit</span>
+      <div class="fabout">
+        <a class="fbrand" href="index.html">pdf-report-engine<span class="dot">.</span></a>
+        <p>Constrained HTML or a plain-data IR in — a vector, selectable, fully paginated PDF out. No headless browser, no native bindings.</p>
+        <pre class="finstall" data-copy><code>npm install pdf-report-engine</code></pre>
+        <p class="fbadges">
+          <span class="badge">MIT</span>
+          <span class="badge">pdfkit + fontkit</span>
+          <span class="badge">Node ≥ 18</span>
+        </p>
+      </div>
+      <nav aria-label="Guides">
+        <h4>Guides</h4>
+        <a href="getting-started.html">Getting started</a>
+        <a href="getting-started.html#first-report">Your first report</a>
+        <a href="getting-started.html#charts">Charts</a>
+        <a href="getting-started.html#navigation">TOC, bookmarks &amp; links</a>
+        <a href="getting-started.html#barcodes">Barcodes</a>
+        <a href="getting-started.html#web-fonts">Web fonts &amp; CJK</a>
+        <a href="getting-started.html#cli">Command line</a>
+      </nav>
+      <nav aria-label="Reference">
+        <h4>Reference</h4>
+        <a href="api.html">API reference</a>
+        <a href="api.html#ir">IR block types</a>
+        <a href="api.html#options">Render options</a>
+        <a href="api.html#html-options">HTML adapter options</a>
+        <a href="examples.html">Example recipes</a>
+        <a href="examples.html#ex-tour">Full worked example</a>
+        <a href="browser-demo.html">Browser demo</a>
+      </nav>
+    </div>
+    <div class="fbar">
+      <div class="wrap">
+        <span>© <span data-year>2026</span> pdf-report-engine contributors · released under the MIT license</span>
+        <a class="totop" href="#top">Back to top ↑</a>
+      </div>
     </div>
   </footer>
 
+  <script src="assets/site.js"></script>
   <script type="module" src="browser-demo.js"></script>
 </body>
 </html>
