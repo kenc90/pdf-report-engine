@@ -43,7 +43,7 @@
     "demo": "tsx src/cli/demo.ts",
     "html:pdf": "tsx src/cli/html-to-pdf.ts",
     "docs": "node scripts/serve-site.mjs",
-    "build:browser": "esbuild src/index.ts --bundle --platform=browser --format=esm --target=es2020 --alias:pdfkit=./node_modules/pdfkit/js/pdfkit.standalone.js --external:node:fs/promises --external:fs --external:path --minify --outfile=docs/browser/pdf-report-engine.js"
+    "build:browser": "node scripts/build-browser.mjs"
   },
   "engines": {
     "node": ">=18"

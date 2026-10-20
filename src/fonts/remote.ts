@@ -23,6 +23,7 @@
  */
 import type { ReportDoc, FontReference } from '../ir/schema.js';
 import type { FontSource } from './registry.js';
+import { collectCharset } from './charset.js';
 
 export interface FontResolveOptions {
   /** Fetch remote font CSS/files. Default `true`. Set `false` for air-gapped renders. */
@@ -51,6 +52,14 @@ export interface FontResolveOptions {
   onError?: 'throw' | 'skip';
   /** Hard cap on faces produced per call, to bound network use. Default 64. */
   maxFaces?: number;
+  /**
+   * When `true` (default), Google Fonts CSS URLs are augmented with a `text=`
+   * parameter containing the characters the report actually renders, so Google
+   * returns a minimal subset (typically 30–50 KB vs a multi-MB full font). This
+   * dramatically speeds up WOFF2 decoding in constrained environments and reduces
+   * memory usage. Set `false` to always fetch the full font.
+   */
+  subsetText?: boolean;
 }
 
 /** A single parsed `@font-face` (or synthesised) face awaiting its bytes. */
@@ -165,15 +174,124 @@ function sniffFont(bytes: Uint8Array): 'ttf' | 'otto' | 'ttcf' | 'woff' | 'woff2
   return 'unknown';
 }
 
-async function defaultDecodeWoff2(bytes: Uint8Array): Promise<Uint8Array> {
-  let decompress: ((b: Uint8Array) => Promise<Uint8Array>) | undefined;
-  try {
-    decompress = (await import('wawoff2')).decompress;
-  } catch {
-    throw new Error('WOFF2 fonts need the optional "wawoff2" dependency (npm install wawoff2) — or supply a TTF/OTF');
+/**
+ * WOFF2 decoder wiring.
+ *
+ * wawoff2 is an Emscripten-compiled WASM module. Its binding file assigns the
+ * module to `module.exports` ONLY inside the ENVIRONMENT_IS_NODE branch of the
+ * runtime detection. When bundled for browser (via esbuild/rollup/webpack),
+ * `module` is either undefined or refers to the bundler's CJS wrapper — the
+ * Emscripten code takes the browser branch and never exports anything. Consumers
+ * receive `{}` from `require('wawoff2/build/decompress_binding.js')`, and setting
+ * `onRuntimeInitialized` on that empty object disconnects from the real Module
+ * (which lives inside the factory scope). Result: the WASM finishes loading but
+ * the promise awaiting `onRuntimeInitialized` never resolves → decode hangs.
+ *
+ * The reliable fix in browser contexts is to load the binding file as a plain
+ * `<script>` (not through the bundler). Its top-level `var Module = ...` then
+ * lands on `window.Module`, and its `run()` call fires `Module.onRuntimeInitialized`
+ * which we can hook directly.
+ *
+ * In Node we keep the original `await import('wawoff2')` path — its CJS handling
+ * correctly exports the Module (via `module["exports"] = Module` inside the Node
+ * branch), so the standard promise-based API works.
+ */
+let _decompressFn: ((b: Uint8Array) => Promise<Uint8Array>) | undefined;
+let _initPromise: Promise<void> | undefined;
+let _initFailed = false;
+
+async function ensureBrowserWawoff2Ready(): Promise<(b: Uint8Array) => Promise<Uint8Array>> {
+  const w = globalThis as unknown as { window: Window & { Module?: any; __wawoff2Loader?: Promise<void> } };
+  const wrapDecompress = (Module: any) => async (bytes: Uint8Array): Promise<Uint8Array> => {
+    const r = Module.decompress(bytes);
+    if (r === false) throw new Error('ConvertWOFF2ToTTF failed');
+    if (!r || typeof r.length !== 'number') {
+      throw new Error(`wawoff2 returned unexpected value: ${Object.prototype.toString.call(r)}`);
+    }
+    // Emscripten's embind may return a Uint8Array *view* into the WASM linear
+    // memory (HEAPU8). That view becomes detached after the next WASM call or
+    // memory grow, so we must copy it out into a stable, standalone buffer
+    // before returning. pdfkit/fontkit then see valid, self-owned bytes.
+    const out = new Uint8Array(r.length);
+    out.set(r);
+    return out;
+  };
+  // Already loaded?
+  if (w.window.Module && typeof w.window.Module.decompress === 'function' && w.window.Module.calledRun) {
+    return wrapDecompress(w.window.Module);
   }
-  if (!decompress) throw new Error('wawoff2.decompress is not available');
-  const out = await decompress(bytes);
+  // Loader in flight?
+  if (!w.window.__wawoff2Loader) {
+    w.window.__wawoff2Loader = new Promise<void>((resolve, reject) => {
+      const attach = (Module: any) => {
+        if (!Module) { reject(new Error('wawoff2 loaded but window.Module missing')); return; }
+        if (Module.calledRun) { resolve(); return; }
+        const prev = Module.onRuntimeInitialized;
+        Module.onRuntimeInitialized = () => {
+          if (typeof prev === 'function') { try { prev(); } catch { /* ignore */ } }
+          resolve();
+        };
+      };
+      if (w.window.Module) { attach(w.window.Module); return; }
+      // Resolve sibling URL relative to the running bundle. `import.meta.url` is
+      // available in ESM output; fall back to a well-known path.
+      let src = './wawoff2-decoder.js';
+      try {
+        // @ts-ignore — import.meta is only present in ESM output.
+        if (typeof import.meta !== 'undefined' && import.meta.url) src = new URL('./wawoff2-decoder.js', import.meta.url).href;
+      } catch { /* keep default */ }
+      const s = document.createElement('script');
+      s.src = src;
+      s.async = true;
+      s.onerror = () => reject(new Error(`failed to load ${src}`));
+      s.onload = () => attach(w.window.Module);
+      document.head.appendChild(s);
+    });
+  }
+  await w.window.__wawoff2Loader;
+  if (!w.window.Module || typeof w.window.Module.decompress !== 'function') {
+    throw new Error('wawoff2 loaded but Module.decompress unavailable');
+  }
+  return wrapDecompress(w.window.Module);
+}
+
+async function ensureNodeWawoff2Ready(): Promise<(b: Uint8Array) => Promise<Uint8Array>> {
+  const mod = await import('wawoff2');
+  const fn = mod.decompress;
+  if (typeof fn !== 'function') throw new Error('wawoff2.decompress is not available');
+  // Force the WASM runtime to initialise by calling decompress with a minimal
+  // invalid buffer. The throw confirms the runtime is warm (the error is from
+  // invalid data, not from a stuck initialisation). Subsequent real decodes
+  // are then fast (<100ms) and can safely live inside a tight per-face timeout.
+  try {
+    await fn(new Uint8Array([0x77, 0x4f, 0x46, 0x32, 0, 0, 0, 0]));
+  } catch {
+    // Expected: 'ConvertWOFF2ToTTF failed' — runtime is now warm.
+  }
+  return fn;
+}
+
+async function ensureWawoff2Ready(): Promise<void> {
+  if (_decompressFn) return;
+  if (_initFailed) throw new Error('WOFF2 decoder previously failed to initialise — skipping');
+  if (!_initPromise) {
+    _initPromise = (async () => {
+      try {
+        _decompressFn = isBrowser() ? await ensureBrowserWawoff2Ready() : await ensureNodeWawoff2Ready();
+      } catch (err) {
+        _initFailed = true;
+        if (typeof console !== 'undefined') console.warn('[wawoff2-init] FAILED:', (err as Error)?.message ?? err);
+        throw new Error('WOFF2 fonts need the optional "wawoff2" dependency (npm install wawoff2) — or supply a TTF/OTF');
+      }
+    })();
+  }
+  await _initPromise;
+}
+
+async function defaultDecodeWoff2(bytes: Uint8Array): Promise<Uint8Array> {
+  await ensureWawoff2Ready();
+  if (!_decompressFn) throw new Error('wawoff2.decompress is not available');
+  const out = await _decompressFn(bytes);
   return out instanceof Uint8Array ? out : new Uint8Array(out as unknown as ArrayBuffer);
 }
 
@@ -229,6 +347,12 @@ export async function resolveRemoteFonts(report: ReportDoc, opts: FontResolveOpt
   const refs = report.fonts;
   if (!refs || refs.length === 0) return [];
 
+  // Collect the report's rendered charset for on-the-fly subsetting (text= param).
+  // When subsetText is enabled (default) and the charset fits, Google returns only
+  // the needed glyphs — dramatically smaller/faster than fetching the full font.
+  const subsetText = opts.subsetText ?? true;
+  const charset = subsetText ? collectCharset(report) : '';
+
   const textCache = new Map<string, Promise<string | null>>();
   const byteCache = new Map<string, Promise<Uint8Array | null>>();
   const fetchRemote = opts.fetchRemote ?? true;
@@ -265,7 +389,8 @@ export async function resolveRemoteFonts(report: ReportDoc, opts: FontResolveOpt
   for (const ref of refs) {
     try {
       if (ref.type === 'google') {
-        const css = await loadText(ref.url);
+        const url = charset ? `${ref.url}${ref.url.includes('?') ? '&' : '?'}text=${encodeURIComponent(charset)}` : ref.url;
+        const css = await loadText(url);
         if (css) rules.push(...parseFontFace(css));
       } else if (ref.type === 'font-face') {
         rules.push(...parseFontFace(ref.css));
@@ -283,18 +408,31 @@ export async function resolveRemoteFonts(report: ReportDoc, opts: FontResolveOpt
   const maxFaces = opts.maxFaces ?? 64;
   const sources: FontSource[] = [];
 
-  // Guard the WOFF2 decoder so a stalled WebAssembly runtime (see decodeTimeoutMs)
-  // cannot dead-lock the render: time-box each decode, and once one times out treat
-  // the decoder as unavailable and skip the remaining WOFF2 faces immediately.
-  const decodeState = { broken: false };
+  // WOFF2 decode guard. Strategy:
+  // 1. Pre-initialise wawoff2 (WASM compile) OUTSIDE the per-face timeout so a
+  //    slow first-call doesn't cascade-skip all faces.
+  // 2. Apply the tight decode timeout per face. Since WASM is already warm,
+  //    any timeout here means the decoder itself is hung → skip remaining faces.
   const decodeTimeoutMs = opts.decodeTimeoutMs ?? 8000;
   const baseDecode = opts.decodeWoff2 ?? defaultDecodeWoff2;
+  let decoderBroken = false;
+
+  // Attempt one-time WASM init before entering the face loop. This is NOT subject
+  // to decodeTimeoutMs — WASM compilation can legitimately take several seconds.
+  if (opts.decodeWoff2 === undefined) {
+    try {
+      await withHardTimeout(ensureWawoff2Ready(), 30_000, 'WOFF2 WASM initialisation exceeded 30s');
+    } catch {
+      decoderBroken = true;
+    }
+  }
+
   const guardedDecode = async (bytes: Uint8Array): Promise<Uint8Array> => {
-    if (decodeState.broken) throw new Error('WOFF2 decode skipped (decoder timed out earlier)');
+    if (decoderBroken) throw new Error('WOFF2 decode skipped (decoder unavailable)');
     try {
       return await withHardTimeout(baseDecode(bytes), decodeTimeoutMs, `WOFF2 decode exceeded ${decodeTimeoutMs}ms`);
     } catch (err) {
-      if (/exceeded \d+ms/.test(String((err as Error)?.message ?? err))) decodeState.broken = true;
+      if (/exceeded \d+ms/.test(String((err as Error)?.message ?? err))) decoderBroken = true;
       throw err;
     }
   };
