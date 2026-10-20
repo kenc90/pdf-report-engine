@@ -14,7 +14,12 @@ import { toRGB } from '../core/color.js';
 
 type PDFDocument = PDFKit.PDFDocument;
 
-export function writePage(doc: PDFDocument, page: Page): void {
+export interface WritePageOptions {
+  /** Emit PDF outline (bookmark) items for this page's headings (default true). */
+  outline?: boolean;
+}
+
+export function writePage(doc: PDFDocument, page: Page, options: WritePageOptions = {}): void {
   doc.addPage({
     size: [page.width, page.height],
     margin: 0,
@@ -24,19 +29,112 @@ export function writePage(doc: PDFDocument, page: Page): void {
   // positioning; every draw command passes explicit x, y.
   doc.x = 0;
   doc.y = 0;
+  // Destinations and outline items must be registered while this page is the
+  // document's current page — both APIs bind to `doc.page` at call time.
+  registerAnchors(doc, page);
+  if (options.outline !== false) addBookmarks(doc, page);
+  for (const pf of page.background) drawFragment(doc, pf);
   for (const pf of page.header) drawFragment(doc, pf);
   for (const pf of page.body) drawFragment(doc, pf);
   for (const pf of page.footer) drawFragment(doc, pf);
 }
 
 function drawFragment(doc: PDFDocument, { fragment, x, y }: PlacedFragment): void {
-  for (const cmd of fragment.commands) drawCommand(doc, cmd, x, y);
+  const faded = fragment.opacity !== undefined && fragment.opacity < 1;
+  if (faded) {
+    doc.save();
+    doc.opacity(fragment.opacity!);
+  }
+  // A full-height fill is the block's own background. Runs inherit that colour
+  // through the style cascade, and repainting it per glyph would only add
+  // seams — so it is passed down as the "already painted" colour.
+  const baseFill = fragmentBaseFill(fragment);
+  for (const cmd of fragment.commands) drawCommand(doc, cmd, x, y, baseFill);
+  if (faded) doc.restore();
 }
 
-function drawCommand(doc: PDFDocument, cmd: DrawCommand, x: number, y: number): void {
+function fragmentBaseFill(fragment: PlacedFragment['fragment']): RGB | undefined {
+  for (const cmd of fragment.commands) {
+    if (cmd.op === 'fillRect' && cmd.y === 0 && cmd.h >= fragment.height - 0.01 && cmd.w > 0) return cmd.color;
+  }
+  return undefined;
+}
+
+function sameRGB(a: RGB, b: RGB): boolean {
+  return Math.abs(a[0] - b[0]) < 1e-3 && Math.abs(a[1] - b[1]) < 1e-3 && Math.abs(a[2] - b[2]) < 1e-3;
+}
+
+/**
+ * Register every anchor on this page as a named destination. pdfkit converts the
+ * top-down y we pass into PDF's bottom-up coordinate space.
+ */
+function registerAnchors(doc: PDFDocument, page: Page): void {
+  const target = doc as unknown as {
+    addNamedDestination(name: string, ...args: unknown[]): void;
+  };
+  for (const a of page.anchors) target.addNamedDestination(a.name, 'XYZ', 0, a.y, null);
+}
+
+/**
+ * Emit one PDF outline item per heading fragment. `PDFOutline.addItem` links to
+ * the *current* page, so items are added page by page and their `Dest` is then
+ * refined with the exact heading top (XYZ) for a precise jump.
+ *
+ * The open-ancestor stack lives on the document, not on the page: a heading on
+ * page 2 must still nest under the chapter heading opened on page 1.
+ */
+const outlineStacks = new WeakMap<PDFDocument, Array<OutlineItem | undefined>>();
+
+function addBookmarks(doc: PDFDocument, page: Page): void {
+  if (page.outline.length === 0) return;
+  const root = (doc as unknown as { outline: OutlineItem }).outline;
+  if (!root) return;
+  let stack = outlineStacks.get(doc);
+  if (!stack) {
+    stack = [];
+    outlineStacks.set(doc, stack);
+  }
+  for (const entry of page.outline) {
+    const level = Math.max(1, Math.min(6, entry.level));
+    // Attach to the nearest open ancestor, not the exact level below: a heading
+    // may legally jump from h1 straight to h3.
+    let parent = root;
+    for (let l = level - 1; l >= 1; l -= 1) {
+      const candidate = stack[l];
+      if (candidate) {
+        parent = candidate;
+        break;
+      }
+    }
+    const item = parent.addItem(entry.title);
+    const dest: [unknown, string, number, number, null] = [
+      (doc as unknown as { page: { dictionary: unknown } }).page.dictionary,
+      'XYZ',
+      0,
+      page.height - entry.y,
+      null,
+    ];
+    (item as unknown as { outlineData: Record<string, unknown> }).outlineData.Dest = dest;
+    stack.length = level + 1;
+    stack[level] = item;
+  }
+}
+
+interface OutlineItem {
+  addItem(title: string): OutlineItem;
+}
+
+function drawCommand(doc: PDFDocument, cmd: DrawCommand, x: number, y: number, baseFill?: RGB): void {
   switch (cmd.op) {
     case 'fillRect':
-      doc.fillColor(css(cmd.color)).rect(x + cmd.x, y + cmd.y, cmd.w, cmd.h).fill();
+      if (cmd.opacity !== undefined && cmd.opacity < 1) {
+        doc.save();
+        doc.fillOpacity(cmd.opacity);
+        doc.fillColor(css(cmd.color)).rect(x + cmd.x, y + cmd.y, cmd.w, cmd.h).fill();
+        doc.restore();
+      } else {
+        doc.fillColor(css(cmd.color)).rect(x + cmd.x, y + cmd.y, cmd.w, cmd.h).fill();
+      }
       return;
     case 'strokeRect': {
       doc.save();
@@ -54,8 +152,43 @@ function drawCommand(doc: PDFDocument, cmd: DrawCommand, x: number, y: number): 
       doc.restore();
       return;
     }
+    case 'poly': {
+      const pts = cmd.points;
+      if (pts.length < 2) return;
+      doc.save();
+      doc.moveTo(x + pts[0]![0], y + pts[0]![1]);
+      for (let i = 1; i < pts.length; i += 1) doc.lineTo(x + pts[i]![0], y + pts[i]![1]);
+      if (cmd.close) doc.closePath();
+      if (cmd.fill && cmd.stroke) {
+        // `f` consumes the path, so `fill()` then `stroke()` would silently drop
+        // the outline. `B` paints both in one pass (pie/donut slice separators).
+        // Round joins keep thin wedges from growing miter spikes at the centre.
+        doc
+          .lineWidth(cmd.stroke.lineWidth)
+          .lineJoin('round')
+          .fillColor(css(cmd.fill))
+          .strokeColor(css(cmd.stroke.color));
+        if (cmd.stroke.dash) applyDash(doc, cmd.stroke.dash);
+        if (cmd.fillOpacity !== undefined) doc.fillOpacity(cmd.fillOpacity);
+        doc.fillAndStroke();
+        if (cmd.fillOpacity !== undefined) doc.fillOpacity(1);
+      } else {
+        if (cmd.fill) {
+          if (cmd.fillOpacity !== undefined) doc.fillOpacity(cmd.fillOpacity);
+          doc.fillColor(css(cmd.fill)).fill();
+          if (cmd.fillOpacity !== undefined) doc.fillOpacity(1);
+        }
+        if (cmd.stroke) {
+          doc.lineWidth(cmd.stroke.lineWidth).strokeColor(css(cmd.stroke.color));
+          if (cmd.stroke.dash) applyDash(doc, cmd.stroke.dash);
+          doc.stroke();
+        }
+      }
+      doc.restore();
+      return;
+    }
     case 'text':
-      drawText(doc, cmd, x, y);
+      drawText(doc, cmd, x, y, baseFill);
       return;
     case 'image': {
       // Layout already resolved a width+height that preserve the aspect ratio,
@@ -120,18 +253,50 @@ function applyDash(doc: PDFDocument, dash: DashPattern): void {
   doc.dash(dash[0]!, { space: dash[1] ?? dash[0] });
 }
 
-function drawText(doc: PDFDocument, cmd: Extract<DrawCommand, { op: 'text' }>, x: number, y: number): void {
+function drawText(
+  doc: PDFDocument,
+  cmd: Extract<DrawCommand, { op: 'text' }>,
+  x: number,
+  y: number,
+  baseFill?: RGB,
+): void {
+  // Pass 1 — inline highlight backgrounds. Painted before any glyph so a
+  // `<mark>` or badge fill can never cover the text it belongs to.
   let spacesBefore = 0;
+  for (const run of cmd.runs) {
+    const style = run.style;
+    const penX = x + cmd.x + run.x + cmd.gapWidth * spacesBefore;
+    if (style.backgroundColor !== undefined) {
+      const bg = toRGB(style.backgroundColor);
+      // Skip a run whose background is just the block fill (already painted).
+      if (!baseFill || !sameRGB(bg, baseFill)) {
+        const ascent = (style.handle.ascender / style.handle.unitsPerEm) * style.fontSize;
+        const descent = -(style.handle.descender / style.handle.unitsPerEm) * style.fontSize;
+        doc.save();
+        if (style.opacity < 1) doc.fillOpacity(style.opacity);
+        doc.fillColor(css(bg));
+        doc.rect(penX, y + cmd.baselineY - ascent, Math.max(0.1, run.width), ascent + descent).fill();
+        doc.restore();
+      }
+    }
+    if (run.space) spacesBefore += 1;
+  }
+
+  // Pass 2 — glyphs, decorations and link rectangles.
+  spacesBefore = 0;
   for (const run of cmd.runs) {
     const style = run.style;
     const fontName = style.handle.embeddedName ?? 'Helvetica';
     const ascent = (style.handle.ascender / style.handle.unitsPerEm) * style.fontSize;
+    const descent = -(style.handle.descender / style.handle.unitsPerEm) * style.fontSize;
     const penX = x + cmd.x + run.x + cmd.gapWidth * spacesBefore;
     // pdfkit's text(x, y) treats y as the top of the line and internally offsets
     // by `ascender/1000 * size`. We want the visual baseline at `y + cmd.baselineY`,
     // so we hand pdfkit `baseline - ascent` and it re-adds the ascent itself.
     const pdfkitY = y + cmd.baselineY - ascent;
 
+    if (style.opacity < 1) doc.save();
+    if (style.opacity < 1) doc.fillOpacity(style.opacity);
     doc.font(fontName);
     doc.fontSize(style.fontSize);
     doc.fillColor(css(resolveRunColor(style.color, run)));
@@ -139,8 +304,17 @@ function drawText(doc: PDFDocument, cmd: Extract<DrawCommand, { op: 'text' }>, x
     if (style.features) options.features = style.features;
     if (style.letterSpacing) options.characterSpacing = style.letterSpacing;
     doc.text(run.text, penX, pdfkitY, options);
+    if (style.opacity < 1) doc.restore();
 
     drawDecorations(doc, run, penX, y + cmd.baselineY, ascent);
+
+    if (run.link && run.text.trim().length > 0) {
+      const rectY = y + cmd.baselineY - ascent;
+      const rectH = Math.max(1, ascent + descent);
+      const rectW = Math.max(1, run.width);
+      if (run.link.startsWith('#')) doc.goTo(penX, rectY, rectW, rectH, run.link.slice(1));
+      else doc.link(penX, rectY, rectW, rectH, run.link);
+    }
     if (run.space) spacesBefore += 1;
   }
 }
@@ -151,6 +325,7 @@ function drawDecorations(doc: PDFDocument, run: PositionedRun, x: number, baseli
   const width = run.width;
   const weight = Math.max(0.5, run.style.fontSize / 18);
   doc.save();
+  if (run.style.opacity < 1) doc.strokeOpacity(run.style.opacity);
   doc.lineWidth(weight).strokeColor(css(resolveRunColor(run.style.color, run)));
   for (const d of decs) {
     const yy = d === 'underline' ? baselineY + weight : baselineY - ascent * 0.32;

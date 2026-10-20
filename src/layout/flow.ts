@@ -13,13 +13,35 @@ import type { PositionedRun } from '../text/typeset.js';
 
 export type DashPattern = number[];
 
+/** A point in fragment-local space, used by `poly`. */
+export type PolyPoint = [number, number];
+
 export type DrawCommand =
-  | { op: 'fillRect'; x: number; y: number; w: number; h: number; color: RGB }
+  | { op: 'fillRect'; x: number; y: number; w: number; h: number; color: RGB; opacity?: number }
   | { op: 'strokeRect'; x: number; y: number; w: number; h: number; color: RGB; lineWidth: number; dash?: DashPattern }
   | { op: 'line'; x1: number; y1: number; x2: number; y2: number; color: RGB; lineWidth: number; dash?: DashPattern }
+  | {
+      op: 'poly';
+      points: PolyPoint[];
+      /** Fill the closed outline (implicitly closed, like SVG `fill`). */
+      fill?: RGB;
+      fillOpacity?: number;
+      stroke?: { color: RGB; lineWidth: number; dash?: DashPattern };
+      close?: boolean;
+    }
   | { op: 'text'; x: number; baselineY: number; runs: PositionedRun[]; gapWidth: number; decorations: Decoration[] }
   | { op: 'underline'; x1: number; y1: number; x2: number; color: RGB; lineWidth: number; lineThrough?: boolean }
   | { op: 'image'; x: number; y: number; w: number; h: number; src: string | Uint8Array };
+
+/** A heading that becomes a PDF bookmark and a table-of-contents entry. */
+export interface OutlineEntry {
+  level: number;
+  title: string;
+  /** Destination anchor name (the heading's `id`, when present). */
+  anchor?: string;
+  /** `'append'` prefixes the entry with a hierarchical section number. */
+  numbering?: 'append' | 'none';
+}
 
 export interface Decoration {
   kind: 'underline' | 'line-through';
@@ -47,6 +69,12 @@ export interface Fragment {
   resetPageNumber?: boolean;
   /** Marks the first fragment of a group so pagination can honour group page breaks. */
   groupValue?: unknown;
+  /** Heading metadata: drives PDF bookmarks and table-of-contents entries. */
+  outline?: OutlineEntry;
+  /** Destination name this fragment defines (any block can be an anchor target). */
+  anchor?: string;
+  /** Paint the whole fragment with this opacity (watermarks / background bands). */
+  opacity?: number;
 }
 
 /** Box geometry a fragment is painted into; used by borders and backgrounds. */

@@ -14,7 +14,7 @@ import { ExprCompiler, exprSource, type ExprContext } from '../expr/eval.js';
 import { createFunctions } from '../expr/functions.js';
 import { formatNumber, formatDate } from '../expr/format.js';
 import { getPath } from '../expr/functions.js';
-import { FontRegistry, type FontHandle } from '../fonts/registry.js';
+import { FontRegistry } from '../fonts/registry.js';
 import { resolveStyle, type ResolvedStyle } from '../text/style.js';
 import type { InlineSource } from '../text/typeset.js';
 
@@ -26,12 +26,26 @@ export interface LayoutContextInit {
   compiler?: ExprCompiler;
 }
 
+/** One row of a generated table of contents. */
+export interface TocEntry {
+  level: number;
+  title: string;
+  /** Logical page number the heading was placed on. */
+  page: number;
+  anchor?: string;
+}
+
 export class LayoutContext {
   readonly registry: FontRegistry;
   readonly baseStyle: ResolvedStyle;
   readonly compiler: ExprCompiler;
   readonly data: Record<string, unknown>;
   readonly vars: Record<string, unknown>;
+  /**
+   * Heading entries available to `toc` blocks. The renderer refreshes this
+   * between fixed-point pagination passes; layout itself never mutates it.
+   */
+  tocEntries: TocEntry[] = [];
 
   constructor(init: LayoutContextInit) {
     this.registry = init.registry;
@@ -112,35 +126,35 @@ export function resolveContent(
   };
   const walkChild = (piece: string | number | ContentSpan, style: ResolvedStyle): void => {
     if (typeof piece === 'string' || typeof piece === 'number') {
-      out.push({ text: String(piece), style, fallback: makeFallback(ctx, style) });
+      out.push({ text: String(piece), style });
       return;
     }
     if (!isSpan(piece)) return;
     const spanStyle = ctx.style(piece.style, style);
     if (piece.bind !== undefined) {
       const raw = resolveBind(piece.bind, ctx, scope);
-      out.push({ text: ctx.resolve(raw, piece.format, scope), style: spanStyle, fallback: makeFallback(ctx, spanStyle) });
+      const source: InlineSource = { text: ctx.resolve(raw, piece.format, scope), style: spanStyle };
+      if (piece.link) source.link = piece.link;
+      out.push(source);
     } else if (piece.text !== undefined) {
-      walk(piece.text, spanStyle);
+      walkWithLink(piece.text, spanStyle, piece.link);
     } else if (piece.children !== undefined) {
-      walk(piece.children, spanStyle);
+      walkWithLink(piece.children, spanStyle, piece.link);
     }
+  };
+
+  /** Walk children and stamp a span-level link onto every produced inline. */
+  const walkWithLink = (node: Content, style: ResolvedStyle, link: string | undefined): void => {
+    if (!link) {
+      walk(node, style);
+      return;
+    }
+    const start = out.length;
+    walk(node, style);
+    for (let i = start; i < out.length; i += 1) out[i]!.link = link;
   };
   walk(content, inherited);
   return out;
-}
-
-/**
- * Build a per-glyph fallback bound to a style's resolved stack, so a run whose
- * primary face lacks a glyph (e.g. CJK in a Latin font) spills into a registered
- * substitute at typeset time. The registry short-circuits back to the primary when
- * it already covers the code point, so this is a no-op for well-covered text.
- */
-function makeFallback(ctx: LayoutContext, style: ResolvedStyle): (ch: string) => FontHandle {
-  const stack = style.fontStack ?? style.handle.family;
-  const weight = style.handle.weight;
-  const fontStyle = style.handle.style;
-  return (ch: string) => ctx.registry.resolveWithFallback(ch, stack, weight, fontStyle);
 }
 
 function resolveBind(bind: string | { expr: string }, ctx: LayoutContext, scope: ExprContext): unknown {

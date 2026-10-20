@@ -33,6 +33,11 @@ import type {
   BandContent,
   BandType,
   FontReference,
+  ChartBlock,
+  ChartKind,
+  TocBlock,
+  BarcodeBlock,
+  BarcodeSymbology,
 } from '../ir/schema.js';
 
 // --- tiny, forgiving HTML tokenizer/parser ---------------------------------
@@ -165,23 +170,27 @@ function findLast<T>(arr: T[], pred: (v: T) => boolean): number {
 type IrBox = Partial<BoxProps>;
 
 function cssToIr(style: string, classStyles: IrBox[]): IrBox {
+  // Class styles are overridden by inline `style` (applied last).
+  const merged: IrBox = {};
+  for (const c of classStyles) Object.assign(merged, c);
+  Object.assign(merged, declarationsToIr(style));
+  return merged;
+}
+
+/** Parse one declaration block (`font-size: 12px; color: #333`) into IR props. */
+function declarationsToIr(style: string): IrBox {
   const out: Record<string, unknown> = {};
   const set = (k: string, v: unknown): void => {
     out[k] = v;
   };
-  const decls = style.split(';').map((d) => d.trim()).filter(Boolean);
-  for (const decl of decls) {
+  for (const decl of style.split(';').map((d) => d.trim()).filter(Boolean)) {
     const colon = decl.indexOf(':');
     if (colon < 0) continue;
     const prop = decl.slice(0, colon).trim().toLowerCase();
-    const value = decl.slice(colon + 1).trim();
+    const value = decl.slice(colon + 1).trim().replace(/\s*!important$/i, '');
     applyDecl(prop, value, set);
   }
-  // Class styles are overridden by inline `style` (applied last).
-  const merged: IrBox = {};
-  for (const c of classStyles) Object.assign(merged, c);
-  Object.assign(merged, out);
-  return merged;
+  return out as IrBox;
 }
 
 const ALIGN: Record<string, StyleProps['align']> = {
@@ -216,8 +225,18 @@ function applyDecl(prop: string, value: string, set: (k: string, v: unknown) => 
       if (ALIGN[value]) set('align', ALIGN[value]);
       return;
     case 'text-decoration':
-      if (value.includes('underline')) set('textDecoration', ['underline']);
-      else if (value.includes('line-through')) set('textDecoration', ['line-through']);
+      {
+        const deco: Array<'underline' | 'line-through'> = [];
+        if (value.includes('underline')) deco.push('underline');
+        if (value.includes('line-through')) deco.push('line-through');
+        if (deco.length) set('textDecoration', deco);
+      }
+      return;
+    case 'opacity':
+      {
+        const n = Number(value);
+        if (Number.isFinite(n)) set('opacity', Math.min(1, Math.max(0, n)));
+      }
       return;
     case 'line-height':
       // Only a unitless ratio or `normal` is meaningful to the IR resolver; a
@@ -330,6 +349,165 @@ function parseBorderShorthand(value: string): BorderShorthand | undefined {
   return [width, style, color];
 }
 
+// --- stylesheet cascade ----------------------------------------------------
+
+interface Compound {
+  tag?: string;
+  id?: string;
+  classes: string[];
+}
+interface SelectorStep extends Compound {
+  /** Relationship to the part on its left (`a > b` = child, `a b` = descendant). */
+  combinator: 'descendant' | 'child';
+}
+interface CssRule {
+  parts: SelectorStep[];
+  style: IrBox;
+  order: number;
+  specificity: number;
+}
+
+/**
+ * Parse `<style>` contents into flat rules. At-rules (`@media`, `@font-face`,
+ * `@page`) are skipped whole — their bodies are not flat declaration blocks.
+ */
+function parseStyleSheet(css: string): CssRule[] {
+  const source = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const rules: CssRule[] = [];
+  let order = 0;
+  let i = 0;
+  while (i < source.length) {
+    const open = source.indexOf('{', i);
+    if (open < 0) break;
+    const prelude = source.slice(i, open).trim();
+    let depth = 1;
+    let j = open + 1;
+    while (j < source.length && depth > 0) {
+      const ch = source[j];
+      if (ch === '{') depth += 1;
+      else if (ch === '}') depth -= 1;
+      j += 1;
+    }
+    const body = source.slice(open + 1, j - 1);
+    i = j;
+    if (!prelude || prelude.startsWith('@')) continue;
+    const style = declarationsToIr(body);
+    if (Object.keys(style).length === 0) continue;
+    for (const raw of prelude.split(',')) {
+      const parts = parseSelector(raw.trim());
+      if (parts.length === 0) continue;
+      rules.push({ parts, style, order: order++, specificity: specificityOf(parts) });
+    }
+  }
+  return rules.sort((a, b) => a.specificity - b.specificity || a.order - b.order);
+}
+
+/** `h2.title > em` → [h2.title, em(child)]; unsupported syntax yields []. */
+function parseSelector(text: string): SelectorStep[] {
+  if (!text || /[:[]/.test(text)) return [];
+  const tokens = text.replace(/\s*>\s*/g, ' > ').split(/\s+/).filter(Boolean);
+  const parts: SelectorStep[] = [];
+  let pending: 'descendant' | 'child' = 'descendant';
+  for (const token of tokens) {
+    if (token === '>') {
+      pending = 'child';
+      continue;
+    }
+    const compound = parseCompound(token);
+    if (!compound) return [];
+    parts.push({ ...compound, combinator: parts.length === 0 ? 'descendant' : pending });
+    pending = 'descendant';
+  }
+  return parts;
+}
+
+function parseCompound(token: string): Compound | undefined {
+  let rest = token;
+  let tag: string | undefined;
+  const tagMatch = /^(\*|[a-zA-Z][\w-]*)/.exec(rest);
+  if (tagMatch) {
+    if (tagMatch[1] !== '*') tag = tagMatch[1]!.toLowerCase();
+    rest = rest.slice(tagMatch[0].length);
+  }
+  let id: string | undefined;
+  const classes: string[] = [];
+  while (rest.length > 0) {
+    if (rest.startsWith('#')) {
+      const m = /^#([\w-]+)/.exec(rest);
+      if (!m) return undefined;
+      id = m[1];
+      rest = rest.slice(m[0].length);
+    } else if (rest.startsWith('.')) {
+      const m = /^\.([\w-]+)/.exec(rest);
+      if (!m) return undefined;
+      classes.push(m[1]!);
+      rest = rest.slice(m[0].length);
+    } else {
+      return undefined;
+    }
+  }
+  return tag || id || classes.length ? { tag, id, classes } : undefined;
+}
+
+function specificityOf(parts: SelectorStep[]): number {
+  let ids = 0;
+  let classes = 0;
+  let tags = 0;
+  for (const part of parts) {
+    if (part.id) ids += 1;
+    classes += part.classes.length;
+    if (part.tag) tags += 1;
+  }
+  return ids * 10000 + classes * 100 + tags;
+}
+
+/**
+ * Resolve matched declarations for every element once, before blocks are built.
+ * Walking with an ancestor stack keeps descendant/child matching honest without
+ * threading parents through every conversion helper.
+ */
+function computeMatchedStyles(root: HElement, rules: CssRule[]): WeakMap<HElement, IrBox> {
+  const matched = new WeakMap<HElement, IrBox>();
+  if (rules.length === 0) return matched;
+  const walk = (el: HElement, ancestors: HElement[]): void => {
+    const style: IrBox = {};
+    let any = false;
+    for (const rule of rules) {
+      if (matchesChain(el, rule.parts, rule.parts.length - 1, ancestors)) {
+        Object.assign(style, rule.style);
+        any = true;
+      }
+    }
+    if (any) matched.set(el, style);
+    for (const child of el.children) if (child.type === 'element') walk(child, [...ancestors, el]);
+  };
+  for (const child of root.children) if (child.type === 'element') walk(child, [root]);
+  return matched;
+}
+
+function matchesChain(el: HElement, parts: SelectorStep[], index: number, ancestors: HElement[]): boolean {
+  if (!matchesCompound(el, parts[index]!)) return false;
+  if (index === 0) return true;
+  if (parts[index]!.combinator === 'child') {
+    const parent = ancestors[ancestors.length - 1];
+    return parent !== undefined && matchesChain(parent, parts, index - 1, ancestors.slice(0, -1));
+  }
+  for (let i = ancestors.length - 1; i >= 0; i -= 1) {
+    if (matchesChain(ancestors[i]!, parts, index - 1, ancestors.slice(0, i))) return true;
+  }
+  return false;
+}
+
+function matchesCompound(el: HElement, step: SelectorStep): boolean {
+  if (step.tag && step.tag !== el.tag) return false;
+  if (step.id && step.id !== el.attrs['id']) return false;
+  if (step.classes.length > 0) {
+    const classes = new Set((el.attrs['class'] ?? '').split(/\s+/).filter(Boolean));
+    for (const name of step.classes) if (!classes.has(name)) return false;
+  }
+  return true;
+}
+
 // --- content mapping -------------------------------------------------------
 
 const INLINE_BOLD = new Set(['b', 'strong']);
@@ -358,7 +536,10 @@ function textToContent(text: string, style: IrBox | undefined): Content {
 function elementStyle(el: HElement, opts: HtmlOptions): IrBox {
   const classes = (el.attrs['class'] ?? '').split(/\s+/).filter(Boolean);
   const classStyles = classes.map((c) => opts.styles?.[c] ?? {}).filter(Boolean);
-  return cssToIr(el.attrs['style'] ?? '', classStyles);
+  // Cascade order: stylesheet rules (already sorted by specificity) < the
+  // programmatic class map < inline `style`.
+  const matched = opts._selectorStyles?.get(el);
+  return cssToIr(el.attrs['style'] ?? '', matched ? [matched, ...classStyles] : classStyles);
 }
 
 /** Merge two IR box props; `over` wins on defined keys. */
@@ -404,16 +585,25 @@ function inlineContent(el: HElement, opts: HtmlOptions, inherited: IrBox): Conte
     if (INLINE_BOLD.has(node.tag)) delta.fontWeight = 700;
     if (INLINE_ITALIC.has(node.tag)) delta.fontStyle = 'italic';
     if (INLINE_UNDERLINE.has(node.tag)) delta.textDecoration = ['underline'];
+    // <mark> carries the browser's default highlight unless the element itself
+    // sets a background (a parent block's fill must not mask the highlight).
+    if (node.tag === 'mark' && elementStyle(node, opts).backgroundColor === undefined) {
+      delta.backgroundColor = '#fff2a8';
+    }
+    const href = node.tag === 'a' ? node.attrs['href'] : undefined;
+    if (href && delta.textDecoration === undefined) delta.textDecoration = ['underline'];
     const spanStyle = mergeIr(style, delta);
     if (node.attrs['data-bind'] !== undefined) {
       const span: ContentSpan = { bind: exprSource(node.attrs['data-bind']) };
       if (node.attrs['data-format']) span.format = node.attrs['data-format'];
+      if (href) span.link = href;
       if (Object.keys(spanStyle).length) span.style = spanStyle as Partial<StyleProps>;
       push(span);
       return;
     }
     const children = inlineContent(node, opts, spanStyle);
     const span: ContentSpan = { text: children };
+    if (href) span.link = href;
     if (Object.keys(delta).length || node.tag !== 'span') span.style = delta as Partial<StyleProps>;
     push(span);
   };
@@ -432,16 +622,189 @@ function leafContent(el: HElement, opts: HtmlOptions, style: IrBox): Content {
   return inlineContent(el, opts, style);
 }
 
-function elToBlock(el: HElement, opts: HtmlOptions): Block[] {
-  if (el.tag === 'hr') {
-    return [{ type: 'spacer', size: 6, ...(elementStyle(el, opts)) } as Block];
+// --- declarative chart / toc / barcode blocks ------------------------------
+
+function boolAttr(el: HElement, name: string, fallback: boolean): boolean {
+  const raw = el.attrs[name];
+  if (raw === undefined) return fallback;
+  return !/^(false|0|no|off)$/i.test(raw.trim());
+}
+
+function numAttr(el: HElement, name: string): number | undefined {
+  const raw = el.attrs[name];
+  if (raw === undefined || raw.trim() === '') return undefined;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function chartKind(value: string | undefined, fallback: ChartKind = 'bar'): ChartKind {
+  const v = (value ?? '').trim().toLowerCase();
+  return v === 'bar' || v === 'line' || v === 'area' || v === 'pie' || v === 'donut' ? v : fallback;
+}
+
+function applyChartOptions(el: HElement, block: ChartBlock): void {
+  const colors = el.attrs['data-colors'];
+  if (colors) block.colors = colors.split(',').map((c) => c.trim()).filter(Boolean);
+  if (el.attrs['data-stacked'] !== undefined) block.stacked = boolAttr(el, 'data-stacked', true);
+  if (el.attrs['data-show-values'] !== undefined) block.showValues = boolAttr(el, 'data-show-values', true);
+  if (el.attrs['data-category-labels'] !== undefined) block.categoryLabels = boolAttr(el, 'data-category-labels', true);
+  const legend = el.attrs['data-legend'];
+  if (legend === 'none' || legend === 'top' || legend === 'bottom' || legend === 'right') block.legend = legend;
+  else if (legend === 'false') block.legend = 'none';
+  const inner = numAttr(el, 'data-inner-radius');
+  if (inner !== undefined) block.innerRadius = inner;
+  const plotH = numAttr(el, 'data-plot-height');
+  if (plotH !== undefined) block.plotHeight = plotH;
+
+  const axis: NonNullable<ChartBlock['valueAxis']> = {};
+  const min = numAttr(el, 'data-min');
+  const max = numAttr(el, 'data-max');
+  const ticks = numAttr(el, 'data-ticks');
+  if (min !== undefined) axis.min = min;
+  if (max !== undefined) axis.max = max;
+  if (ticks !== undefined) axis.ticks = ticks;
+  if (el.attrs['data-value-format']) axis.format = el.attrs['data-value-format'];
+  if (el.attrs['data-axis-labels'] !== undefined) axis.labels = boolAttr(el, 'data-axis-labels', true);
+  if (el.attrs['data-grid-lines'] !== undefined) axis.gridLines = boolAttr(el, 'data-grid-lines', true);
+  if (Object.keys(axis).length > 0) block.valueAxis = axis;
+}
+
+function chartFromElement(el: HElement, style: IrBox): ChartBlock {
+  const kindAttr = el.attrs['data-chart'];
+  const kind = chartKind(kindAttr && kindAttr !== 'true' ? kindAttr : el.attrs['data-kind']);
+  const block: ChartBlock = { type: 'chart', kind, series: [], ...(style as Partial<ChartBlock>) };
+  const title = el.attrs['data-title'] ?? el.attrs['title'];
+  if (title) block.title = title;
+
+  if (el.attrs['data-categories'] !== undefined) block.categories = el.attrs['data-categories'];
+  const seriesAttr = el.attrs['data-series'];
+  if (seriesAttr !== undefined) {
+    block.series = seriesAttr
+      .split(';')
+      .map((segment) => segment.trim())
+      .filter(Boolean)
+      .map((segment) => {
+        const colon = segment.indexOf(':');
+        return colon < 0
+          ? { values: segment }
+          : { name: segment.slice(0, colon).trim(), values: segment.slice(colon + 1).trim() };
+      });
+  } else if (el.attrs['data-values'] !== undefined) {
+    block.series = [
+      { name: el.attrs['data-name'], values: el.attrs['data-values'], color: el.attrs['data-color'] },
+    ];
   }
+  applyChartOptions(el, block);
+  return block;
+}
+
+/** Build a chart from a literal `<table>`: header row = series, first column = categories. */
+function chartFromTable(table: HElement, style: IrBox): ChartBlock {
+  const thead = table.children.find((c): c is HElement => c.type === 'element' && c.tag === 'thead');
+  const tbody = table.children.find((c): c is HElement => c.type === 'element' && c.tag === 'tbody');
+  const rows = [...(thead ? rowsOf(thead) : []), ...(tbody ? rowsOf(tbody) : rowsOf(table))];
+  const texts = rows.map((tr) => cellsOf(tr).map((td) => literalText(td)));
+
+  let header: string[] = [];
+  let body = texts;
+  if (texts.length > 1 && texts[0]!.length > 1 && texts[0]!.slice(1).every((t) => !Number.isFinite(parseLooseNumber(t)))) {
+    header = texts[0]!;
+    body = texts.slice(1);
+  }
+
+  const seriesCount = body.reduce((n, row) => Math.max(n, row.length - 1), 0);
+  const series = Array.from({ length: seriesCount }, (_, i) => ({
+    name: header[i + 1] || undefined,
+    values: body.map((row) => parseLooseNumber(row[i + 1] ?? '')),
+  }));
+
+  const kindAttr = table.attrs['data-chart'];
+  const kind = chartKind(kindAttr && kindAttr !== 'true' ? kindAttr : table.attrs['data-kind']);
+  const block: ChartBlock = {
+    type: 'chart',
+    kind,
+    categories: body.map((row) => row[0] ?? ''),
+    series,
+    ...(style as Partial<ChartBlock>),
+  };
+  const title = table.attrs['data-title'] ?? table.attrs['title'];
+  if (title) block.title = title;
+  applyChartOptions(table, block);
+  return block;
+}
+
+/** Numbers in a rendered table cell: strips currency/grouping, handles `(123)`. */
+function parseLooseNumber(text: string): number {
+  const trimmed = text.trim();
+  const negative = /^\(.*\)$/.test(trimmed);
+  const cleaned = trimmed.replace(/[,\s$€£¥%()]/g, '');
+  const n = Number(cleaned);
+  if (!Number.isFinite(n)) return Number.NaN;
+  return negative ? -n : n;
+}
+
+function tocFromElement(el: HElement, style: IrBox): TocBlock {
+  const block: TocBlock = { type: 'toc', ...(style as Partial<TocBlock>) };
+  const title = el.attrs['data-title'] ?? el.attrs['title'];
+  const text = (title ?? literalText(el)).trim();
+  if (text) block.title = text;
+  const maxLevel = numAttr(el, 'data-max-level') ?? numAttr(el, 'data-level');
+  if (maxLevel !== undefined) block.maxLevel = maxLevel;
+  if (el.attrs['data-leaders'] !== undefined) block.leaders = boolAttr(el, 'data-leaders', true);
+  if (el.attrs['data-page-numbers'] !== undefined) block.pageNumbers = boolAttr(el, 'data-page-numbers', true);
+  const indent = numAttr(el, 'data-indent');
+  if (indent !== undefined) block.indent = indent;
+  const gap = numAttr(el, 'data-gap');
+  if (gap !== undefined) block.gap = gap;
+  return block;
+}
+
+function barcodeFromElement(el: HElement, style: IrBox): BarcodeBlock {
+  const raw = (el.attrs['data-barcode'] ?? '').trim().toLowerCase();
+  const symbology: BarcodeSymbology = raw === 'qr' || raw === 'ean13' ? raw : 'code128';
+  const bind = el.attrs['data-bind'];
+  const value: Content =
+    bind !== undefined
+      ? [{ bind: exprSource(bind), format: el.attrs['data-format'] }]
+      : el.attrs['data-value'] ?? literalText(el);
+  const block: BarcodeBlock = { type: 'barcode', symbology, value, ...(style as Partial<BarcodeBlock>) };
+
+  const ec = el.attrs['data-error-correction'];
+  if (ec === 'L' || ec === 'M' || ec === 'Q' || ec === 'H') block.errorCorrection = ec;
+  const moduleSize = numAttr(el, 'data-module-size');
+  if (moduleSize !== undefined) block.moduleSize = moduleSize;
+  const quiet = numAttr(el, 'data-quiet-zone');
+  if (quiet !== undefined) block.quietZone = quiet;
+  if (el.attrs['data-show-text'] !== undefined) block.showText = boolAttr(el, 'data-show-text', true);
+  if (el.attrs['data-color']) block.color = el.attrs['data-color'];
+  return block;
+}
+
+function elToBlock(el: HElement, opts: HtmlOptions): Block[] {
+  // Non-visual head/stylesheet elements never become report content.
+  if (el.tag === 'style' || el.tag === 'script' || el.tag === 'link' || el.tag === 'meta' || el.tag === 'title') return [];
   const style = elementStyle(el, opts);
+  const id = el.attrs['id'];
+  const withId = <T extends Block>(block: T): T => {
+    if (id && block.id === undefined) block.id = id;
+    return block;
+  };
+
+  if (el.tag === 'hr') {
+    return [withId({ type: 'spacer', size: 6, ...style } as Block)];
+  }
+  if (el.attrs['data-toc'] !== undefined) return [withId(tocFromElement(el, style))];
+  if (el.attrs['data-barcode'] !== undefined) return [withId(barcodeFromElement(el, style))];
+  if (el.attrs['data-chart'] !== undefined && el.tag !== 'table') return [withId(chartFromElement(el, style))];
+
   const heading = /^h([1-6])$/.exec(el.tag);
   if (heading) {
-    return [{ type: 'heading', level: Number(heading[1]), content: leafContent(el, opts, style), ...style } as Block];
+    return [withId({ type: 'heading', level: Number(heading[1]), content: leafContent(el, opts, style), ...style } as Block)];
   }
-  if (el.tag === 'table') return [tableBlock(el, opts, style)];
+  if (el.tag === 'table') {
+    if (el.attrs['data-chart'] !== undefined) return [withId(chartFromTable(el, style))];
+    return [withId(tableBlock(el, opts, style))];
+  }
   if (el.tag === 'img') {
     const block: Record<string, unknown> = { type: 'image', src: resolveImageSrc(el.attrs['src'] ?? '', opts), ...style };
     // `width`/`height` HTML attributes are CSS pixels; honour them when inline
@@ -450,7 +813,7 @@ function elToBlock(el: HElement, opts: HtmlOptions): Block[] {
     if (block.width === undefined && el.attrs['width'] !== undefined) block.width = `${el.attrs['width']}px`;
     if (block.height === undefined && el.attrs['height'] !== undefined) block.height = `${el.attrs['height']}px`;
     if (el.attrs['alt'] !== undefined) block.alt = el.attrs['alt'];
-    return [block as unknown as Block];
+    return [withId(block as unknown as Block)];
   }
 
   const blockChildren = el.children.filter(isBlock);
@@ -460,14 +823,16 @@ function elToBlock(el: HElement, opts: HtmlOptions): Block[] {
       if (c.type === 'element' && isBlock(c)) nested.push(...elToBlock(c, opts));
       else if (c.type === 'text' && /\S/.test(c.text)) nested.push({ type: 'paragraph', content: textToContent(c.text, style), ...style } as Block);
     }
+    // A wrapper with an id anchors its first real block.
+    if (id && nested.length > 0 && nested[0]!.id === undefined) nested[0]!.id = id;
     return nested;
   }
   if (el.tag === 'li') {
     const content = inlineContent(el, opts, style);
     const bullet = Array.isArray(content) ? ['\u2022 ', ...content] : ['\u2022 ', content];
-    return [{ type: 'paragraph', content: bullet, ...style, marginLeft: (style.marginLeft ?? 0) + 12 } as Block];
+    return [withId({ type: 'paragraph', content: bullet, ...style, marginLeft: (style.marginLeft ?? 0) + 12 } as Block)];
   }
-  return [{ type: 'paragraph', content: leafContent(el, opts, style), ...style } as Block];
+  return [withId({ type: 'paragraph', content: leafContent(el, opts, style), ...style } as Block)];
 }
 
 function rowsOf(el: HElement): HElement[] {
@@ -610,6 +975,8 @@ export interface HtmlOptions {
    */
   page?: PageSpec;
   info?: ReportDoc['info'];
+  /** @internal Stylesheet declarations precomputed for every element. */
+  _selectorStyles?: WeakMap<HElement, IrBox>;
 }
 
 /** Absolute filesystem path? (POSIX `/…`, Windows `C:\…` / `C:/…`). */
@@ -728,6 +1095,9 @@ function bandContent(el: HElement, opts: HtmlOptions): BandContent {
   const style = elementStyle(el, opts);
   const band: BandContent = { blocks: elToBlock(el, opts) };
   if (style.height !== undefined) band.height = toPt(style.height);
+  // Band-level style (notably `opacity`) inherits into every block and lets the
+  // pagination engine paint the whole band translucently.
+  if (Object.keys(style).length > 0) band.style = style as Partial<StyleProps>;
   return band;
 }
 
@@ -835,11 +1205,29 @@ function pickDefined<T extends object>(obj: T | undefined): Partial<T> {
   return out as Partial<T>;
 }
 
+/** CSS text from every `<style>` element, concatenated in document order. */
+function collectStyleText(root: HElement): string {
+  let css = '';
+  const walk = (el: HElement): void => {
+    if (el.tag === 'style') {
+      css += `\n${styleText(el)}`;
+      return;
+    }
+    for (const c of el.children) if (c.type === 'element') walk(c);
+  };
+  walk(root);
+  return css;
+}
+
 /** Convert constrained authoring HTML into the report IR. */
 export function htmlToReportDoc(html: string, opts: HtmlOptions = {}): ReportDoc {
   const tree = parseHtml(html);
+  // Resolve the `<style>` cascade once, up front: every later conversion reads
+  // the precomputed match for its element instead of re-walking ancestors.
+  const rules = parseStyleSheet(collectStyleText(tree));
+  const effective: HtmlOptions = rules.length > 0 ? { ...opts, _selectorStyles: computeMatchedStyles(tree, rules) } : opts;
   const body = findFirst(tree, 'body') ?? tree;
-  const reportStyle = cssToIr(body.attrs['style'] ?? '', []) as Partial<StyleProps>;
+  const reportStyle = elementStyle(body, effective) as Partial<StyleProps>;
 
   const blocks: Block[] = [];
   const bands: Partial<Record<BandType, BandContent>> = {};
@@ -848,12 +1236,13 @@ export function htmlToReportDoc(html: string, opts: HtmlOptions = {}): ReportDoc
       if (/\S/.test(child.text)) blocks.push({ type: 'paragraph', content: textToContent(child.text.trim(), undefined) } as Block);
       continue;
     }
+    if (child.tag === 'style' || child.tag === 'script' || child.tag === 'link' || child.tag === 'meta' || child.tag === 'title') continue;
     const bandName = child.attrs['data-band'] as BandType | undefined;
     if (bandName && BAND_TYPES.has(bandName)) {
-      bands[bandName] = bandContent(child, opts);
+      bands[bandName] = bandContent(child, effective);
       continue;
     }
-    blocks.push(...elToBlock(child, opts));
+    blocks.push(...elToBlock(child, effective));
   }
 
   const htmlPage = pageSpecFromHtml(html, tree);

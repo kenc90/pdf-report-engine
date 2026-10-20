@@ -23,12 +23,28 @@ import type { ResolvedPage, Box } from '../core/page.js';
 import type { ResolvedStyle } from '../text/style.js';
 import type { LayoutContext } from '../layout/context.js';
 import { layoutBlock } from '../layout/block.js';
-import type { Fragment } from '../layout/flow.js';
+import type { Fragment, OutlineEntry } from '../layout/flow.js';
 
 export interface PlacedFragment {
   fragment: Fragment;
   x: number;
   y: number;
+}
+
+/** A named destination anchored to a y position in page space. */
+export interface PageAnchor {
+  name: string;
+  y: number;
+}
+
+/** A bookmark / TOC row with its resolved page and position. */
+export interface PageOutlineEntry extends OutlineEntry {
+  /** Absolute page-space y of the heading. */
+  y: number;
+  /** 1-based physical page index. */
+  page: number;
+  /** Logical page number (after `resetPageNumber`). */
+  logical: number;
 }
 
 export interface Page {
@@ -41,6 +57,12 @@ export interface Page {
   body: PlacedFragment[];
   header: PlacedFragment[];
   footer: PlacedFragment[];
+  /** Painted behind everything else (watermark / letterhead band). */
+  background: PlacedFragment[];
+  /** Named destinations defined on this page. */
+  anchors: PageAnchor[];
+  /** Heading entries in document order, with resolved page numbers. */
+  outline: PageOutlineEntry[];
 }
 
 export interface PaginateInput {
@@ -73,6 +95,10 @@ function layoutBand(band: BandContent | undefined, ctx: LayoutContext, opts: { c
   if (band.height !== undefined) {
     const total = frags.reduce((s, f) => s + fragSpan(f), 0);
     if (total < band.height) frags.push({ height: band.height - total, before: 0, after: 0, commands: [] });
+  }
+  // A band-level opacity paints everything in it translucent — the watermark case.
+  if (band.style?.opacity !== undefined) {
+    for (const f of frags) f.opacity = band.style.opacity;
   }
   return frags;
 }
@@ -129,6 +155,9 @@ export function paginate(input: PaginateInput): Page[] {
       body: [],
       header: [],
       footer: [],
+      background: [],
+      anchors: [],
+      outline: [],
     };
     pages.push(p);
     cursorY = bodyTop;
@@ -208,6 +237,9 @@ export function paginate(input: PaginateInput): Page[] {
       body: [],
       header: [],
       footer: [],
+      background: [],
+      anchors: [],
+      outline: [],
     };
     pages.push(next);
     current = next;
@@ -222,12 +254,24 @@ export function paginate(input: PaginateInput): Page[] {
   const total = pages.length;
 
   // --- Pass C: real headers/footers + logical numbering + summary ----------
+  // Section counters for `HeadingBlock.outline.numbering === 'append'`.
+  const counters: number[] = [];
+  const sectionNumber = (level: number): string => {
+    const idx = Math.max(0, level - 1);
+    counters[idx] = (counters[idx] ?? 0) + 1;
+    counters.length = idx + 1;
+    return counters.join('.');
+  };
+
   for (let i = 0; i < pages.length; i += 1) {
     const p = pages[i]!;
     p.total = total;
     p.logical = i + 1 - resetEpochFor(pages, i);
     const pageScope: ExprContext = { ...scope, $page: { number: p.logical, total, ...({ pageIndex: i } as object) } };
     const po = { contentWidth, scope: pageScope, inherited };
+
+    // Background band first: it sits behind the header, body and footer.
+    p.background = placeBand(layoutBand(bands?.background, ctx, po), contentLeft, page.margin.top);
 
     p.header = placeBand(layoutBand(bands?.pageHeader, ctx, po), contentLeft, page.margin.top);
 
@@ -242,6 +286,16 @@ export function paginate(input: PaginateInput): Page[] {
         p.body.push({ fragment: f, x: contentLeft, y });
         y += f.height + f.after;
       }
+    }
+
+    // Collect named destinations and outline entries in document order.
+    for (const pf of p.body) {
+      const f = pf.fragment;
+      if (f.anchor) p.anchors.push({ name: f.anchor, y: pf.y });
+      if (!f.outline) continue;
+      let title = f.outline.title;
+      if (f.outline.numbering === 'append') title = `${sectionNumber(f.outline.level)} ${title}`;
+      p.outline.push({ ...f.outline, title, y: pf.y, page: p.number, logical: p.logical });
     }
   }
 

@@ -84,9 +84,11 @@ function parseSection(pattern: string, symbols: NumberSymbols): ParsedSection {
   const groupPositions: number[] = [];
   {
     let fromRight = 0;
-    for (let k = intPart.length - 1; k >= 0; k -= 1) {
-      if (intPart[k] === ',') groupPositions.push(fromRight);
-      else fromRight += 1;
+    // Scan the *raw* integer part: `intPart` has already lost the separators.
+    for (let k = intPartRaw.length - 1; k >= 0; k -= 1) {
+      const ch = intPartRaw[k]!;
+      if (ch === ',') groupPositions.push(fromRight);
+      else if (ch === '0' || ch === '#') fromRight += 1;
     }
   }
   const groupSize = groupPositions.length ? Math.max(...groupPositions) : 0;
@@ -262,8 +264,9 @@ function applyPattern(value: number, sec: ParsedSection, symbols: NumberSymbols)
     let intDigits = intRaw ?? '0';
     if (intDigits.length < sec.minIntegerDigits) intDigits = intDigits.padStart(sec.minIntegerDigits, '0');
     let fracDigits = fracRaw;
-    // Trim to minimum fraction digits, keeping ICU's "1.5 with #,##0.## -> 1.5".
-    if (sec.maxFractionDigits < maxFrac) fracDigits = fracDigits.slice(0, Math.max(sec.minFractionDigits, 0));
+    // `#` in the fraction is optional: drop trailing zeros, then pad back to
+    // the minimum (`#,##0.###` renders 1.5 as "1.5", not "1.500").
+    if (sec.maxFractionDigits > sec.minFractionDigits) fracDigits = fracDigits.replace(/0+$/, '');
     while (fracDigits.length < sec.minFractionDigits) fracDigits += '0';
     intDigits = group(intDigits, sec.groupSize, symbols.group);
     text = fracDigits ? `${intDigits}${symbols.decimal}${fracDigits}` : intDigits;

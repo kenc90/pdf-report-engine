@@ -26,6 +26,12 @@ export interface ContentSpan {
   format?: string;
   style?: Partial<StyleProps>;
   children?: Content;
+  /**
+   * Hyperlink target: an absolute URL (`https:`, `mailto:`, `tel:`) or an
+   * internal destination written as `#anchor`. Internal anchors resolve against
+   * any block/heading whose `id` (or HTML `id`) matches.
+   */
+  link?: string;
 }
 
 /** Properties that inherit down the node tree. */
@@ -36,6 +42,8 @@ export interface StyleProps {
   fontStyle?: 'normal' | 'italic' | 'oblique';
   color?: ColorInput;
   backgroundColor?: ColorInput;
+  /** 0..1 paint opacity for text/fills (watermarks, tinted chart areas). */
+  opacity?: number;
   lineHeight?: number | 'normal';
   letterSpacing?: number;
   align?: 'left' | 'center' | 'right' | 'justify';
@@ -102,7 +110,7 @@ export interface HeadingBlock extends BlockBase {
   content: Content;
   level?: number;
   /** Adds a PDF outline entry. `numbering: 'append'` mirrors Jasper's section numbering. */
-  outline?: { level?: number; numbering?: 'append' | 'none' };
+  outline?: { level?: number; numbering?: 'append' | 'none' } | false;
 }
 
 export interface SpacerBlock extends BlockBase {
@@ -133,6 +141,119 @@ export interface ImageBlock extends BlockBase {
   /** Explicit intrinsic size (px); probed from `src` when omitted. */
   intrinsic?: { width: number; height: number };
   alt?: string;
+}
+
+// --- charts ---------------------------------------------------------------
+
+export type ChartKind = 'bar' | 'line' | 'area' | 'pie' | 'donut';
+
+export interface ChartSeries {
+  /** Legend label. */
+  name?: string;
+  /**
+   * Series values. Either a literal array, a comma-separated string
+   * (`'12,18,9'`), a binding expression string (`'$data.revenue'`), or an
+   * explicit `Expr`. Bindings must resolve to an array of numbers.
+   */
+  values: number[] | string | Expr;
+  color?: ColorInput;
+  /** Number pattern for value labels on this series. */
+  format?: string;
+}
+
+export interface ValueAxisOptions {
+  min?: number;
+  max?: number;
+  /** Preferred tick count (default 5). */
+  ticks?: number;
+  /** Number pattern for tick labels (e.g. `'#,##0'`). */
+  format?: string;
+  /** Draw the value-axis labels (default true). */
+  labels?: boolean;
+  /** Draw horizontal grid lines (default true). */
+  gridLines?: boolean;
+}
+
+/**
+ * A data-bound vector chart. Everything is drawn with the same primitives as
+ * the rest of the engine, so charts stay crisp at any zoom and never depend on
+ * a canvas or an external charting library.
+ *
+ * Pie/donut charts read their slices from `series[0].values` and label them
+ * with `categories`; every other kind maps one value per category per series.
+ */
+export interface ChartBlock extends BlockBase {
+  type: 'chart';
+  kind: ChartKind;
+  /** Heading rendered above the plot, in the inherited style but bold. */
+  title?: Content;
+  /** Category labels: literal array, CSV string, binding expression, or `Expr`. */
+  categories?: string[] | string | Expr;
+  series: ChartSeries[];
+  /** Stack bars / areas instead of grouping them side by side. */
+  stacked?: boolean;
+  legend?: 'none' | 'top' | 'bottom' | 'right';
+  /** Palette used when a series has no explicit `color`. */
+  colors?: ColorInput[];
+  /** Write each value above its bar / point (default false). */
+  showValues?: boolean;
+  valueAxis?: ValueAxisOptions;
+  /** Draw category labels under the plot (default true). */
+  categoryLabels?: boolean;
+  /** Inner radius of a donut as a fraction of the outer radius (default 0.55). */
+  innerRadius?: number;
+  /** Plot height; defaults to `height`, or 160pt. */
+  plotHeight?: number;
+}
+
+// --- table of contents ----------------------------------------------------
+
+/**
+ * A table of contents generated from heading blocks. Page numbers require the
+ * document to be paginated first, so the renderer runs a small fixed-point loop:
+ * lay out → paginate → rebuild the TOC with real page numbers → repeat until
+ * the TOC height is stable (at most four iterations).
+ */
+export interface TocBlock extends BlockBase {
+  type: 'toc';
+  /** Heading rendered above the entries (omit for none). */
+  title?: Content;
+  /** Include headings up to this level (default 3). */
+  maxLevel?: number;
+  /** Draw dot leaders between the title and the page number (default true). */
+  leaders?: boolean;
+  /** Left indent per nesting level in points (default 12). */
+  indent?: number;
+  /** Show page numbers (default true). */
+  pageNumbers?: boolean;
+  /** Space between the heading text and the leaders in points (default 4). */
+  gap?: number;
+}
+
+// --- barcodes -------------------------------------------------------------
+
+export type BarcodeSymbology = 'qr' | 'code128' | 'ean13';
+
+/**
+ * A machine-readable code block. `qr` and `code128` accept arbitrary text;
+ * `ean13` accepts 12 digits (the checksum is appended) or 13 digits
+ * (the checksum is validated).
+ */
+export interface BarcodeBlock extends BlockBase {
+  type: 'barcode';
+  symbology: BarcodeSymbology;
+  /** The encoded value: a literal, or a `ContentSpan`/`Expr` to bind. */
+  value: Content;
+  /** Module width in points. When omitted, a sensible size is chosen. */
+  moduleSize?: number;
+  /** QR only: error-correction level (default `'M'`). */
+  errorCorrection?: 'L' | 'M' | 'Q' | 'H';
+  /** QR only: quiet zone in modules (default 4). */
+  quietZone?: number;
+  /** Print the human-readable value below a 1D code (default true). */
+  showText?: boolean;
+  /** Bar/module colour (default black). */
+  color?: ColorInput;
 }
 
 /** A single row of a `table`, produced by expanding a `dataSource`. */
@@ -228,7 +349,7 @@ export interface TableBlock extends BlockBase {
   subtotalToken?: string;
 }
 
-export type Block = ParagraphBlock | HeadingBlock | TableBlock | SpacerBlock | PageBreakBlock | ImageBlock;
+export type Block = ParagraphBlock | HeadingBlock | TableBlock | SpacerBlock | PageBreakBlock | ImageBlock | ChartBlock | TocBlock | BarcodeBlock;
 
 export type BandType = 'pageHeader' | 'pageFooter' | 'title' | 'summary' | 'background';
 
@@ -271,6 +392,10 @@ export interface ReportDoc {
   body?: Block[];
   /** Remote font references (Google Fonts links, `@font-face`, font URLs). */
   fonts?: FontReference[];
+  /**
+   * Emit a PDF outline (bookmark pane) from heading blocks. Defaults to `true`
+   * when the body contains headings; set `false` to suppress it.
+   */
   outline?: boolean;
 }
 

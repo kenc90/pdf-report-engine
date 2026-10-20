@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Quarterly dashboard</title>
+  <style>
+    @page { size: a4; margin: 18mm 16mm; }
+
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #243447; }
+    h1 { color: #0f2f57; margin-bottom: 2pt; }
+    h1, h2 { color: #0f2f57; }
+    h2 { margin-top: 14pt; border-bottom: 0.6pt solid #c9d6e6; padding-bottom: 3pt; }
+
+    .muted { color: #6b7c93; font-size: 8.5pt; }
+    .kpi { background-color: #eef4ff; border: 0.6pt solid #a9c0e0; padding: 6pt; }
+    .kpi strong { color: #b23a2f; font-size: 15pt; }
+    .kpi span { color: #46628a; }
+
+    /* Descendant + child selectors and an id selector. */
+    section > h2 { letter-spacing: 0.3pt; }
+    #note { background-color: #fff6cc; padding: 5pt; }
+
+  </style>
+</head>
+<body>
+  <!-- Transparent letterhead/watermark: repeated on every page. -->
+  <div data-band="background" style="opacity:0.05; font-size:96pt; font-weight:bold; color:#0f2f57">DRAFT</div>
+  <header data-band="pageHeader" style="opacity:1; font-size:8pt; color:#94a3b8; letter-spacing:2pt; text-transform:uppercase; border-bottom:0.8pt solid #e2e8f0; padding-bottom:3pt">
+    Northwind Group &middot; Quarterly dashboard
+  </header>
+  <footer data-band="pageFooter" style="font-size:8pt; color:#94a3b8; text-align:right">
+    Page {PAGE} of {TOTAL}
+  </footer>
+
+  <h1 id="top">Quarterly dashboard</h1>
+  <p class="muted">
+    Prepared for <a href="https://example.com">Northwind Group</a> &middot; Q3 2026 &middot;
+    <a href="#appendix">jump to appendix</a>
+  </p>
+
+  <div data-toc data-title="Contents" data-level="3" style="margin-bottom:10pt"></div>
+
+  <section>
+    <h2 id="headline">Headline</h2>
+    <p class="kpi"><strong>+18.4%</strong> revenue growth, with <mark>record</mark> gross margin.
+      <span>Twelve new enterprise accounts.</span></p>
+
+    <p id="note">Inline highlights, links and box fills are real PDF paint operations &mdash;
+      selectable text, vector shapes, no rasterisation.</p>
+  </section>
+
+  <section>
+    <h2 id="charts">Charts</h2>
+    <div data-chart="bar" data-title="Revenue vs. cost (millions)" data-categories="Q1,Q2,Q3,Q4"
+         data-series="Revenue:12.4,18.1,15.2,22.6; Cost:7.1,9.4,8.2,11.3"
+         data-legend="bottom" data-show-values="true" data-value-format="#,##0.0"
+         style="height:170pt"></div>
+
+    <div data-chart="donut" data-title="Revenue mix" data-categories="North,South,East,West"
+         data-values="42,28,18,12" data-legend="right" style="height:150pt; margin-top:8pt"></div>
+
+    <table data-chart="area" data-title="Pipeline (indexed)" data-stacked="true"
+           data-colors="#2E5FA3,#E8833A" style="height:150pt; margin-top:8pt">
+      <thead><tr><th>Month</th><th>Actual</th><th>Plan</th></tr></thead>
+      <tbody>
+        <tr><td>Jul</td><td>10</td><td>12</td></tr>
+        <tr><td>Aug</td><td>14</td><td>13</td></tr>
+        <tr><td>Sep</td><td>19</td><td>15</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2 id="codes">Machine-readable codes</h2>
+    <p class="muted">Scan to open the live report, or use the serial and product code.</p>
+    <div data-barcode="qr" data-value="https://example.com/reports/2026-Q3" data-module-size="2.2"
+         data-error-correction="Q" style="margin-bottom:8pt"></div>
+    <div data-barcode="code128" data-value="RPT-2026-Q3-0042" data-color="#0f2f57"></div>
+    <div data-barcode="ean13" data-value="590123412345"></div>
+  </section>
+
+  <section>
+    <h2 id="appendix">Appendix</h2>
+    <p>
+      Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer euismod, nulla at
+      vulputate cursus, nunc sem tincidunt arcu, vitae cursus augue risus at ipsum. Donec
+      condimentum, mauris a facilisis vehicula, est nisl efficitur leo, ac posuere dui mi
+      in erat. Vivamus tempor, justo sed consequat ultrices, nibh velit aliquet velit, ut
+      suscipit mauris metus a quam. Sed vitae sapien vel ligula dignissim commodo. Nulla
+      facilisi. Curabitur feugiat, nibh non faucibus feugiat, mi risus mattis ligula, in
+      accumsan risus mauris non sem. Phasellus at orci vitae nisl faucibus cursus.
+    </p>
+    <p>
+      Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque
+      laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi
+      architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam voluptatem quia voluptas
+      sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione
+      voluptatem sequi nesciunt. Neque porro quisquam est, qui dolorem ipsum quia dolor sit
+      amet, consectetur, adipisci velit.
+    </p>
+    <p>
+      At vero eos et accusamus et iusto odio dignissimos ducimus qui blanditiis praesentium
+      voluptatum deleniti atque corrupti quos dolores et quas molestias excepturi sint
+      occaecati cupiditate non provident, similique sunt in culpa qui officia deserunt
+      mollitia animi, id est laborum et dolorum fuga. Et harum quidem rerum facilis est et
+      expedita distinctio. Nam libero tempore, cum soluta nobis est eligendi optio cumque
+      nihil impedit quo minus id quod maxime placeat facere possimus.
+    </p>
+    <p><a href="#top">Back to top</a></p>
+  </section>
+</body>
+</html>

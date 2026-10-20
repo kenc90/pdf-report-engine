@@ -23,10 +23,16 @@ export interface InlineSource {
   text: string;
   style: ResolvedStyle;
   /**
+   * Hyperlink target: an external URL (`https:`, `mailto:`, …) or an internal
+   * destination (`#anchor`). Every run produced from this inline carries it.
+   */
+  link?: string;
+  /**
    * Per-glyph fallback: given a code point, return the face that should render it
    * (the primary when it covers the glyph, else a registered substitute). When
-   * absent every code point uses `style.handle` (the pre-fallback behaviour, and
-   * what deterministic tests rely on).
+   * absent the style's own fallback is used, and when *that* is absent every code
+   * point uses `style.handle` (the pre-fallback behaviour, and what deterministic
+   * tests rely on).
    */
   fallback?: (ch: string) => FontHandle;
 }
@@ -40,6 +46,8 @@ export interface PositionedRun {
   width: number;
   /** True when the whole run is spaces — the writer spreads these when justified. */
   space?: boolean;
+  /** Hyperlink target carried from the inline source (URL or `#anchor`). */
+  link?: string;
 }
 
 export interface Line {
@@ -106,7 +114,9 @@ function descentOf(s: ResolvedStyle): number {
 
 /** The face a single code point should render in, honouring per-glyph fallback. */
 function runHandle(src: InlineSource, ch: string): FontHandle {
-  return src.fallback ? src.fallback(ch) : src.style.handle;
+  // An inline may override the stack-aware fallback its style carries.
+  const fallback = src.fallback ?? src.style.fallback;
+  return fallback ? fallback(ch) : src.style.handle;
 }
 
 /** Width of a slice of tagged code points, summed per owning inline *and* face. */
@@ -283,7 +293,9 @@ function flush(input: FlushInput): Line {
     // Carry the chosen face on a cloned style so the writer measures and paints
     // this sub-run with the very font used here (measurement == rendering).
     const runStyle: ResolvedStyle = face === style.handle ? style : { ...style, handle: face };
-    runs.push({ text, style: runStyle, x, width, space: isSpace });
+    const posRun: PositionedRun = { text, style: runStyle, x, width, space: isSpace };
+    if (src.link) posRun.link = src.link;
+    runs.push(posRun);
     x += width;
     i = j;
   }

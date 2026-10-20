@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>pdf-report-engine — pure-JS paginated PDF report engine</title>
-  <meta name="description" content="A pure-JavaScript paginated PDF report engine: report IR or HTML to real vector PDFs with selectable text and Jasper-style pagination. No Chromium." />
+  <meta name="description" content="A pure-JavaScript paginated PDF report engine: report IR or HTML to real vector PDFs with charts, bookmarks, barcodes, selectable text and Jasper-style pagination. No Chromium." />
   <link rel="stylesheet" href="assets/styles.css" />
 </head>
 <body>
@@ -26,8 +26,9 @@
       <h1>Real PDF reports, from pure JavaScript.</h1>
       <p class="lead">
         Turn a report <em>IR</em> — or a small subset of authoring HTML — into a
-        <strong>vector PDF with selectable, searchable text</strong> and
-        <strong>Jasper-style band pagination</strong>. No Chromium. No headless browser. No screenshots.
+        <strong>vector PDF with selectable, searchable text</strong>,
+        <strong>Jasper-style band pagination</strong>, vector charts, PDF bookmarks and
+        QR/barcodes. No Chromium. No headless browser. No screenshots.
       </p>
       <div class="cta">
         <a class="btn" href="getting-started.html">Get started</a>
@@ -65,7 +66,8 @@
         <div class="card">
           <h4>Band pagination</h4>
           <p>Jasper-style bands: <code>title</code>, <code>pageHeader</code>, <code>detail</code>,
-          <code>groupHeader/Footer</code>, <code>pageFooter</code>, <code>summary</code>.</p>
+          <code>groupHeader/Footer</code>, <code>pageFooter</code>, <code>summary</code>, plus a
+          translucent <code>background</code> band for letterheads and watermarks.</p>
         </div>
         <div class="card">
           <h4>Repeated headers &amp; groups</h4>
@@ -81,6 +83,27 @@
           <h4>Two authoring modes</h4>
           <p>Hand-build the <code>ReportDoc</code> IR in JS, or feed an HTML subset through
           <code>htmlToReportDoc()</code>.</p>
+        </div>
+        <div class="card">
+          <h4>Vector charts</h4>
+          <p>Bar, line, area, pie and donut — stacked series, legends, value axes and number
+          formats, authored as IR blocks or declarative <code>data-chart</code> elements.</p>
+        </div>
+        <div class="card">
+          <h4>Bookmarks, TOC &amp; links</h4>
+          <p>Headings build a nested PDF outline; a <code>toc</code> block adds dot leaders with
+          real page numbers, and text links to URLs or <code>#anchors</code>.</p>
+        </div>
+        <div class="card">
+          <h4>QR &amp; barcodes</h4>
+          <p><code>qr</code>, <code>code128</code> and <code>ean13</code> blocks encode literal
+          values or bound data — vector modules, quiet zones and optional human-readable text.</p>
+        </div>
+        <div class="card">
+          <h4>Stylesheets &amp; highlights</h4>
+          <p>A real <code>&lt;style&gt;</code> subset: tag, class, id and compound selectors with
+          CSS specificity, descendant/child combinators, plus <code>&lt;mark&gt;</code> run
+          highlights.</p>
         </div>
         <div class="card">
           <h4>Merged cells</h4>
@@ -103,6 +126,11 @@
           lines never overflow their box.</p>
         </div>
       </div>
+      <p class="note" style="margin-top:16px">
+        See them together: <a href="examples.html#ex-tour"><code>samples/dashboard.html</code></a>
+        is a single report with stylesheet selectors, a translucent watermark, a clickable TOC,
+        bar/donut/area charts, QR / Code 128 / EAN-13 codes, highlights and internal links.
+      </p>
     </section>
 
     <section id="pipeline">

@@ -18,6 +18,14 @@ export interface ResolvedStyle {
    * kept so per-glyph fallback can re-resolve a code point against the same stack.
    */
   fontStack?: string | string[];
+  /**
+   * Per-glyph fallback bound to {@link fontStack} and the resolved face's
+   * weight/style. `typeset` uses it whenever an inline does not carry its own, so
+   * every text path — paragraphs, table cells, TOC rows, chart labels, barcode
+   * captions — spills uncovered code points into a registered face without each
+   * call site having to wire it up.
+   */
+  fallback?: (ch: string) => FontHandle;
   fontSize: number;
   /** Absolute line height in points. */
   lineHeight: number;
@@ -36,6 +44,8 @@ export interface ResolvedStyle {
   textTransform: 'none' | 'uppercase' | 'lowercase' | 'capitalize';
   color: ColorInput;
   backgroundColor: ColorInput | undefined;
+  /** 0..1 paint opacity (watermarks, tinted chart fills). */
+  opacity: number;
   features: Record<string, boolean> | undefined;
   decoration: Array<'underline' | 'line-through'>;
 }
@@ -110,6 +120,15 @@ export function resolveStyle(
 
   const stack = props.fontFamily ?? inherited?.handle.family;
   const handle = registry.resolve(stack as string | string[] | undefined, weight, fontStyle);
+  // Bind the fallback to the *chosen* face's weight/style so a bold-to-regular
+  // substitute is picked consistently with the primary. Well-covered text — the
+  // overwhelming majority of any report — short-circuits on one coverage test
+  // instead of re-running CSS matching per code point.
+  const fallback = (ch: string): FontHandle => {
+    const cp = ch.codePointAt(0);
+    if (cp === undefined || handle.coversCodePoint(cp)) return handle;
+    return registry.resolveWithFallback(ch, stack as string | string[] | undefined, handle.weight, handle.style);
+  };
 
   // Prefer the carried declaration (a multiplier / 'normal') over the absolute
   // `lineHeight`, which is the value we compute and must not be re-multiplied.
@@ -119,6 +138,7 @@ export function resolveStyle(
   return {
     handle,
     fontStack: stack as string | string[] | undefined,
+    fallback,
     fontSize,
     lineHeight,
     lineHeightInput: lhInput,
@@ -129,6 +149,7 @@ export function resolveStyle(
     textTransform: props.textTransform ?? inherited?.textTransform ?? 'none',
     color: props.color ?? inherited?.color ?? [0, 0, 0],
     backgroundColor: props.backgroundColor ?? inherited?.backgroundColor,
+    opacity: props.opacity ?? inherited?.opacity ?? 1,
     features,
     decoration: (props.textDecoration ?? inherited?.decoration ?? []) as ResolvedStyle['decoration'],
   };

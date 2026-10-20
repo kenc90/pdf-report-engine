@@ -26,12 +26,15 @@ import { resolveContent, type LayoutContext } from './context.js';
 import { typeset, type Line } from '../text/typeset.js';
 import type { ResolvedStyle } from '../text/style.js';
 import { resolveBox, resolveBorders, borderRGB, borderDash, type EdgeInsets } from './box.js';
-import type { Fragment, DrawCommand } from './flow.js';
+import type { Fragment, DrawCommand, OutlineEntry } from './flow.js';
 // `block <-> table` is a genuine cycle (a table lays out cell paragraphs via this
 // module, and this module dispatches table blocks to the table layout). Both sides
 // only *call* the imported function at runtime, and ESM function declarations are
 // hoisted, so the cycle resolves correctly without a registration dance.
 import { layoutTable } from './table.js';
+import { layoutChart } from './chart.js';
+import { layoutToc } from './toc.js';
+import { layoutBarcode } from './barcode.js';
 
 export interface BlockLayoutOptions {
   /** Horizontal origin of the content area within the page (usually 0 here). */
@@ -43,22 +46,42 @@ export interface BlockLayoutOptions {
 export function layoutBlock(block: Block, ctx: LayoutContext, opts: BlockLayoutOptions): Fragment[] {
   const inherited = opts.inherited ?? ctx.baseStyle;
   if (block.visible === false) return [];
+  let frags: Fragment[];
   switch (block.type) {
     case 'paragraph':
-      return layoutTextBlock(block, ctx, opts, inherited);
+      frags = layoutTextBlock(block, ctx, opts, inherited);
+      break;
     case 'heading':
-      return layoutHeading(block, ctx, opts, inherited);
+      frags = layoutHeading(block, ctx, opts, inherited);
+      break;
     case 'spacer':
-      return layoutSpacer(block, ctx, opts, inherited);
+      frags = layoutSpacer(block, ctx, opts, inherited);
+      break;
     case 'image':
-      return layoutImage(block, ctx, opts, inherited);
+      frags = layoutImage(block, ctx, opts, inherited);
+      break;
     case 'pageBreak':
-      return [{ height: 0, before: 0, after: 0, commands: [], isPageBreak: true, breakBefore: 'page' }];
+      frags = [{ height: 0, before: 0, after: 0, commands: [], isPageBreak: true, breakBefore: 'page' }];
+      break;
     case 'table':
-      return layoutTable(block, ctx, opts, inherited);
+      frags = layoutTable(block, ctx, opts, inherited);
+      break;
+    case 'chart':
+      frags = layoutChart(block, ctx, opts, inherited);
+      break;
+    case 'toc':
+      frags = layoutToc(block, ctx, opts, inherited);
+      break;
+    case 'barcode':
+      frags = layoutBarcode(block, ctx, opts, inherited);
+      break;
     default:
-      return [];
+      frags = [];
   }
+  // Any block with an `id` defines a named destination at its first fragment,
+  // which is what `#id` links resolve against.
+  if (block.id && frags.length && !frags[0]!.anchor) frags[0]!.anchor = block.id;
+  return frags;
 }
 
 const HEADING_SCALE = [2, 1.6, 1.4, 1.2, 1.1, 1];
@@ -75,7 +98,16 @@ function layoutHeading(block: HeadingBlock, ctx: LayoutContext, opts: BlockLayou
   };
   const merged: BoxProps = { ...headingProps, ...block };
   const style = ctx.style(merged, inherited);
-  return layoutParagraphCore(block.content, block, style, ctx, opts, inherited);
+  let outline: OutlineEntry | undefined;
+  if (block.outline !== false) {
+    outline = {
+      level: block.outline?.level ?? level,
+      title: '',
+      anchor: block.id,
+      numbering: block.outline?.numbering,
+    };
+  }
+  return layoutParagraphCore(block.content, block, style, ctx, opts, inherited, outline);
 }
 
 function layoutTextBlock(block: ParagraphBlock, ctx: LayoutContext, opts: BlockLayoutOptions, inherited: ResolvedStyle): Fragment[] {
@@ -90,6 +122,7 @@ export function layoutParagraphCore(
   ctx: LayoutContext,
   opts: BlockLayoutOptions,
   inherited: ResolvedStyle,
+  outline?: OutlineEntry,
 ): Fragment[] {
   const { margin, padding } = resolveBox(box);
   const borders = resolveBorders(box);
@@ -99,7 +132,7 @@ export function layoutParagraphCore(
     return emptyFragment(style, margin, padding, opts.contentWidth);
   }
   const result = typeset(inline, innerWidth);
-  return fragmentsFromLines(result.lines, {
+  const frags = fragmentsFromLines(result.lines, {
     style,
     margin,
     padding,
@@ -111,6 +144,17 @@ export function layoutParagraphCore(
     fill: style.backgroundColor,
     fillOffsetLeft: margin.left,
   });
+  // Reconstruct the rendered title from the typeset lines: bindings have been
+  // evaluated and `text-transform` applied, so bookmarks match what the page shows.
+  if (outline && frags.length) {
+    const title = result.lines
+      .map((l) => l.runs.map((r) => r.text).join(''))
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (title) frags[0]!.outline = { ...outline, title };
+  }
+  return frags;
 }
 
 export interface FragParams {

@@ -7,8 +7,13 @@
  */
 import { describe, expect, it } from 'vitest';
 import { FontRegistry, type FontHandle } from '../src/fonts/registry.js';
-import type { ResolvedStyle } from '../src/text/style.js';
-import { typeset, type InlineSource } from '../src/text/typeset.js';
+import { resolveStyle, type ResolvedStyle } from '../src/text/style.js';
+import { typeset, type InlineSource, type PositionedRun } from '../src/text/typeset.js';
+import { LayoutContext } from '../src/layout/context.js';
+import { layoutBlock } from '../src/layout/block.js';
+import { layoutToc } from '../src/layout/toc.js';
+import type { Fragment } from '../src/layout/flow.js';
+import type { ChartBlock } from '../src/ir/schema.js';
 
 function makeHandle(family: string, advance: number, cover: (cp: number) => boolean): FontHandle {
   return {
@@ -43,6 +48,7 @@ function styleFor(handle: FontHandle): ResolvedStyle {
     textTransform: 'none',
     color: [0, 0, 0],
     backgroundColor: undefined,
+    opacity: 1,
     features: undefined,
     decoration: [],
   };
@@ -106,5 +112,41 @@ describe('typeset per-glyph fallback', () => {
     expect(runs[0]!.text).toBe('A何B');
     expect(runs[0]!.style.handle).toBe(latin);
     expect(runs[0]!.width).toBeCloseTo(15); // 3 * 0.5em * 10pt
+  });
+});
+
+/**
+ * Text the engine *generates* (TOC rows, chart labels) is typeset from a plain
+ * string plus a resolved style rather than from IR content spans, so it relies on
+ * the fallback that `resolveStyle` carries on the style itself.
+ */
+describe('style-carried fallback in generated text', () => {
+  /** One registry shared by the context and the assertions: handles are compared by identity. */
+  function makeCtx(): { ctx: LayoutContext; latin: FontHandle; cjk: FontHandle } {
+    const { reg, latin, cjk } = registry();
+    const baseStyle = resolveStyle({ fontFamily: 'Latin', fontSize: 10 }, reg, undefined);
+    return { ctx: new LayoutContext({ registry: reg, baseStyle }), latin, cjk };
+  }
+
+  function textRuns(frags: Fragment[]): PositionedRun[] {
+    return frags.flatMap((f) => f.commands.flatMap((c) => (c.op === 'text' ? c.runs : [])));
+  }
+
+  it('renders a CJK TOC entry title with the covering face', () => {
+    const { ctx, latin, cjk } = makeCtx();
+    ctx.tocEntries = [{ level: 1, title: 'A何', page: 2, anchor: 'h1' }];
+    const runs = textRuns(layoutToc({ type: 'toc' }, ctx, { contentWidth: 200, scope: {} }, ctx.baseStyle));
+    // Latin stays on the primary face; the CJK glyph spills into the CJK face.
+    expect(runs.filter((r) => r.style.handle === latin).map((r) => r.text).join('')).toContain('A');
+    expect(runs.filter((r) => r.style.handle === cjk).map((r) => r.text).join('')).toBe('何');
+    // Every piece of the row — title, leaders, page number — keeps the jump link.
+    expect(runs.every((r) => r.link === '#h1')).toBe(true);
+  });
+
+  it('renders CJK chart category labels with the covering face', () => {
+    const { ctx, cjk } = makeCtx();
+    const block = { type: 'chart', kind: 'bar', categories: ['中'], series: [{ values: '5' }] } as ChartBlock;
+    const runs = textRuns(layoutBlock(block, ctx, { contentWidth: 200, scope: {} }));
+    expect(runs.some((r) => r.style.handle === cjk && r.text === '中')).toBe(true);
   });
 });

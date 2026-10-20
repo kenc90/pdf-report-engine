@@ -26,6 +26,16 @@ glyph embedding all happen in-process via [`pdfkit`](https://pdfkit.org) +
 - **Sandboxed expression evaluator** — data bindings run inside a `Proxy`-whitelisted
   scope with a small function library; there is no raw `eval` of globals.
 - **HTML-subset adapter** so you can author with plain markup.
+- **CSS stylesheet subset** — `<style>` rules with tag, class, id, descendant (` `) and
+  child (`>`) selectors, resolved by CSS specificity; inline `style` still wins.
+- **Vector charts** — data-bound `bar`, `line`, `area`, `pie` and `donut` charts with
+  axes, grid lines, legends, stacked modes and value labels. Every mark is a real PDF
+  path/rectangle, so charts stay crisp at any zoom.
+- **Table of contents, PDF bookmarks and hyperlinks** — a `toc` block with dot leaders
+  and *real* page numbers (fixed-point pagination), a nested PDF outline generated from
+  headings, external `http(s)` links and internal `#anchor` destinations.
+- **QR / Code 128 / EAN-13** barcode blocks — dependency-free encoders, emitted as
+  merged vector rectangles with optional human-readable captions.
 - **`@page` control from HTML** — a `<style>@page { size: A4 landscape; margin: 15mm }</style>`
   rule (or a `<meta name="pdf-page" content="size=letter; margin=0.5in">`) sets the page size,
   orientation and margins; a JS-provided `page` option still wins.
@@ -170,6 +180,45 @@ const pdf = await renderToBuffer(report, {
 });
 ```
 
+Charts, barcodes, a table of contents and links are ordinary IR blocks. Give headings an
+`id` so TOC rows and `#anchor` links have a destination:
+
+```ts
+const report: ReportDoc = {
+  body: [
+    { type: 'heading', level: 1, id: 'top', content: 'Quarterly report' },
+    { type: 'toc', title: 'Contents', maxLevel: 3 },       // real page numbers + dot leaders
+
+    {
+      type: 'chart', kind: 'bar', title: 'Revenue (millions)', height: 170,
+      categories: ['Q1', 'Q2', 'Q3', 'Q4'],
+      series: [
+        { name: 'Actual', values: [12, 18, 15, 22] },
+        { name: 'Plan', values: [10, 14, 16, 20] },
+      ],
+      legend: 'bottom', showValues: true, valueAxis: { format: '#,##0' },
+    },
+    { type: 'chart', kind: 'donut', categories: ['North', 'South'],
+      series: [{ values: [62, 38] }] },
+
+    { type: 'barcode', symbology: 'qr', value: 'https://example.com/report/2026-Q3' },
+    { type: 'barcode', symbology: 'code128', value: 'RPT-2026-Q3-0042' },
+    { type: 'barcode', symbology: 'ean13', value: '590123412345' }, // checksum appended
+
+    { type: 'paragraph', content: [
+      'Read the ', { text: 'live report', link: 'https://example.com' },
+      ' or jump to the ', { text: 'appendix', link: '#appendix' }, '.',
+    ] },
+    { type: 'heading', level: 2, id: 'appendix', content: 'Appendix' },
+  ],
+};
+```
+
+Chart values/categories also accept CSV strings (`'12,18,15'`) or bindings
+(`'$data.revenue'`); barcode `value` accepts a binding too, so codes can be data-driven.
+`bar`/`line`/`area` read one value per category per series; `pie`/`donut` read
+`series[0].values` and label the slices from `categories`.
+
 See `src/cli/demo.ts` for a complete, runnable example (grouping, subtotals, running
 tokens, embedded fonts with a base-14 fallback).
 
@@ -216,12 +265,22 @@ const pdf = await renderToBuffer(report, { fonts: await readFontFiles([
 
 - **Blocks:** `h1..h6`, `p`, `div`/`section`/`article`/`header`/`footer`/`main`,
   `table` (`thead`/`tbody`/`tfoot`/`tr`/`th`/`td`), `ul`/`ol`/`li`, `hr`, `br`.
-- **Inline:** `b`/`strong`, `i`/`em`, `u`/`ins`, `span`, `font`, `a`.
+- **Inline:** `b`/`strong`, `i`/`em`, `u`/`ins`, `span`, `font`, `a`, `mark`.
+- **Stylesheets:** `<style>` contents are parsed into a small cascade supporting tag
+  (`p`), class (`.kpi`), id (`#note`) and compound (`p.kpi`, `#note strong`) selectors,
+  comma lists, and descendant (` `) / child (`>`) combinators. Specificity follows CSS
+  (id > class > tag), source order breaks ties, and an inline `style` wins. At-rules
+  such as `@media` and `@font-face` are skipped; `@page` is handled separately.
+- **Links:** `<a href="https://…">` becomes a real PDF link annotation; `href="#id"`
+  jumps to any block/heading carrying that `id` (a named destination). Anchors are
+  clipped to the text runs, and TOC rows link to their heading automatically.
+- **Highlights:** `<mark>` paints the browser-style `#fff2a8` run background unless the
+  element sets its own `background-color`.
 - **Running tokens:** `{PAGE}`, `{TOTAL}`, `{TOP}` are rewritten into `$page.*` bindings. They
   resolve to real per-page values inside a `data-band` header/footer; in plain body flow they
   show the measure-time value.
 - **Inline `style` subset:** `font-size` (px → pt), `font-family`, `font-weight`,
-  `font-style`, `color`, `background(-color)`, `text-align`, `text-decoration`,
+  `font-style`, `color`, `background(-color)`, `opacity`, `text-align`, `text-decoration`,
   unitless `line-height`, `letter-spacing`, `white-space`, `text-transform`,
   `width`/`height`/`min-height`, `vertical-align`, `margin`/`padding` (shorthand + sides),
   `border` (top/bottom/full shorthand), and `break-*` / `page-break-*` → break rules.
@@ -240,8 +299,24 @@ const pdf = await renderToBuffer(report, { fonts: await readFontFiles([
 - **Data binding:** `data-each="item in $data.list"`, `data-bind="<expr>"`,
   `data-format="<pattern>"` turn a `<table>` into a bound data region; `data-bind` on any
   leaf binds that node's text to an expression instead of its literal content.
+- **Declarative chart / TOC / barcode blocks:** a `div` (or `table`) carrying a
+  `data-chart` attribute becomes a `ChartBlock`:
+  `data-chart="bar|line|area|pie|donut"`, `data-title`, `data-categories="Q1,Q2"`,
+  `data-series="Actual:1,2;Plan:3,4"` (or `data-values` for a single series),
+  `data-colors`, `data-stacked`, `data-show-values`, `data-legend="none|top|bottom|right"`,
+  `data-min`/`data-max`/`data-ticks`/`data-value-format`/`data-axis-labels`/`data-grid-lines`,
+  `data-inner-radius`, `data-plot-height`. A `<table data-chart="line">` reads its header
+  row as series names and its first column as categories, so an authored table can be
+  shown as a chart without a second data source.
+  A `div data-toc` becomes a TOC (`data-title`, `data-level`/`data-max-level`,
+  `data-leaders`, `data-page-numbers`, `data-indent`, `data-gap`), and a
+  `div data-barcode="qr|code128|ean13"` becomes a barcode (`data-value`, `data-bind`,
+  `data-error-correction`, `data-module-size`, `data-quiet-zone`, `data-show-text`,
+  `data-color`).
 - **Bands:** an element with `data-band="pageHeader | pageFooter | title | summary | background"`
   is lifted out of the body flow into a **repeated page band**, painted on every page.
+  Band styles inherit into its blocks, so `opacity:0.05` on a `background` band produces a
+  translucent watermark/letterhead on every page.
 - **Images:** a block-level `<img src="..." width="..." height="...">` embeds a real PDF image
   object (PNG / JPEG / GIF / BMP). `src` may be a **local file path**, a **`data:` URI**, raw
   **bytes** (`Uint8Array`), or an **online `http(s)` URL** — all supported. Relative local paths
@@ -346,6 +421,11 @@ The `samples/` folder demonstrates the supported subset:
   cells), a data-bound 36-row ledger whose **column header repeats on every page**, and
   **`data-band` page header/footer** with correctly-resolved `Page N of M` numbering.
   `npm run html:pdf -- samples/annual-report.html -o output/` (data auto-pairs).
+- `dashboard.html` — the **new-features tour**: `<style>` tag/class/id/descendant
+  selectors, a translucent `background` watermark, a clickable `data-toc` with real page
+  numbers, a bar chart, a donut, a `<table data-chart="area">`, QR / Code 128 / EAN-13
+  codes, `<mark>` highlights, external and `#anchor` links, and a nested PDF outline.
+  `npm run html:pdf -- samples/dashboard.html -o output/`.
 - `testimonial.html` — a **formal certificate / Jasper-style testimonial** replica: a repeating
   `data-band` header (institution crest slot + title) and footer (`Page N of M` + a reference
   number), serif body text, and label/value section tables. It renders **out of the box** — the
@@ -517,6 +597,11 @@ whole-report total the simplest approach is a `variables` entry referenced via `
 3. **Pass C** — re-flow headers/footers on each page with the real `$page` values, so
    `{PAGE}`/`{TOTAL}` are correct.
 
+When the body contains a `toc` block, `createReport` wraps the passes in a fixed-point loop:
+lay out → paginate → collect the heading outline entries → rebuild the TOC with their real
+page numbers → repeat until the entry set is stable (at most four iterations). That is how
+the TOC can show page numbers that depend on the TOC's own height.
+
 `paginate(...)` is also exported if you want to drive the paginator directly against your
 own fragments.
 
@@ -535,7 +620,7 @@ From the package root (`pdf-report-engine`):
 | `FontRegistry` | Lower-level face registration / measurement. |
 | `resolvePage`, `toPt`, `expandBox`, `MM_TO_PT`, `CM_TO_PT`, `IN_TO_PT`, `PX_TO_PT` | Page-size & length helpers. |
 | `paginate` | Run the pagination engine directly. |
-| IR types | `ReportDoc`, `Block`, `TableBlock`, `ParagraphBlock`, `HeadingBlock`, `SpacerBlock`, `PageBreakBlock`, `BandContent`, `BandType`, `StyleProps`, `BoxProps`, `Content`, `ContentSpan`, `ColumnNode`, `RowNode`, `CellNode`, `GroupNode`, `DataSource`, `Expr`. |
+| IR types | `ReportDoc`, `Block`, `TableBlock`, `ParagraphBlock`, `HeadingBlock`, `SpacerBlock`, `PageBreakBlock`, `ImageBlock`, `ChartBlock`, `ChartKind`, `ChartSeries`, `ValueAxisOptions`, `TocBlock`, `BarcodeBlock`, `BarcodeSymbology`, `BandContent`, `BandType`, `StyleProps`, `BoxProps`, `Content`, `ContentSpan`, `ColumnNode`, `RowNode`, `CellNode`, `GroupNode`, `DataSource`, `Expr`. |
 
 `RenderOptions.now` is an injectable clock (for deterministic `now()` in expressions and
 PDF timestamps) — useful in tests.
@@ -548,7 +633,8 @@ src/
   core/        page sizes + unit conversion (px/mm/cm/in -> pt)
   fonts/       font registry + metrics (measurement/render oracle)
   text/        style resolution + line breaking / typesetting
-  layout/      block & table layout, column sizing, fragments
+  barcode/     QR (versions 1-40), Code 128 and EAN-13 encoders
+  layout/      block/chart/toc/barcode & table layout, column sizing, fragments
   pagination/  three-pass band paginator
   expr/        sandboxed expression evaluator + function library
   writer/      pdfkit writer (draws fragments, embeds fonts)
@@ -567,8 +653,10 @@ npm run test:watch    # watch mode
 
 The integration test verifies multi-page pagination, per-page running tokens, and that the
 bytes contain a real `/Type0` + `/CIDFontType2` + `/ToUnicode` embedded-font structure.
-Font-dependent assertions self-skip when the reference font (e.g. `arial.ttf`) is absent,
-so the model-level checks always run.
+`test/features.test.ts` additionally covers the barcode encoders, chart geometry, the CSS
+cascade, declarative HTML blocks, TOC page numbers, PDF outline/link structures and inline
+background fills. Font-dependent assertions self-skip when the reference font
+(e.g. `arial.ttf`) is absent, so the model-level checks always run.
 
 ## License
 

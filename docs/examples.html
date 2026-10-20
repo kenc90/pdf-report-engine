@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Examples · pdf-report-engine</title>
-  <meta name="description" content="Runnable JavaScript examples for pdf-report-engine: basic IR, data-driven tables, HTML authoring, streaming, images and merged cells." />
+  <meta name="description" content="Runnable JavaScript examples for pdf-report-engine: basic IR, data-driven tables, HTML authoring, charts, bookmarks and TOC, barcodes, streaming, images and merged cells." />
   <link rel="stylesheet" href="assets/styles.css" />
 </head>
 <body>
@@ -45,6 +45,22 @@ node examples/05-images.mjs</code></pre>
           <tr><td><code>05-images.mjs</code></td><td>Images from bytes / path / online (<code>resolveImage</code>)</td><td><code>renderToBuffer</code></td></tr>
         </tbody>
       </table>
+    </section>
+
+    <section id="ex-tour">
+      <h3>One-document tour: <code>samples/dashboard.html</code></h3>
+      <p>
+        The quickest way to see everything at once is the dashboard sample. It uses a
+        <code>&lt;style&gt;</code> sheet with tag/class/id/descendant/child selectors, a
+        translucent <code>background</code> band, a clickable TOC with real page numbers,
+        bar / donut / area charts, QR / Code 128 / EAN-13 codes, <code>&lt;mark&gt;</code>
+        highlights, external and <code>#anchor</code> links, and a nested PDF outline.
+      </p>
+      <pre data-copy><code>npm run html:pdf -- samples/dashboard.html -o output/</code></pre>
+      <p>
+        The sections below break the same features down into standalone snippets; the five
+        <code>.mjs</code> scripts above stay focused on the core data/report flow.
+      </p>
     </section>
 
     <section id="ex-stream">
@@ -195,6 +211,172 @@ const pdf = await renderToBuffer(report);</code></pre>
         Images are <strong>block-level only</strong> — place <code>&lt;img&gt;</code> as its own element,
         not inline inside a paragraph or a table cell. See <code>samples/image.html</code> (local) and
         <code>samples/image-online.html</code> (remote) for runnable versions.
+      </p>
+    </section>
+
+    <section id="ex-charts">
+      <h3>Charts (IR and HTML)</h3>
+      <p>
+        Charts are ordinary blocks: choose a <code>kind</code>, give it categories and one or more
+        series, and the engine emits vector marks as a single atomic fragment. Here is a grouped
+        bar chart and a donut:
+      </p>
+      <pre data-copy><code>{
+  type: 'chart', kind: 'bar', title: 'Revenue vs. cost ($M)', height: 170,
+  categories: ['Q1', 'Q2', 'Q3', 'Q4'],
+  series: [
+    { name: 'Revenue', values: [12.4, 18.1, 15.2, 22.6] },
+    { name: 'Cost',    values: [7.1, 9.4, 8.2, 11.3] },
+  ],
+  legend: 'bottom', showValues: true,
+  valueAxis: { format: '#,##0.0', ticks: 5 },
+}
+
+{
+  type: 'chart', kind: 'donut', title: 'Revenue mix', height: 150,
+  categories: ['North', 'South', 'East', 'West'],
+  series: [{ values: [42, 28, 18, 12] }],   // pie/donut read series[0]
+  legend: 'right', innerRadius: 0.55,
+}</code></pre>
+      <p>
+        In HTML, one element declares a chart. A <code>&lt;table data-chart&gt;</code> is plotted
+        from its own rows instead — the header row names the series and the first column names the
+        categories — so a table you already render can be shown as a chart:
+      </p>
+      <pre data-copy><code>&lt;div data-chart="bar" data-title="Revenue vs. cost ($M)"
+     data-categories="Q1,Q2,Q3,Q4"
+     data-series="Revenue:12.4,18.1,15.2,22.6; Cost:7.1,9.4,8.2,11.3"
+     data-legend="bottom" data-show-values="true"
+     data-value-format="#,##0.0" style="height:170pt"&gt;&lt;/div&gt;
+
+&lt;div data-chart="donut" data-title="Revenue mix"
+     data-categories="North,South,East,West" data-values="42,28,18,12"
+     data-legend="right" style="height:150pt"&gt;&lt;/div&gt;
+
+&lt;table data-chart="area" data-title="Pipeline" data-stacked="true"
+       data-colors="#2E5FA3,#E8833A" style="height:150pt"&gt;
+  &lt;thead&gt;&lt;tr&gt;&lt;th&gt;Month&lt;/th&gt;&lt;th&gt;Actual&lt;/th&gt;&lt;th&gt;Plan&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;&lt;td&gt;Jul&lt;/td&gt;&lt;td&gt;10&lt;/td&gt;&lt;td&gt;12&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;Aug&lt;/td&gt;&lt;td&gt;14&lt;/td&gt;&lt;td&gt;13&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;Sep&lt;/td&gt;&lt;td&gt;19&lt;/td&gt;&lt;td&gt;15&lt;/td&gt;&lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;</code></pre>
+      <p class="note" style="margin-top:12px">
+        Series values and categories also accept CSV strings (<code>'12,18,9'</code>) or bindings
+        (<code>'$data.revenue'</code>), and <code>stacked</code>/<code>data-stacked</code> turns
+        grouped bars or areas into a stack. See
+        <a href="getting-started.html#charts">Getting started → Charts</a> for the full attribute
+        list.
+      </p>
+    </section>
+
+    <section id="ex-nav">
+      <h3>Bookmarks, TOC and links</h3>
+      <p>
+        Headings build the PDF outline automatically. Add <code>id</code>s so TOC rows and
+        <code>#anchor</code> links have a destination, and insert a <code>toc</code> block where the
+        contents should appear:
+      </p>
+      <pre data-copy><code>const report = {
+  body: [
+    { type: 'heading', level: 1, id: 'intro', content: 'Quarterly report' },
+    { type: 'toc', title: 'Contents', maxLevel: 2 },   // dot leaders + real page numbers
+
+    { type: 'heading', level: 2, id: 'revenue', content: 'Revenue' },
+    { type: 'paragraph', content: [
+      'See the ', { text: 'online dashboard', link: 'https://example.com/dashboard' },
+      ' or jump to ', { text: 'risk factors', link: '#risk' }, '.',
+    ] },
+
+    { type: 'heading', level: 2, id: 'risk', content: 'Risk factors' },
+  ],
+};</code></pre>
+      <p>The same document in HTML:</p>
+      <pre data-copy><code>&lt;h1 id="intro"&gt;Quarterly report&lt;/h1&gt;
+&lt;div data-toc data-title="Contents" data-level="2"&gt;&lt;/div&gt;
+&lt;p&gt;See the &lt;a href="https://example.com/dashboard"&gt;online dashboard&lt;/a&gt;
+   or jump to &lt;a href="#risk"&gt;risk factors&lt;/a&gt;.&lt;/p&gt;
+&lt;h2 id="risk"&gt;Risk factors&lt;/h2&gt;</code></pre>
+      <p>
+        TOC page numbers come from a fixed-point pagination loop, so they stay correct even when
+        adding an entry changes the TOC's own height. Suppress a single bookmark with
+        <code>outline: false</code> on the heading, or the whole bookmark tree with
+        <code>report.outline = false</code> — a <code>toc</code> block still renders its entries.
+      </p>
+    </section>
+
+    <section id="ex-barcodes">
+      <h3>QR codes and barcodes</h3>
+      <p>
+        Three symbologies ship as vector blocks: QR, Code 128 and EAN-13. Values are ordinary
+        <code>Content</code>, so a code can encode literal text or a bound field:
+      </p>
+      <pre data-copy><code>/* QR: error correction and module size are optional */
+{ type: 'barcode', symbology: 'qr',
+  value: 'https://example.com/reports/2026-Q3',
+  moduleSize: 2.2, errorCorrection: 'Q', quietZone: 4 }
+
+/* Code 128: optional bar height and human-readable caption */
+{ type: 'barcode', symbology: 'code128', value: 'RPT-2026-Q3-0042',
+  height: 36, showText: true }
+
+/* EAN-13: 12 digits (checksum appended) or 13 digits (checksum validated) */
+{ type: 'barcode', symbology: 'ean13', value: '590123412345' }
+
+/* Data-driven: the encoded value resolves against the report scope */
+{ type: 'barcode', symbology: 'qr', value: { bind: '$data.order.trackingUrl' } }</code></pre>
+      <p>And the declarative form:</p>
+      <pre data-copy><code>&lt;div data-barcode="qr" data-value="https://example.com/reports/2026-Q3"
+     data-module-size="2.2" data-error-correction="Q"&gt;&lt;/div&gt;
+&lt;div data-barcode="code128" data-value="RPT-2026-Q3-0042"
+     data-color="#0f2f57" style="height:36pt"&gt;&lt;/div&gt;
+&lt;div data-barcode="ean13" data-value="590123412345"&gt;&lt;/div&gt;
+
+&lt;!-- bound from data, with alignment --&gt;
+&lt;div data-barcode="qr" data-bind="$data.order.trackingUrl"
+     style="text-align:center"&gt;&lt;/div&gt;</code></pre>
+      <p class="note" style="margin-top:12px">
+        A QR code is square and ignores <code>showText</code>; 1D codes print their value below
+        the bars unless <code>showText: false</code> / <code>data-show-text="false"</code>.
+        Invalid values (non-digits for EAN-13, unsupported Code 128 input) throw at layout time
+        instead of producing a bad scan.
+      </p>
+    </section>
+
+    <section id="ex-css">
+      <h3>Stylesheets, classes and inline highlights</h3>
+      <p>
+        The HTML adapter parses <code>&lt;style&gt;</code> into a small cascade with CSS
+        specificity. Tag, class, id and compound selectors work, as do comma lists and
+        descendant/child combinators; an inline <code>style</code> always wins.
+      </p>
+      <pre data-copy><code>&lt;style&gt;
+  h2 { color: #0f2f57; border-bottom: 0.6pt solid #c9d6e6; padding-bottom: 3pt; }
+  .kpi { background-color: #eef4ff; border: 0.6pt solid #a9c0e0; padding: 6pt; }
+  .kpi strong { color: #b23a2f; font-size: 15pt; }   /* descendant */
+  section &gt; h2 { letter-spacing: 0.3pt; }             /* child */
+  #note { background-color: #fff6cc; padding: 5pt; }  /* id */
+&lt;/style&gt;
+
+&lt;p class="kpi"&gt;&lt;strong&gt;+18.4%&lt;/strong&gt; revenue growth&lt;/p&gt;
+&lt;p id="note"&gt;&lt;mark&gt;Highlighted&lt;/mark&gt; text and a
+  &lt;span style="background-color:#dbeafe; opacity:0.9"&gt;tinted run&lt;/span&gt;.&lt;/p&gt;</code></pre>
+      <p>
+        <code>&lt;mark&gt;</code> paints the browser highlight <code>#fff2a8</code> unless the
+        element sets its own background. For styles shared across documents, pass a class map —
+        it is applied after the stylesheet and before inline style:
+      </p>
+      <pre data-copy><code>const report = htmlToReportDoc(html, {
+  styles: {
+    muted: { color: '#6b7c93', fontSize: 8.5 },
+    kpi:   { backgroundColor: '#eef4ff', paddingTop: 6, paddingLeft: 6 },
+  },
+});</code></pre>
+      <p class="note" style="margin-top:12px">
+        Pseudo-classes and attribute selectors are not supported; such rules are ignored.
+        At-rules are skipped by the cascade, while <code>@page</code> and <code>@font-face</code>
+        are handled by their own parsers.
       </p>
     </section>
   </main>

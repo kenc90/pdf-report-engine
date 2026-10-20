@@ -196,6 +196,180 @@ const report = {
 };</code></pre>
     </section>
 
+    <section id="charts">
+      <h2>Charts</h2>
+      <p>
+        A <code>chart</code> block draws <strong>bar</strong>, <strong>line</strong>,
+        <strong>area</strong>, <strong>pie</strong> and <strong>donut</strong> charts with the
+        same primitives as the rest of the engine: real vector marks and selectable labels,
+        no canvas and no charting library. A chart is laid out as one atomic fragment, so it
+        never splits across a page.
+      </p>
+      <pre data-copy><code>body: [
+  {
+    type: 'chart', kind: 'bar', title: 'Revenue vs. cost ($M)', height: 170,
+    categories: ['Q1', 'Q2', 'Q3', 'Q4'],
+    series: [
+      { name: 'Revenue', values: [12.4, 18.1, 15.2, 22.6] },
+      { name: 'Cost',    values: [7.1, 9.4, 8.2, 11.3] },
+    ],
+    legend: 'bottom', showValues: true, valueAxis: { format: '#,##0.0' },
+  },
+  {
+    type: 'chart', kind: 'donut', title: 'Revenue mix', height: 150,
+    categories: ['North', 'South', 'East', 'West'],
+    series: [{ values: [42, 28, 18, 12] }],
+    legend: 'right', innerRadius: 0.55,
+  },
+]</code></pre>
+      <p>
+        <code>values</code> and <code>categories</code> accept literal arrays, CSV strings
+        (<code>'12,18,9'</code>) or bindings (<code>'$data.revenue'</code>), so a chart can be
+        data-driven without a second source. <code>bar</code>/<code>line</code>/<code>area</code>
+        read one value per category per series; <code>pie</code>/<code>donut</code> read
+        <code>series[0].values</code> and label slices from <code>categories</code> (their legend
+        shows each slice's percentage). Set <code>stacked: true</code> to stack bars or areas
+        instead of grouping them.
+      </p>
+      <p>A chart is equally at home in HTML, either declared with attributes or read from a table:</p>
+      <pre data-copy><code>&lt;div data-chart="bar" data-title="Revenue vs. cost ($M)"
+     data-categories="Q1,Q2,Q3,Q4"
+     data-series="Revenue:12.4,18.1,15.2,22.6; Cost:7.1,9.4,8.2,11.3"
+     data-legend="bottom" data-show-values="true" data-value-format="#,##0.0"
+     style="height:170pt"&gt;&lt;/div&gt;
+
+&lt;div data-chart="donut" data-title="Revenue mix"
+     data-categories="North,South,East,West" data-values="42,28,18,12"
+     data-legend="right" style="height:150pt"&gt;&lt;/div&gt;
+
+&lt;!-- Or plot an authored table: the header row names series, the first column
+     names categories; cell numbers may include $ , % and (123) negatives. --&gt;
+&lt;table data-chart="area" data-title="Pipeline" data-stacked="true"
+       data-colors="#2E5FA3,#E8833A" style="height:150pt"&gt;
+  &lt;thead&gt;&lt;tr&gt;&lt;th&gt;Month&lt;/th&gt;&lt;th&gt;Actual&lt;/th&gt;&lt;th&gt;Plan&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;&lt;td&gt;Jul&lt;/td&gt;&lt;td&gt;10&lt;/td&gt;&lt;td&gt;12&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;Aug&lt;/td&gt;&lt;td&gt;14&lt;/td&gt;&lt;td&gt;13&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;Sep&lt;/td&gt;&lt;td&gt;19&lt;/td&gt;&lt;td&gt;15&lt;/td&gt;&lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;</code></pre>
+      <table>
+        <thead><tr><th>Attribute</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>data-chart="bar|line|area|pie|donut"</code></td><td>Chart kind (aliases: <code>data-kind</code>; default <code>bar</code>).</td></tr>
+          <tr><td><code>data-title</code></td><td>Title drawn above the plot (also accepts a <code>title</code> attribute).</td></tr>
+          <tr><td><code>data-categories</code></td><td>Comma-separated category labels.</td></tr>
+          <tr><td><code>data-series="Name:1,2;Other:3,4"</code></td><td>One or more named series. Use <code>data-values</code> (with optional <code>data-name</code>/<code>data-color</code>) for a single series.</td></tr>
+          <tr><td><code>data-stacked</code>, <code>data-show-values</code>, <code>data-category-labels</code></td><td>Booleans; present means true, <code>false</code>/<code>0</code>/<code>no</code>/<code>off</code> means false.</td></tr>
+          <tr><td><code>data-legend="none|top|bottom|right"</code></td><td>Legend placement. Default: right for pie/donut, bottom for multiple series, none for one.</td></tr>
+          <tr><td><code>data-colors</code>, <code>data-inner-radius</code>, <code>data-plot-height</code></td><td>Palette, donut hole ratio (default 0.55) and fallback height when no <code>height</code> is set.</td></tr>
+          <tr><td><code>data-min</code>, <code>data-max</code>, <code>data-ticks</code>, <code>data-value-format</code>, <code>data-axis-labels</code>, <code>data-grid-lines</code></td><td>Value-axis controls: bounds, preferred tick count, number pattern, labels and grid lines.</td></tr>
+          <tr><td><code>style="height:…"</code></td><td>Overall chart height; title, labels and legend strips are reserved inside it.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="navigation">
+      <h2>Bookmarks, table of contents &amp; links</h2>
+      <p>
+        Every heading emits an <strong>outline entry</strong> — the bookmark tree PDF readers
+        show in their sidebar. Entries nest by heading level automatically, and a heading on a
+        later page still attaches under the chapter opened earlier. Any block with an
+        <code>id</code> also becomes a named destination.
+      </p>
+      <pre data-copy><code>const report = {
+  body: [
+    { type: 'heading', level: 1, id: 'intro', content: 'Introduction' },
+    { type: 'toc', title: 'Contents', maxLevel: 2 },        // real page numbers + dot leaders
+    { type: 'heading', level: 2, id: 'charts', content: 'Charts' },
+    { type: 'paragraph', content: ['See the chart below.'] },
+    // ...
+    { type: 'paragraph', content: [
+      'Read the ', { text: 'live report', link: 'https://example.com/report' },
+      ' or jump to ', { text: 'the appendix', link: '#appendix' }, '.',
+    ] },
+    { type: 'heading', level: 2, id: 'appendix', content: 'Appendix' },
+  ],
+};</code></pre>
+      <p>
+        A <code>toc</code> block collects the document's headings (up to <code>maxLevel</code>,
+        default 3) and shows their final page numbers with dot leaders. Because the TOC's own
+        height changes pagination, the renderer runs a small fixed-point loop —
+        lay out → paginate → rebuild the TOC — until the entries stop moving (at most four
+        passes). Each row links to its heading when that heading has an <code>id</code>.
+      </p>
+      <p>
+        Links live on content spans: an absolute URL (<code>https:</code>, <code>mailto:</code>,
+        <code>tel:</code>) becomes an external annotation, and <code>#anchor</code> jumps to any
+        block carrying that <code>id</code>. In HTML just use <code>&lt;a href&gt;</code> — the
+        adapter maps both forms:
+      </p>
+      <pre data-copy><code>&lt;h1 id="intro"&gt;Introduction&lt;/h1&gt;
+&lt;div data-toc data-title="Contents" data-level="2"&gt;&lt;/div&gt;
+&lt;p&gt;Read the &lt;a href="https://example.com/report"&gt;live report&lt;/a&gt;
+   or &lt;a href="#appendix"&gt;jump to the appendix&lt;/a&gt;.&lt;/p&gt;
+&lt;h2 id="appendix"&gt;Appendix&lt;/h2&gt;</code></pre>
+      <table>
+        <thead><tr><th>TOC attribute</th><th>Default / meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>data-title</code></td><td>Heading above the entries (literal text also works).</td></tr>
+          <tr><td><code>data-level</code> / <code>data-max-level</code></td><td>Deepest heading level included (default 3).</td></tr>
+          <tr><td><code>data-leaders</code>, <code>data-page-numbers</code></td><td>Dot leaders and page numbers (both default true).</td></tr>
+          <tr><td><code>data-indent</code>, <code>data-gap</code></td><td>Indent per nesting level (12pt) and gap before page numbers (4pt).</td></tr>
+        </tbody>
+      </table>
+      <p>Per-heading and document-wide control stays in the IR:</p>
+      <pre data-copy><code>{ type: 'heading', level: 2, content: 'Note', outline: false }          // no bookmark
+{ type: 'heading', level: 2, content: 'Scope', outline: { level: 1 } }    // re-level the entry
+{ type: 'heading', level: 2, content: 'Scope',
+  outline: { numbering: 'append' } }                                     // 1.1 Scope, 1.2 ...
+
+const report = { outline: false, body: [...] };   // no bookmark tree; a toc block still works</code></pre>
+      <div class="note">
+        Give a heading an <code>id</code> when you want TOC rows or <code>#id</code> links to
+        target it. The bookmark entry itself does not require one.
+      </div>
+    </section>
+
+    <section id="barcodes">
+      <h2>QR codes &amp; barcodes</h2>
+      <p>
+        <code>barcode</code> blocks encode <strong>QR</strong>, <strong>Code 128</strong> and
+        <strong>EAN-13</strong> as vector rectangles — no image is embedded, so codes stay crisp
+        at any zoom. <code>value</code> is ordinary <code>Content</code>, so it can be a literal
+        or a data binding.
+      </p>
+      <pre data-copy><code>body: [
+  { type: 'barcode', symbology: 'qr', value: 'https://example.com/reports/2026-Q3',
+    moduleSize: 2.2, errorCorrection: 'Q' },
+  { type: 'barcode', symbology: 'code128', value: 'RPT-2026-Q3-0042', height: 36 },
+  { type: 'barcode', symbology: 'ean13', value: '590123412345' },   // checksum appended
+]</code></pre>
+      <pre data-copy><code>&lt;div data-barcode="qr" data-value="https://example.com/reports/2026-Q3"
+     data-module-size="2.2" data-error-correction="Q"&gt;&lt;/div&gt;
+&lt;div data-barcode="code128" data-value="RPT-2026-Q3-0042" data-color="#0f2f57"
+     style="height:36pt"&gt;&lt;/div&gt;
+&lt;div data-barcode="ean13" data-value="590123412345"&gt;&lt;/div&gt;</code></pre>
+      <table>
+        <thead><tr><th>Field / attribute</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>symbology</code> / <code>data-barcode</code></td><td><code>qr</code>, <code>code128</code> or <code>ean13</code>.</td></tr>
+          <tr><td><code>value</code> / <code>data-value</code></td><td>Text to encode; <code>data-bind</code> + <code>data-format</code> binds a field instead.</td></tr>
+          <tr><td><code>moduleSize</code> / <code>data-module-size</code></td><td>Width of one module in points; omitted, the code fits the content width.</td></tr>
+          <tr><td><code>errorCorrection</code> / <code>data-error-correction</code></td><td>QR only: <code>L</code>, <code>M</code> (default), <code>Q</code> or <code>H</code>.</td></tr>
+          <tr><td><code>quietZone</code> / <code>data-quiet-zone</code></td><td>QR only: quiet-zone width in modules (default 4).</td></tr>
+          <tr><td><code>showText</code> / <code>data-show-text</code></td><td>Print the value under a 1D code (default true).</td></tr>
+          <tr><td><code>color</code> / <code>data-color</code></td><td>Bar/module colour (default black).</td></tr>
+          <tr><td><code>height</code> / <code>style="height:…"</code></td><td>Bar height for a 1D code (default 46pt); QR is square.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Alignment follows the block's <code>align</code> (or HTML <code>text-align</code>).
+        EAN-13 accepts 12 digits — the check digit is appended — or 13 digits, in which case
+        the check digit is validated. Invalid values fail loudly at layout time.
+      </p>
+    </section>
+
     <section id="from-html">
       <h2>Author with HTML</h2>
       <p>Prefer markup? The adapter parses a forgiving HTML/CSS subset into the same IR.</p>
@@ -223,6 +397,41 @@ const pdf = await renderToBuffer(report);</code></pre>
       <code>[w h]</code> in any unit, plus <code>portrait</code>/<code>landscape</code>; <code>margin</code> =
       a CSS 1&ndash;4 value shorthand. A <code>page</code> passed to <code>htmlToReportDoc(html, { page })</code>
       from JS overrides whatever the HTML declares.</p>
+
+      <h3>Stylesheets, classes and highlights</h3>
+      <p>
+        A <code>&lt;style&gt;</code> element is parsed into a small but real cascade. Supported
+        selectors are tag (<code>h2</code>), class (<code>.kpi</code>), id (<code>#note</code>) and
+        compound combinations (<code>p.kpi</code>, <code>#note strong</code>), plus comma lists and
+        descendant (whitespace) / child (<code>&gt;</code>) combinators. Specificity follows CSS —
+        id &gt; class &gt; tag — source order breaks ties, and an inline <code>style</code> always wins.
+      </p>
+      <pre data-copy><code>&lt;style&gt;
+  h2 { color: #0f2f57; border-bottom: 0.6pt solid #c9d6e6; padding-bottom: 3pt; }
+  .kpi { background-color: #eef4ff; border: 0.6pt solid #a9c0e0; padding: 6pt; }
+  .kpi strong { color: #b23a2f; font-size: 15pt; }   /* descendant */
+  section &gt; h2 { letter-spacing: 0.3pt; }             /* child */
+  #note { background-color: #fff6cc; padding: 5pt; }  /* id */
+&lt;/style&gt;
+
+&lt;p class="kpi"&gt;&lt;strong&gt;+18.4%&lt;/strong&gt; revenue growth&lt;/p&gt;
+&lt;p id="note"&gt;&lt;mark&gt;Highlighted&lt;/mark&gt; inline text and a
+  &lt;span style="background-color:#dbeafe; opacity:0.9"&gt;tinted run&lt;/span&gt;.&lt;/p&gt;</code></pre>
+      <p>
+        Runs carry their own <code>background-color</code> and <code>opacity</code> (0&ndash;1), so
+        highlights and tinted emphasis are painted behind the glyphs. <code>&lt;mark&gt;</code>
+        defaults to the browser highlight <code>#fff2a8</code> unless the element sets a
+        background. Block backgrounds paint the whole fragment; a <code>background</code> band
+        plus <code>opacity</code> gives a translucent letterhead or watermark.
+      </p>
+      <div class="note">
+        Pseudo-classes and attribute selectors (<code>:hover</code>, <code>[data-x]</code>) are not
+        supported — they are ignored rather than approximated. At-rules such as <code>@media</code>
+        are skipped by the cascade; <code>@page</code> and <code>@font-face</code> are handled by
+        their own parsers. The same declarations can also be injected from JS with
+        <code>htmlToReportDoc(html, { styles: { muted: { color: '#6b7c93', fontSize: 8.5 } } })</code>
+        — the class map sits between the stylesheet and inline style.
+      </div>
     </section>
 
     <section id="images">

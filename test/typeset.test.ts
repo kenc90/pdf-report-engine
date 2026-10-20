@@ -22,6 +22,7 @@ function style(partial: Partial<ResolvedStyle> = {}): ResolvedStyle {
     textTransform: 'none',
     color: [0, 0, 0],
     backgroundColor: undefined,
+    opacity: 1,
     features: undefined,
     decoration: [],
     ...partial,

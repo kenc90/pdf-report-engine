@@ -9,7 +9,7 @@ import PDFDocument from 'pdfkit';
 import { resolvePage } from './core/page.js';
 import { FontRegistry, type FontSource } from './fonts/registry.js';
 import { resolveStyle } from './text/style.js';
-import { LayoutContext } from './layout/context.js';
+import { LayoutContext, type TocEntry } from './layout/context.js';
 import { ExprCompiler } from './expr/eval.js';
 import { createFunctions } from './expr/functions.js';
 import { paginate, type Page } from './pagination/engine.js';
@@ -83,21 +83,49 @@ export function createReport(report: ReportDoc, options: RenderOptions = {}): Re
     $vars: report.variables,
   };
 
-  const pages = paginate({
-    ctx,
-    page,
-    contentWidth: page.content.width,
-    body: report.body ?? [],
-    bands: report.bands,
-    scope,
-    baseStyle,
-  });
+  // A TOC needs the page numbers that only exist after pagination, while its own
+  // height affects those numbers. Iterate until the entry list stops changing
+  // (bounded so a pathological document cannot loop forever).
+  let pages: Page[] = [];
+  for (let pass = 0; pass < 4; pass += 1) {
+    pages = paginate({
+      ctx,
+      page,
+      contentWidth: page.content.width,
+      body: report.body ?? [],
+      bands: report.bands,
+      scope,
+      baseStyle,
+    });
+    const entries = collectTocEntries(pages);
+    if (sameEntries(ctx.tocEntries, entries)) break;
+    ctx.tocEntries = entries;
+  }
 
-  for (const p of pages) writePage(doc, p);
-
-  addOutline(doc, report);
+  for (const p of pages) writePage(doc, p, { outline: report.outline });
 
   return { doc, pages, registry };
+}
+
+/** Flatten the paginated outline into the rows a `toc` block renders. */
+function collectTocEntries(pages: Page[]): TocEntry[] {
+  const entries: TocEntry[] = [];
+  for (const page of pages) {
+    for (const entry of page.outline) {
+      entries.push({ level: entry.level, title: entry.title, page: entry.logical, anchor: entry.anchor });
+    }
+  }
+  return entries;
+}
+
+function sameEntries(a: TocEntry[], b: TocEntry[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    const x = a[i]!;
+    const y = b[i]!;
+    if (x.level !== y.level || x.page !== y.page || x.title !== y.title || x.anchor !== y.anchor) return false;
+  }
+  return true;
 }
 
 /** Render to bytes (collects the stream). Resolves remote images and fonts first. */
@@ -149,13 +177,3 @@ function toPdfInfo(report: ReportDoc): Record<string, string> {
   return out;
 }
 
-/**
- * Build a PDF outline from heading blocks. We walk the already-paginated model so
- * each entry points at the correct page; the y is the fragment's placed top.
- */
-function addOutline(doc: PDFKitDoc, report: ReportDoc): void {
-  void doc;
-  void report;
-  // Outline emission is deferred: it needs heading fragments tagged during layout,
-  // which the demo does not yet require. Wired in when `{TOP}`/bookmarks land.
-}

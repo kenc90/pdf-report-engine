@@ -49,13 +49,24 @@ const DEMO_DATA = {
 };
 
 // Default report — deliberately exercises most of the library's authoring features:
-// Google Fonts, page bands + running tokens, a title/summary band, KPI cards (borderless
-// tables), rich inline formatting, an embedded image, a data-bound striped/gridded table,
-// merged cells, a page break, and base-14 fallback.
+// Google Fonts, a <style> sheet with tag/class/id selectors, page bands + running tokens,
+// a title/summary band, a generated TOC, KPI cards (borderless tables), vector charts,
+// rich inline formatting (highlights + links), an embedded image, a data-bound
+// striped/gridded table, merged cells, QR/Code 128/EAN-13 barcodes, a page break,
+// and base-14 fallback.
 const DEFAULT_HTML = `<!-- ══ Web fonts straight from the HTML: the engine collects the charset from
      the IR, passes it as text= to Google's CSS API, fetches only the needed glyphs (tiny subset),
      and embeds them. In Node a bot UA yields TTF directly; in a browser WOFF2 is decoded. ══ -->
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Roboto+Slab:wght@400;700&family=Noto+Sans+SC:wght@400&display=swap" rel="stylesheet">
+
+<!-- ══ A real stylesheet: tag / class / id selectors with CSS specificity.
+     Inline style still wins over these rules. ══ -->
+<style>
+  .section-title { font-family: 'Roboto Slab'; color: #0f2f57; border-bottom: 2pt solid #e08a1e; padding-bottom: 4pt; }
+  #ledger { color: #1b4d3e; }                 /* id beats class */
+  .callout { background-color: #fff7e6; padding: 6pt; }
+  mark { background-color: #ffe08a; }          /* tag selector */
+</style>
 
 <body style="font-family:Inter; font-size:10pt; color:#24303f">
 
@@ -84,6 +95,10 @@ const DEFAULT_HTML = `<!-- ══ Web fonts straight from the HTML: the engine c
   </table>
 </section>
 
+<!-- ══ Generated TOC: dot leaders, real page numbers and clickable rows. Headings
+     carry ids so every row has a destination. ══ -->
+<div data-toc data-title="Contents" data-level="2" style="margin-top:16pt; margin-bottom:2pt"></div>
+
 <!-- ══ KPI cards: a borderless table of coloured cells (no CSS grid/float — tables do layout). ══ -->
 <p style="font-size:8pt; letter-spacing:2pt; text-transform:uppercase; color:#94a3b8; margin-top:14pt">At a glance</p>
 <table style="border:0; width:100%">
@@ -95,26 +110,35 @@ const DEFAULT_HTML = `<!-- ══ Web fonts straight from the HTML: the engine c
   </tr>
 </table>
 
+<!-- ══ A vector chart authored from plain attributes: no canvas, no images. ══ -->
+<div data-chart="bar" data-title="Revenue by quarter ($M)" data-categories="Q1 25,Q2 25,Q3 25,Q4 25,Q1 26,Q2 26"
+     data-series="Revenue:58.2,61.4,63.1,66.8,69.5,72.1" data-legend="none" data-show-values="true"
+     data-value-format="#,##0.0" style="height:140pt; margin-top:12pt"></div>
+
+<div data-chart="donut" data-title="Revenue mix" data-categories="Platform,Analytics,Services,Retail"
+     data-values="38,26,19,17" data-legend="right" style="height:150pt; margin-top:12pt"></div>
+
 <!-- ══ Rich inline formatting + base-14 Latin-1 coverage. ══ -->
-<h2 style="font-family:'Roboto Slab'; color:#0f2f57; border-bottom:2pt solid #e08a1e; padding-bottom:4pt">Highlights</h2>
+<h2 id="highlights" class="section-title">Highlights</h2>
 <p style="line-height:1.5; color:#334155">
   Every glyph is <strong>vector and selectable</strong>. Inline styling covers <em>italics</em>,
-  <u>underline</u>, <span style="color:#1b7f4b; font-weight:700">coloured emphasis</span>, and a
-  <a href="#">link</a>. With no web font in play, the base-14 face still renders Latin-1 &amp; symbols:
+  <u>underline</u>, <span style="color:#1b7f4b; font-weight:700">coloured emphasis</span>,
+  <mark>highlighted runs</mark>, an <a href="https://example.com">external link</a>, and an
+  <a href="#ledger">internal jump</a>. With no web font in play, the base-14 face still renders Latin-1 &amp; symbols:
   é ñ ü ß · ± × ½ © ° § ¶ —. Headings use <strong>Roboto Slab</strong>, fetched from Google Fonts on the client.
 </p>
 
 <!-- ══ CJK / Chinese: rendered via charset-aware subsetting — the engine collects the CJK
      characters from the IR, passes them as text= to Google Fonts, and receives a tiny subset
      containing only those glyphs. Mixed CJK + Latin with no manual font switching. ══ -->
-<h2 style="font-family:'Noto Sans SC'; color:#0f2f57; border-bottom:2pt solid #e08a1e; padding-bottom:4pt">中文示例 - Chinese</h2>
+<h2 id="chinese" class="section-title">中文示例 - Chinese</h2>
 <p style="font-family:'Noto Sans SC'; line-height:1.6; color:#334155">
   本报告完全在浏览器端以纯 JavaScript 渲染成真实的矢量 PDF，文字可选取、可搜索，并支持中日韩字形与逐字符字体回退。
 </p>
 
 <!-- ══ Data-bound table: rows generated from a JSON dataset (data-each), each cell filled by
      data-bind, numbers via data-format. Striped + gridded. Provided to the demo harness. ══ -->
-<h2 style="font-family:'Roboto Slab'; color:#0f2f57; border-bottom:2pt solid #e08a1e; padding-bottom:4pt">Ledger by segment</h2>
+<h2 id="ledger" class="section-title">Ledger by segment</h2>
 <p style="font-size:8.5pt; color:#94a3b8">Bound from an in-memory dataset (values in $M). Edit <code>DEMO_DATA</code> in <code>browser-demo.js</code> to change the rows.</p>
 <table data-each="line in $data.ledger" data-grid="0.5pt solid #e5eaf1" data-striped>
   <thead>
@@ -138,7 +162,7 @@ const DEFAULT_HTML = `<!-- ══ Web fonts straight from the HTML: the engine c
 </table>
 
 <!-- ══ Merged cells: colspan + rowspan render as a single aligned grid. ══ -->
-<h2 style="font-family:'Roboto Slab'; color:#0f2f57; border-bottom:2pt solid #e08a1e; padding-bottom:4pt">Merged cells</h2>
+<h2 id="merged" class="section-title">Merged cells</h2>
 <table data-grid="1px solid #b8c4d4">
   <tr><th colspan="3" style="background:#dce6f2; color:#0f2f57; padding:6pt; text-align:center">A banner spanning three columns</th></tr>
   <tr>
@@ -148,10 +172,18 @@ const DEFAULT_HTML = `<!-- ══ Web fonts straight from the HTML: the engine c
   <tr><td style="padding:6pt">February</td><td style="padding:6pt; text-align:right">$600</td></tr>
 </table>
 
+<!-- ══ Vector QR / barcodes: every module is a real rectangle — no image, no canvas. ══ -->
+<h2 id="codes" class="section-title">Machine-readable codes</h2>
+<p class="callout">Scan the QR code to open the live report, or read the serial and product code.</p>
+<div data-barcode="qr" data-value="https://example.com/reports/2026-Q3"
+     data-module-size="2" data-error-correction="Q" style="margin-top:8pt"></div>
+<div data-barcode="code128" data-value="RPT-2026-Q3-0042" data-color="#0f2f57" style="height:34pt"></div>
+<div data-barcode="ean13" data-value="590123412345"></div>
+
 <hr>
 
-<!-- ══ A forced page break — the footer now reads "Page 2 of 2". ══ -->
-<h2 style="break-before:page; font-family:'Roboto Slab'; color:#0f2f57; border-bottom:2pt solid #e08a1e; padding-bottom:4pt">On the second page</h2>
+<!-- ══ A forced page break — the heading starts a new page and the footer total updates. ══ -->
+<h2 id="second" class="section-title" style="break-before:page">After the forced page break</h2>
 <p style="color:#334155; line-height:1.5">
   This heading began a new page via <code>break-before: page</code>, proving real pagination.
   The repeating <strong>pageHeader</strong>/<strong>pageFooter</strong> bands and the running
