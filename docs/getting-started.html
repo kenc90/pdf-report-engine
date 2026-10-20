@@ -216,10 +216,27 @@ const report = {
     legend: 'bottom', showValues: true, valueAxis: { format: '#,##0.0' },
   },
   {
+    // line: unlike bar/area, the value axis is not forced through zero.
+    type: 'chart', kind: 'line', title: 'ARPU ($)', height: 160,
+    categories: ['Jul', 'Aug', 'Sep', 'Oct'],
+    series: [
+      { name: 'Consumer',   values: [21.4, 22.0, 23.1, 24.3] },
+      { name: 'Enterprise', values: [38.2, 39.6, 39.1, 43.0] },
+    ],
+    valueAxis: { min: 18, max: 48, ticks: 4, format: '$#,##0.0' },
+  },
+  {
     type: 'chart', kind: 'donut', title: 'Revenue mix', height: 150,
     categories: ['North', 'South', 'East', 'West'],
     series: [{ values: [42, 28, 18, 12] }],
     legend: 'right', innerRadius: 0.55,
+  },
+  {
+    // pie is the same block without a hole; `stacked: true` piles bars or areas.
+    type: 'chart', kind: 'pie', title: 'Channel mix', height: 150,
+    categories: ['Direct', 'Partner', 'Retail', 'Online'],
+    series: [{ values: [37, 25, 22, 16] }],
+    legend: 'right',
   },
 ]</code></pre>
       <p>
@@ -238,8 +255,18 @@ const report = {
      data-legend="bottom" data-show-values="true" data-value-format="#,##0.0"
      style="height:170pt"&gt;&lt;/div&gt;
 
+&lt;div data-chart="line" data-title="ARPU ($)" data-categories="Jul,Aug,Sep,Oct"
+     data-series="Consumer:21.4,22.0,23.1,24.3; Enterprise:38.2,39.6,39.1,43.0"
+     data-min="18" data-max="48" data-ticks="4" data-value-format="$#,##0.0"
+     style="height:160pt"&gt;&lt;/div&gt;
+
 &lt;div data-chart="donut" data-title="Revenue mix"
      data-categories="North,South,East,West" data-values="42,28,18,12"
+     data-legend="right" style="height:150pt"&gt;&lt;/div&gt;
+
+&lt;!-- Same shape as donut, minus the hole. --&gt;
+&lt;div data-chart="pie" data-title="Channel mix"
+     data-categories="Direct,Partner,Retail,Online" data-values="37,25,22,16"
      data-legend="right" style="height:150pt"&gt;&lt;/div&gt;
 
 &lt;!-- Or plot an authored table: the header row names series, the first column

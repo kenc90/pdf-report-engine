@@ -110,13 +110,33 @@ const DEFAULT_HTML = `<!-- ══ Web fonts straight from the HTML: the engine c
   </tr>
 </table>
 
-<!-- ══ A vector chart authored from plain attributes: no canvas, no images. ══ -->
+<!-- ══ Vector charts from plain attributes — all five kinds, no canvas, no images. ══ -->
 <div data-chart="bar" data-title="Revenue by quarter ($M)" data-categories="Q1 25,Q2 25,Q3 25,Q4 25,Q1 26,Q2 26"
      data-series="Revenue:58.2,61.4,63.1,66.8,69.5,72.1" data-legend="none" data-show-values="true"
      data-value-format="#,##0.0" style="height:140pt; margin-top:12pt"></div>
 
+<div data-chart="line" data-title="Revenue vs. cost ($M)" data-categories="Q1 25,Q2 25,Q3 25,Q4 25,Q1 26,Q2 26"
+     data-series="Revenue:58.2,61.4,63.1,66.8,69.5,72.1; Cost:41.0,42.6,43.4,45.1,46.2,43.8"
+     data-legend="bottom" data-min="35" data-max="80" data-ticks="5" data-value-format="#,##0.0"
+     style="height:140pt; margin-top:10pt"></div>
+
+<!-- A <table data-chart> is plotted straight from its own rows: header = series, first column = categories. -->
+<table data-chart="area" data-title="Headcount by segment (stacked)" data-stacked="true"
+       data-colors="#0f2f57,#1b7f4b,#e08a1e" style="height:130pt; margin-top:10pt">
+  <thead><tr><th>Quarter</th><th>Platform</th><th>Analytics</th><th>Services</th></tr></thead>
+  <tbody>
+    <tr><td>Q3 25</td><td>420</td><td>310</td><td>280</td></tr>
+    <tr><td>Q4 25</td><td>445</td><td>330</td><td>295</td></tr>
+    <tr><td>Q1 26</td><td>470</td><td>352</td><td>300</td></tr>
+    <tr><td>Q2 26</td><td>505</td><td>378</td><td>357</td></tr>
+  </tbody>
+</table>
+
+<div data-chart="pie" data-title="Channel mix" data-categories="Direct,Partner,Retail,Online"
+     data-values="37,25,22,16" data-legend="right" style="height:130pt; margin-top:10pt"></div>
+
 <div data-chart="donut" data-title="Revenue mix" data-categories="Platform,Analytics,Services,Retail"
-     data-values="38,26,19,17" data-legend="right" style="height:150pt; margin-top:12pt"></div>
+     data-values="38,26,19,17" data-legend="right" data-inner-radius="0.6" style="height:140pt; margin-top:10pt"></div>
 
 <!-- ══ Rich inline formatting + base-14 Latin-1 coverage. ══ -->
 <h2 id="highlights" class="section-title">Highlights</h2>

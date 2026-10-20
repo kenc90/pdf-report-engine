@@ -423,7 +423,8 @@ The `samples/` folder demonstrates the supported subset:
   `npm run html:pdf -- samples/annual-report.html -o output/` (data auto-pairs).
 - `dashboard.html` — the **new-features tour**: `<style>` tag/class/id/descendant
   selectors, a translucent `background` watermark, a clickable `data-toc` with real page
-  numbers, a bar chart, a donut, a `<table data-chart="area">`, QR / Code 128 / EAN-13
+  numbers, **every chart kind** (grouped bar, stacked bar, line, `<table data-chart="area">`,
+  pie, donut), QR / Code 128 / EAN-13
   codes, `<mark>` highlights, external and `#anchor` links, and a nested PDF outline.
   `npm run html:pdf -- samples/dashboard.html -o output/`.
 - `testimonial.html` — a **formal certificate / Jasper-style testimonial** replica: a repeating

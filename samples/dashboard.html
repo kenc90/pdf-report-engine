@@ -51,14 +51,28 @@
 
   <section>
     <h2 id="charts">Charts</h2>
+    <p class="muted">All five kinds — bar, line, area, pie, donut — as vector marks: grouped and
+      stacked series, legends, value labels and a formatted value axis.</p>
+
+    <!-- bar, grouped: two series side by side, value labels on top of each bar. -->
     <div data-chart="bar" data-title="Revenue vs. cost (millions)" data-categories="Q1,Q2,Q3,Q4"
          data-series="Revenue:12.4,18.1,15.2,22.6; Cost:7.1,9.4,8.2,11.3"
          data-legend="bottom" data-show-values="true" data-value-format="#,##0.0"
          style="height:170pt"></div>
 
-    <div data-chart="donut" data-title="Revenue mix" data-categories="North,South,East,West"
-         data-values="42,28,18,12" data-legend="right" style="height:150pt; margin-top:8pt"></div>
+    <!-- bar, stacked: one band per category, series piled up inside it. -->
+    <div data-chart="bar" data-title="Revenue by region (stacked)" data-categories="Q1,Q2,Q3,Q4"
+         data-series="North:5.2,6.1,6.8,7.4; South:3.1,3.4,3.9,4.2; East:2.2,2.6,2.9,3.3; West:1.9,2.1,2.4,2.7"
+         data-stacked="true" data-legend="bottom" data-value-format="#,##0.0"
+         style="height:160pt; margin-top:8pt"></div>
 
+    <!-- line: the value axis is not forced through zero, so a trend keeps its shape. -->
+    <div data-chart="line" data-title="ARPU trend (dollars)" data-categories="Jul,Aug,Sep,Oct,Nov,Dec"
+         data-series="Consumer:21.4,22.0,23.1,22.6,24.3,25.1; Enterprise:38.2,39.6,39.1,41.4,43.0,44.6"
+         data-legend="bottom" data-min="18" data-max="48" data-ticks="4"
+         data-value-format="$#,##0.0" style="height:160pt; margin-top:8pt"></div>
+
+    <!-- area, stacked: authored from a real <table>, plotted from its own rows. -->
     <table data-chart="area" data-title="Pipeline (indexed)" data-stacked="true"
            data-colors="#2E5FA3,#E8833A" style="height:150pt; margin-top:8pt">
       <thead><tr><th>Month</th><th>Actual</th><th>Plan</th></tr></thead>
@@ -68,6 +82,15 @@
         <tr><td>Sep</td><td>19</td><td>15</td></tr>
       </tbody>
     </table>
+
+    <!-- pie: one series, one slice per category; the legend carries the percentages. -->
+    <div data-chart="pie" data-title="Channel mix" data-categories="Direct,Partner,Retail,Online"
+         data-values="37,25,22,16" data-legend="right" style="height:150pt; margin-top:8pt"></div>
+
+    <!-- donut: a pie with a hole; innerRadius sets how big the hole is. -->
+    <div data-chart="donut" data-title="Revenue mix" data-categories="North,South,East,West"
+         data-values="42,28,18,12" data-legend="right" data-inner-radius="0.6"
+         style="height:150pt; margin-top:8pt"></div>
   </section>
 
   <section>

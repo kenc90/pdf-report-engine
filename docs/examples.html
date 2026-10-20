@@ -53,8 +53,9 @@ node examples/05-images.mjs</code></pre>
         The quickest way to see everything at once is the dashboard sample. It uses a
         <code>&lt;style&gt;</code> sheet with tag/class/id/descendant/child selectors, a
         translucent <code>background</code> band, a clickable TOC with real page numbers,
-        bar / donut / area charts, QR / Code 128 / EAN-13 codes, <code>&lt;mark&gt;</code>
-        highlights, external and <code>#anchor</code> links, and a nested PDF outline.
+        bar / stacked bar / line / area / pie / donut charts, QR / Code 128 / EAN-13 codes,
+        <code>&lt;mark&gt;</code> highlights, external and <code>#anchor</code> links, and a
+        nested PDF outline.
       </p>
       <pre data-copy><code>npm run html:pdf -- samples/dashboard.html -o output/</code></pre>
       <p>
@@ -219,7 +220,8 @@ const pdf = await renderToBuffer(report);</code></pre>
       <p>
         Charts are ordinary blocks: choose a <code>kind</code>, give it categories and one or more
         series, and the engine emits vector marks as a single atomic fragment. Here is a grouped
-        bar chart and a donut:
+        bar chart, a line chart with an explicit value axis, and a donut (<code>pie</code> is the
+        same block without <code>innerRadius</code>):
       </p>
       <pre data-copy><code>{
   type: 'chart', kind: 'bar', title: 'Revenue vs. cost ($M)', height: 170,
@@ -230,6 +232,17 @@ const pdf = await renderToBuffer(report);</code></pre>
   ],
   legend: 'bottom', showValues: true,
   valueAxis: { format: '#,##0.0', ticks: 5 },
+}
+
+{
+  type: 'chart', kind: 'line', title: 'ARPU ($)', height: 160,
+  categories: ['Jul', 'Aug', 'Sep', 'Oct'],
+  series: [
+    { name: 'Consumer',   values: [21.4, 22.0, 23.1, 24.3] },
+    { name: 'Enterprise', values: [38.2, 39.6, 39.1, 43.0] },
+  ],
+  // bar/area force the axis through zero; line does not, so trends keep their shape.
+  valueAxis: { min: 18, max: 48, ticks: 4, format: '$#,##0.0' },
 }
 
 {
@@ -248,6 +261,11 @@ const pdf = await renderToBuffer(report);</code></pre>
      data-series="Revenue:12.4,18.1,15.2,22.6; Cost:7.1,9.4,8.2,11.3"
      data-legend="bottom" data-show-values="true"
      data-value-format="#,##0.0" style="height:170pt"&gt;&lt;/div&gt;
+
+&lt;div data-chart="bar" data-title="Revenue by region (stacked)"
+     data-categories="Q1,Q2,Q3,Q4"
+     data-series="North:5.2,6.1,6.8,7.4; South:3.1,3.4,3.9,4.2"
+     data-stacked="true" data-legend="bottom" style="height:160pt"&gt;&lt;/div&gt;
 
 &lt;div data-chart="donut" data-title="Revenue mix"
      data-categories="North,South,East,West" data-values="42,28,18,12"
