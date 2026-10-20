@@ -391,7 +391,12 @@ function inlineContent(el: HElement, opts: HtmlOptions, inherited: IrBox): Conte
       return;
     }
     if (node.tag === 'br') {
-      push('\n');
+      // U+2028 LINE SEPARATOR, not '\n'. The typesetting normaliser collapses
+      // ASCII whitespace (including LF) under `white-space: normal`, which would
+      // silently turn <br> into a space. U+2028 survives collapsing and is
+      // classified as LB.BK (mandatory break) by findBreaks, so the packer emits
+      // a hard line break regardless of the surrounding whitespace mode.
+      push('\u2028');
       return;
     }
     const elStyle = mergeIr(style, elementStyle(node, opts));
