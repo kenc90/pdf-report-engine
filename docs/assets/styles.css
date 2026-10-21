@@ -49,6 +49,24 @@
   --btn-bg: #fbbf24;
   --btn-ink: #3b2506;
   --btn-line: #d9910a;
+
+  /* Syntax-highlight tokens. The code plate is dark in both themes, so one set
+     of bright hues reads on --code-bg / --on-code without theme overrides. */
+  --gutter-ink: #7d6167;
+  --gutter-line: rgba(255, 255, 255, 0.10);
+  --tok-comment: #9a7f85;
+  --tok-meta: #f0cdd4;
+  --tok-tag: #fb7185;
+  --tok-attr: #fbbf24;
+  --tok-string: #86efac;
+  --tok-entity: #f9a8d4;
+  --tok-punct: #b79aa0;
+  --tok-keyword: #c4b5fd;
+  --tok-number: #93c5fd;
+  --tok-bool: #f0abfc;
+  --tok-func: #fcd34d;
+  --tok-class: #7dd3fc;
+  --tok-var: #fdba74;
 }
 
 /* Explicit user choice: dark. */
@@ -146,6 +164,18 @@ a:hover { text-decoration: underline; }
   color: var(--on-brand);
 }
 .brand .dot, .site-footer .fbrand .dot { color: var(--accent); }
+.brand .vtag {
+  margin-left: 8px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: var(--badge-text);
+  background: var(--badge-bg);
+  border: 1px solid var(--badge-line);
+  border-radius: 999px;
+  padding: 2px 8px;
+  vertical-align: 2px;
+}
 .nav { margin-left: auto; display: flex; gap: 4px; flex-wrap: wrap; }
 .nav a {
   color: var(--nav-text);
@@ -371,6 +401,21 @@ pre code { color: inherit; background: none; padding: 0; }
   cursor: pointer;
 }
 .copy:hover { background: var(--copy-hover-bg); }
+
+/* Token colours painted by site.js (and the browser-demo editor overlay). */
+.tok-comment { color: var(--tok-comment); font-style: italic; }
+.tok-meta { color: var(--tok-meta); }
+.tok-tag, .tok-selector { color: var(--tok-tag); }
+.tok-attr, .tok-prop { color: var(--tok-attr); }
+.tok-string, .tok-value { color: var(--tok-string); }
+.tok-entity { color: var(--tok-entity); }
+.tok-punct { color: var(--tok-punct); }
+.tok-keyword { color: var(--tok-keyword); }
+.tok-number { color: var(--tok-number); }
+.tok-bool { color: var(--tok-bool); }
+.tok-func { color: var(--tok-func); }
+.tok-class { color: var(--tok-class); }
+.tok-var { color: var(--tok-var); }
 
 /* ---------- Tables ---------- */
 /* site.js wraps each content table in .table-scroll so a wide table scrolls

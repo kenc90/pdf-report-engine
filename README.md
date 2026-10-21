@@ -1,5 +1,9 @@
 # pdf-report-engine
 
+![version](https://img.shields.io/badge/version-0.1.0-brightgreen)
+![license](https://img.shields.io/badge/license-MIT-blue)
+![node](https://img.shields.io/badge/node-%E2%89%A518-brightgreen)
+
 A pure-JavaScript **paginated PDF report engine**. It turns a report *IR* (intermediate
 representation) — or a small subset of authoring **HTML** — into a **real vector PDF with
 selectable, searchable text** and **Jasper-Reports-style pagination**.

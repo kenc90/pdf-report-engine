@@ -21,7 +21,7 @@
 <body>
   <header class="site-header" id="top">
     <div class="wrap">
-      <span class="brand">pdf-report-engine<span class="dot">.</span></span>
+      <span class="brand">pdf-report-engine<span class="dot">.</span><span class="vtag" data-version></span></span>
       <nav class="nav">
         <a href="index.html">Home</a>
         <a href="getting-started.html">Getting started</a>
@@ -104,7 +104,7 @@
         selectors: tag, <code>*</code>, class, id and compound combinations, comma lists, and
         descendant (whitespace) / child (<code>&gt;</code>) combinators.
       </p>
-      <pre data-copy><code>h2 { color: #0f2f57; }
+      <pre data-copy data-lang="css"><code>h2 { color: #0f2f57; }
 .kpi { background-color: #eef4ff; }      /* class */
 #note { background-color: #fff6cc; }     /* id */
 .kpi strong { color: #b23a2f; }          /* descendant */
@@ -747,7 +747,7 @@ formatNumber(Infinity, '#,##0.00')                // ∞</code></pre>
 
     <section id="layout-src">
       <h2>Source layout</h2>
-      <pre data-copy><code>src/
+      <pre data-copy data-lang="text"><code>src/
   ir/          ReportDoc IR schema
   core/        page sizes + unit conversion + image probing/remote resolution
   fonts/       font registry + metrics (measure/render oracle)
@@ -768,7 +768,7 @@ formatNumber(Infinity, '#,##0.00')                // ∞</code></pre>
         <a class="fbrand" href="index.html">pdf-report-engine<span class="dot">.</span></a>
         <p>Constrained HTML or a plain-data IR in — a vector, selectable, fully paginated PDF out. No headless browser, no native bindings.</p>
         <pre class="finstall" data-copy><code>npm install pdf-report-engine</code></pre>
-        <p class="fbadges">
+        <p class="fbadges"><span class="badge" data-version></span>
           <span class="badge">MIT</span>
           <span class="badge">pdfkit + fontkit</span>
           <span class="badge">Node ≥ 18</span>

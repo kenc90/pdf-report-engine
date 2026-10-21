@@ -1,5 +1,13 @@
 // Tiny, dependency-free helpers for the static docs site.
+// Single source of truth is package.json; `npm version` rewrites this line via
+// scripts/sync-version.mjs. It is stamped into every [data-version] placeholder.
+var VERSION = '0.1.0';
 (function () {
+  // Show the current version wherever a [data-version] placeholder exists.
+  document.querySelectorAll('[data-version]').forEach(function (el) {
+    el.textContent = 'v' + VERSION;
+  });
+
   // Highlight the current page in the nav.
   var here = location.pathname.split('/').pop() || 'index.html';
   document.querySelectorAll('.nav a').forEach(function (a) {
@@ -218,4 +226,176 @@
     t.parentNode.insertBefore(wrap, t);
     wrap.appendChild(t);
   });
+})();
+
+// ---- code colouring for the <pre data-copy> blocks on the docs pages -------
+// A tiny, dependency-free highlighter mirroring the browser-demo editor. The
+// real text already lives in the <code> element (textContent, entities decoded);
+// we re-tokenise it and re-escape into <span class="tok-*">. Language is taken
+// from a `data-lang` attribute when present, otherwise sniffed from how the
+// block starts. The footer "copy" button reads code.innerText, which still
+// returns the original text after the spans are injected, so copying is safe.
+(function () {
+  if (!document.querySelector) return;
+
+  function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function sp(cls, text) { return '<span class="tok-' + cls + '">' + esc(text) + '</span>'; }
+
+  // ---- shared lexers (HTML + CSS), the same shape the editor overlay uses ----
+  function textTokens(raw) {
+    var out = '', last = 0, m, re = /&[#A-Za-z0-9]{1,10};/g;
+    while ((m = re.exec(raw)) !== null) { out += esc(raw.slice(last, m.index)) + sp('entity', m[0]); last = m.index + m[0].length; }
+    return out + esc(raw.slice(last));
+  }
+  function lex(raw, rules, fallback) {
+    var out = '', i = 0;
+    while (i < raw.length) {
+      var rest = raw.slice(i), hit = null;
+      for (var r = 0; r < rules.length; r += 1) { var m = rules[r][0].exec(rest); if (m && m[0].length) { hit = { text: m[0], cls: rules[r][1] }; break; } }
+      if (!hit) hit = { text: rest[0], cls: fallback };
+      out += hit.cls ? sp(hit.cls, hit.text) : esc(hit.text);
+      i += hit.text.length;
+    }
+    return out;
+  }
+  var ATTR_RULES = [
+    [/^\s+/, null],
+    [/^"[^"]*"?|^'[^']*'?/, 'string'],
+    [/^[A-Za-z_:@][-.:\w@]*/, 'attr'],
+    [/^[=/>]/, 'punct'],
+  ];
+  function tagTokens(raw) {
+    var closing = raw.indexOf('</') === 0;
+    var out = sp('punct', closing ? '</' : '<');
+    var rest = raw.slice(closing ? 2 : 1);
+    var name = /^[A-Za-z][-.:\w]*/.exec(rest);
+    if (name) { out += sp('tag', name[0]); rest = rest.slice(name[0].length); }
+    var tail = /\/?>$/.exec(rest);
+    if (tail) return out + lex(rest.slice(0, tail.index), ATTR_RULES, 'punct') + sp('punct', tail[0]);
+    return out + lex(rest, ATTR_RULES, 'punct');
+  }
+  function cssTokens(src) {
+    var out = '', i = 0, inBlock = false, inValue = false;
+    function emit(cls, text) { out += cls ? sp(cls, text) : esc(text); i += text.length; }
+    while (i < src.length) {
+      var rest = src.slice(i), m;
+      if ((m = /^\/\*[\s\S]*?(?:\*\/|$)/.exec(rest))) emit('comment', m[0]);
+      else if ((m = /^"[^"]*"?|^'[^']*'?/.exec(rest))) emit('string', m[0]);
+      else if ((m = /^\s+/.exec(rest))) emit(null, m[0]);
+      else if ((m = /^@[-\w]+/.exec(rest))) emit('attr', m[0]);
+      else if ((m = /^[{}]/.exec(rest))) { inBlock = m[0] === '{'; inValue = false; emit('punct', m[0]); }
+      else if ((m = /^;/.exec(rest))) { inValue = false; emit('punct', m[0]); }
+      else if ((m = /^:/.exec(rest))) { if (inBlock) inValue = true; emit('punct', m[0]); }
+      else if (inBlock && inValue && (m = /^#[0-9a-fA-F]{3,8}\b|^[-+]?\d[\d.]*[a-z%]*|^[-\w]+/i.exec(rest))) emit('value', m[0]);
+      else if ((m = /^[-\w]+/.exec(rest))) emit(inBlock ? 'prop' : 'selector', m[0]);
+      else emit('punct', rest[0]);
+    }
+    return out;
+  }
+  function htmlTokens(src) {
+    var out = '', i = 0;
+    while (i < src.length) {
+      var lt = src.indexOf('<', i);
+      if (lt === -1) return out + textTokens(src.slice(i));
+      out += textTokens(src.slice(i, lt));
+      if (src.indexOf('<!--', lt) === lt) {
+        var end = src.indexOf('-->', lt); var stop = end === -1 ? src.length : end + 3;
+        out += sp('comment', src.slice(lt, stop)); i = stop; continue;
+      }
+      if (src.indexOf('<!', lt) === lt || src.indexOf('<?', lt) === lt) {
+        var de = src.indexOf('>', lt); var ds = de === -1 ? src.length : de + 1;
+        out += sp('meta', src.slice(lt, ds)); i = ds; continue;
+      }
+      var j = lt + 1, quote = '';
+      while (j < src.length) {
+        var c = src[j];
+        if (quote) { if (c === quote) quote = ''; }
+        else if (c === '"' || c === "'") quote = c;
+        else if (c === '>') break;
+        j += 1;
+      }
+      var ts = j >= src.length ? src.length : j + 1;
+      var raw = src.slice(lt, ts);
+      out += tagTokens(raw); i = ts;
+      var name = /^<\/?\s*([A-Za-z][-.:\w]*)/.exec(raw);
+      name = name && name[1].toLowerCase();
+      if (name === 'style' && raw.indexOf('</') !== 0) {
+        var off = src.slice(i).toLowerCase().indexOf('</style');
+        var bodyEnd = off === -1 ? src.length : i + off;
+        out += cssTokens(src.slice(i, bodyEnd)); i = bodyEnd;
+      }
+    }
+    return out;
+  }
+
+  // ---- JS / TS / JSON ----
+  var JS_KEYWORDS = { import: 1, export: 1, from: 1, const: 1, let: 1, var: 1, function: 1, return: 1, await: 1, async: 1, new: 1, if: 1, else: 1, for: 1, while: 1, do: 1, of: 1, in: 1, class: 1, extends: 1, implements: 1, as: 1, try: 1, catch: 1, finally: 1, switch: 1, throw: 1, typeof: 1, instanceof: 1, yield: 1, delete: 1, get: 1, set: 1, static: 1 };
+  var JS_LITERALS = { true: 1, false: 1, null: 1, undefined: 1, NaN: 1, Infinity: 1 };
+  function classifyIdent(rest, w) {
+    if (JS_LITERALS[w]) return 'bool';
+    var tail = rest.slice(w.length);
+    if (/^\s*\??\s*:(?![:=])/.test(tail)) return 'prop';   // object key / optional property
+    if (JS_KEYWORDS[w]) return 'keyword';
+    if (/^\s*\(/.test(tail)) return 'func';
+    if (/^[A-Z]/.test(w)) return 'class';                    // TS type / interface
+    return null;
+  }
+  function jsTokens(src) {
+    var out = '', i = 0;
+    while (i < src.length) {
+      var rest = src.slice(i), m;
+      if ((m = /^\s+/.exec(rest))) { out += esc(m[0]); i += m[0].length; continue; }
+      if ((m = /^\/\/[^\n]*/.exec(rest))) { out += sp('comment', m[0]); i += m[0].length; continue; }
+      if ((m = /^\/\*[\s\S]*?(?:\*\/|$)/.exec(rest))) { out += sp('comment', m[0]); i += m[0].length; continue; }
+      if (rest[0] === '`') { var j = 1; while (j < rest.length) { if (rest[j] === '\\') { j += 2; continue; } if (rest[j] === '`') { j += 1; break; } j += 1; } var seg = rest.slice(0, j); out += sp('string', seg); i += seg.length; continue; }
+      if ((m = /^"(?:\\.|[^"\\])*"?|^'(?:\\.|[^'\\])*'?/.exec(rest))) { out += sp('string', m[0]); i += m[0].length; continue; }
+      if ((m = /^\$[A-Za-z_][\w$]*/.exec(rest))) { out += sp('var', m[0]); i += m[0].length; continue; }
+      if ((m = /^0[xX][0-9a-fA-F]+|^\d[\d_]*(?:\.[\d_]+)?(?:[eE][+-]?\d+)?/.exec(rest))) { out += sp('number', m[0]); i += m[0].length; continue; }
+      if ((m = /^[A-Za-z_][\w$]*/.exec(rest))) { var cls = classifyIdent(rest, m[0]); out += cls ? sp(cls, m[0]) : esc(m[0]); i += m[0].length; continue; }
+      if ((m = /^[{}()\[\],;:.?=<>!+\-*/%&|^~]+/.exec(rest))) { out += sp('punct', m[0]); i += m[0].length; continue; }
+      out += esc(rest[0]); i += 1;
+    }
+    return out;
+  }
+
+  // ---- bash / shell ----
+  var BASH_CMDS = { npm: 1, npx: 1, node: 1, yarn: 1, pnpm: 1, git: 1, cd: 1, curl: 1, ls: 1, echo: 1, mkdir: 1 };
+  function bashTokens(src) {
+    var out = '', i = 0, prev = '', atStart = true;
+    while (i < src.length) {
+      var rest = src.slice(i), c = rest[0], m;
+      if (c === '\n') { out += '\n'; i += 1; prev = '\n'; atStart = true; continue; }
+      if (/\s/.test(c)) { m = /^\s+/.exec(rest)[0]; out += esc(m); i += m.length; prev = m.charAt(m.length - 1); continue; }
+      var wordStart = atStart || /\s/.test(prev);
+      if (c === '#' && wordStart) { m = /^[^\n]*/.exec(rest)[0]; out += sp('comment', m); i += m.length; prev = '#'; atStart = false; continue; }
+      if (c === '"' || c === "'") { var q = c, j = 1; while (j < rest.length) { if (rest[j] === '\\') { j += 2; continue; } if (rest[j] === q) { j += 1; break; } j += 1; } var seg = rest.slice(0, j); out += sp('string', seg); i += seg.length; prev = seg.charAt(seg.length - 1) || c; atStart = false; continue; }
+      if (wordStart && /^-{1,2}[\w][\w-]*/.test(rest)) { m = /^-{1,2}[\w][\w-]*/.exec(rest)[0]; out += sp('attr', m); i += m.length; prev = m.charAt(m.length - 1); atStart = false; continue; }
+      if (atStart && /^[A-Za-z][\w-]*/.test(rest)) { m = /^[A-Za-z][\w-]*/.exec(rest)[0]; out += (BASH_CMDS[m] ? sp('func', m) : esc(m)); i += m.length; prev = m.charAt(m.length - 1); atStart = false; continue; }
+      out += esc(c); i += 1; prev = c; atStart = false;
+    }
+    return out;
+  }
+
+  var TOKENIZERS = { html: htmlTokens, css: cssTokens, js: jsTokens, bash: bashTokens };
+
+  function detect(text) {
+    var t = text.replace(/^\s+/, '');
+    if (t.charAt(0) === '<') return 'html';
+    var first = (text.match(/[^\n]*/) || [''])[0].replace(/^\s+/, '');
+    if (first.charAt(0) === '#') return 'bash';
+    if (/^(npm|npx|node|yarn|pnpm|git|cd|curl|ls|echo|mkdir)\b/.test(first)) return 'bash';
+    return 'js';
+  }
+
+  function highlight(code) {
+    var pre = code.parentNode;
+    var lang = ((pre && pre.getAttribute('data-lang')) || code.getAttribute('data-lang') || '').toLowerCase();
+    if (lang === 'text' || lang === 'none' || lang === 'plain' || lang === 'plaintext') return;
+    var raw = code.textContent;
+    var fn = TOKENIZERS[lang] || TOKENIZERS[detect(raw)];
+    code.innerHTML = fn(raw);
+  }
+
+  var blocks = document.querySelectorAll('pre[data-copy] > code');
+  for (var b = 0; b < blocks.length; b += 1) { try { highlight(blocks[b]); } catch (e) { /* leave the block uncoloured */ } }
 })();

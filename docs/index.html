@@ -21,7 +21,7 @@
 <body>
   <header class="site-header" id="top">
     <div class="wrap">
-      <span class="brand">pdf-report-engine<span class="dot">.</span></span>
+      <span class="brand">pdf-report-engine<span class="dot">.</span><span class="vtag" data-version></span></span>
       <nav class="nav">
         <a href="index.html">Home</a>
         <a href="getting-started.html">Getting started</a>
@@ -50,6 +50,7 @@
         <a class="btn ghost" href="examples.html">See examples</a>
       </div>
       <div class="badges">
+        <span class="badge" data-version></span>
         <span class="badge">Node ≥ 18</span>
         <span class="badge">ESM</span>
         <span class="badge">pdfkit + fontkit</span>
@@ -166,7 +167,7 @@
     <section id="pipeline">
       <h2>How it works</h2>
       <p>Two entry points funnel through one pipeline:</p>
-      <pre data-copy><code>authoring (IR or HTML)  →  ReportDoc IR  →  layout  →  pagination  →  pdfkit writer  →  PDF bytes</code></pre>
+      <pre data-copy data-lang="text"><code>authoring (IR or HTML)  →  ReportDoc IR  →  layout  →  pagination  →  pdfkit writer  →  PDF bytes</code></pre>
       <ul>
         <li><a href="api.html"><code>renderToBuffer(report, options?)</code></a> — one-shot: IR in, PDF bytes out.</li>
         <li><a href="api.html"><code>createReport(report, options?)</code></a> — the live pdfkit doc plus the paginated <code>pages</code> model, so you can stream yourself.</li>
@@ -200,7 +201,7 @@ fs.writeFileSync('report.pdf', pdf);</code></pre>
         <a class="fbrand" href="index.html">pdf-report-engine<span class="dot">.</span></a>
         <p>Constrained HTML or a plain-data IR in — a vector, selectable, fully paginated PDF out. No headless browser, no native bindings.</p>
         <pre class="finstall" data-copy><code>npm install pdf-report-engine</code></pre>
-        <p class="fbadges">
+        <p class="fbadges"><span class="badge" data-version></span>
           <span class="badge">MIT</span>
           <span class="badge">pdfkit + fontkit</span>
           <span class="badge">Node ≥ 18</span>

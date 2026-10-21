@@ -38,18 +38,8 @@
 
     /* ---- editor: line-number gutter + colourised overlay under a transparent textarea.
        The textarea keeps the real text (native editing/undo/a11y); the <pre> behind it
-       paints the colours, and both scroll in lockstep (see browser-demo.js). ---- */
-    :root {
-      --gutter-ink: #7d6167;
-      --gutter-line: rgba(255, 255, 255, 0.10);
-      --tok-comment: #9a7f85;
-      --tok-meta: #f0cdd4;
-      --tok-tag: #fb7185;
-      --tok-attr: #fbbf24;
-      --tok-string: #86efac;
-      --tok-entity: #f9a8d4;
-      --tok-punct: #b79aa0;
-    }
+       paints the colours, and both scroll in lockstep (see browser-demo.js).
+       --gutter-* and --tok-* / .tok-* colour tokens live in assets/styles.css. ---- */
     .editor-shell { position: relative; padding-left: 54px; background: var(--code-bg); }
     .editor-gutter, .editor-highlight, #editor {
       font: 13px/20px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -74,13 +64,14 @@
     }
     #editor:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
     #editor::selection { background: rgba(251, 191, 36, .28); }
-    .tok-comment { color: var(--tok-comment); font-style: italic; }
-    .tok-meta { color: var(--tok-meta); }
-    .tok-tag, .tok-selector { color: var(--tok-tag); }
-    .tok-attr, .tok-prop { color: var(--tok-attr); }
-    .tok-string, .tok-value { color: var(--tok-string); }
-    .tok-entity { color: var(--tok-entity); }
-    .tok-punct { color: var(--tok-punct); }
+    /* Slim, unobtrusive scrollbars for the editor (it's the only scrolling element —
+       the gutter and colour overlay use overflow:hidden). Firefox + Chromium/Safari. */
+    #editor { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .22) transparent; }
+    #editor::-webkit-scrollbar { width: 8px; height: 8px; }
+    #editor::-webkit-scrollbar-track { background: transparent; }
+    #editor::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .22); border-radius: 8px; }
+    #editor::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, .34); }
+    #editor::-webkit-scrollbar-corner { background: transparent; }
 
     /* ---- toolbar ---- */
     .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 14px 0 4px; }
@@ -103,7 +94,7 @@
 <body>
   <header class="site-header" id="top">
     <div class="wrap">
-      <span class="brand">pdf-report-engine<span class="dot">.</span></span>
+      <span class="brand">pdf-report-engine<span class="dot">.</span><span class="vtag" data-version></span></span>
       <nav class="nav">
         <a href="index.html">Home</a>
         <a href="getting-started.html">Getting started</a>
@@ -189,7 +180,7 @@
         <a class="fbrand" href="index.html">pdf-report-engine<span class="dot">.</span></a>
         <p>Constrained HTML or a plain-data IR in — a vector, selectable, fully paginated PDF out. No headless browser, no native bindings.</p>
         <pre class="finstall" data-copy><code>npm install pdf-report-engine</code></pre>
-        <p class="fbadges">
+        <p class="fbadges"><span class="badge" data-version></span>
           <span class="badge">MIT</span>
           <span class="badge">pdfkit + fontkit</span>
           <span class="badge">Node ≥ 18</span>

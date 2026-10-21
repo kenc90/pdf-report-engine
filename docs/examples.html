@@ -21,7 +21,7 @@
 <body>
   <header class="site-header" id="top">
     <div class="wrap">
-      <span class="brand">pdf-report-engine<span class="dot">.</span></span>
+      <span class="brand">pdf-report-engine<span class="dot">.</span><span class="vtag" data-version></span></span>
       <nav class="nav">
         <a href="index.html">Home</a>
         <a href="getting-started.html">Getting started</a>
@@ -128,7 +128,7 @@ const pdf = await renderToBuffer(report, {
                 align: 'center', backgroundColor: '#dce6f2', style: { fontWeight: 'bold' } }] },
     { cells: [{ content: 'North' }, { content: 'Q1' }, { content: '$1,000' }] },
     { cells: [{ content: '2026', rowSpan: 2 }, { content: 'Jan' }, { content: '$400' }] },
-    { cells: [                       { content: 'Feb' }, { content: '$600' }] },
+    { cells: [{ content: 'Feb' }, { content: '$600' }] },
   ],
 }</code></pre>
       <p>In HTML it is just the familiar attributes:</p>
@@ -580,7 +580,7 @@ const pdf = await renderToBuffer(report);</code></pre>
         <a class="fbrand" href="index.html">pdf-report-engine<span class="dot">.</span></a>
         <p>Constrained HTML or a plain-data IR in — a vector, selectable, fully paginated PDF out. No headless browser, no native bindings.</p>
         <pre class="finstall" data-copy><code>npm install pdf-report-engine</code></pre>
-        <p class="fbadges">
+        <p class="fbadges"><span class="badge" data-version></span>
           <span class="badge">MIT</span>
           <span class="badge">pdfkit + fontkit</span>
           <span class="badge">Node ≥ 18</span>

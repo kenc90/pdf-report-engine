@@ -29,7 +29,7 @@ function showTab(which) {
   if (isEditor) syncScroll();
 }
 tabEditor.addEventListener('click', () => showTab('editor'));
-tabPreview.addEventListener('click', () => showTab('preview'));
+tabPreview.addEventListener('click', () => { showTab('preview'); generate(); });
 
 // A tiny inline logo so the images feature works with no network / no file access.
 const LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAAAwCAIAAAA3jserAAAAu0lEQVR42u3SQQ2AMBREwe8AB1hATj1hAitI4YSOGuBCSpu2TPIU7E5c+zpcy5bUoCBDk+BwGBxkwEEGHGTAQQYcZMBBhoIMDYbDMXCQAQcZcJABBxlwkAEHGeoXhw/gIAMOMuAgAw4y4CBDPeCwOBxkwEEGHGTAQYba4jAxHGTAQQYcZKgWDrPCQQYcZMBBhmrhMCUcZMBBhspxWBCO547z1sQFGfoYh+HgIAMOMlSOw15wkKE3OCz1wzKtiMUHl/QIoAAAAABJRU5ErkJggg==';
@@ -284,7 +284,19 @@ const DEFAULT_HTML = `<!-- ══ Web fonts straight from the HTML: the engine c
 
 </body>`;
 
-editor.value = DEFAULT_HTML;
+// Remember the user's HTML between visits; fall back to the sample report.
+const STORAGE_KEY = 'pdf-report-engine:browser-demo:html';
+function restoreEditor() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved !== null) return saved;
+  } catch {}
+  return DEFAULT_HTML;
+}
+function persistEditor() {
+  try { localStorage.setItem(STORAGE_KEY, editor.value); } catch {}
+}
+editor.value = restoreEditor();
 
 // ---- editor chrome: line numbers + HTML/CSS colours -----------------------
 // The textarea keeps the real text (native editing, undo, selection, a11y). A
@@ -429,6 +441,7 @@ function syncEditor() {
   const lines = editor.value.split('\n').length;
   gutterEl.textContent = Array.from({ length: lines }, (_, n) => n + 1).join('\n');
   syncScroll();
+  persistEditor();
 }
 
 editor.addEventListener('input', syncEditor);
@@ -500,6 +513,7 @@ document.getElementById('clearfonts').addEventListener('click', () => {
 
 // ---- generate ------------------------------------------------------------
 let lastUrl = null;
+let generating = false;
 
 /** Count page objects in the produced PDF (for the preview tab badge). */
 function countPages(bytes) {
@@ -510,6 +524,8 @@ function countPages(bytes) {
 }
 
 async function generate() {
+  if (generating) return;
+  generating = true;
   status('Rendering PDF…');
   downloadEl.hidden = true;
   pagecountEl.hidden = true;
@@ -538,6 +554,8 @@ async function generate() {
   } catch (err) {
     status('Error: ' + (err && err.message ? err.message : String(err)), true);
     console.error(err);
+  } finally {
+    generating = false;
   }
 }
 
@@ -554,5 +572,6 @@ function status(msg, isError) {
   statusEl.className = isError ? 'error' : '';
 }
 
-// Render once on load so the preview tab is populated immediately.
-generate();
+// No PDF is rendered on load — edit freely, then press "Generate PDF" or open the
+// "PDF preview" tab (switching to it renders on demand).
+status('Edit the HTML, then open the “PDF preview” tab or press “Generate PDF”.');
