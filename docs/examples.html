@@ -139,6 +139,63 @@ const pdf = await renderToBuffer(report, {
 &lt;/table&gt;</code></pre>
     </section>
 
+    <section id="ex-diagonal">
+      <h3>Diagonal corner header (two-way table)</h3>
+      <p>
+        A cross-tabulation table names both axes in one corner cell: a diagonal slash
+        splits it into two triangles, the column-axis label above and the row-axis label
+        below. Give a cell <code>diagonal</code> (IR) or <code>data-diagonal</code> (HTML).
+        The row grows to fit both labels, and each label wraps toward its own corner so
+        neither one runs past the slash into the opposite triangle.
+      </p>
+      <pre data-copy><code>// IR: a corner cell split by a top-left → bottom-right slash
+{
+  type: 'table',
+  showGrid: true,
+  headerRows: [{
+    cells: [
+      // default dir 'tl': top label sits upper-right, bottom label lower-left
+      { diagonal: { top: 'Preferred Pet', bottom: 'Gender' },
+        backgroundColor: '#e6efdc', style: { fontWeight: 'bold' } },
+      'Dog', 'Cat', 'Other', 'TOTAL',
+    ],
+  }],
+  staticRows: [
+    { cells: [{ content: 'Girl', backgroundColor: '#e6efdc' }, 2, 5, 1, 8] },
+    { cells: [{ content: 'Boy',  backgroundColor: '#e6efdc' }, 4, 3, 2, 9] },
+  ],
+}</code></pre>
+      <p>
+        In HTML the cell's own text is the upper label and
+        <code>data-diagonal-bottom</code> supplies the lower one. Set the value to
+        <code>tr</code> to mirror the slash (top-right → bottom-left), give both labels
+        explicitly with <code>data-diagonal-top</code>, or drop the line entirely with
+        <code>data-diagonal-line="false"</code>:
+      </p>
+      <pre data-copy><code>&lt;table data-grid="1.5px solid #1a1a1a"&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th data-diagonal data-diagonal-bottom="Gender"
+          style="background:#e6efdc; font-weight:bold"&gt;Preferred Pet&lt;/th&gt;
+      &lt;th&gt;Dog&lt;/th&gt;&lt;th&gt;Cat&lt;/th&gt;&lt;th&gt;Other&lt;/th&gt;&lt;th&gt;TOTAL&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;&lt;td&gt;Girl&lt;/td&gt;&lt;td&gt;2&lt;/td&gt;&lt;td&gt;5&lt;/td&gt;&lt;td&gt;1&lt;/td&gt;&lt;td&gt;8&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;Boy&lt;/td&gt;&lt;td&gt;4&lt;/td&gt;&lt;td&gt;3&lt;/td&gt;&lt;td&gt;2&lt;/td&gt;&lt;td&gt;9&lt;/td&gt;&lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;!-- mirrored slash, both labels given explicitly --&gt;
+&lt;th data-diagonal="tr" data-diagonal-top="Region" data-diagonal-bottom="Quarter"&gt;Sales&lt;/th&gt;</code></pre>
+      <p class="note" style="margin-top:12px">
+        <code>diagonal</code> takes over the cell's paint, so any inline
+        <code>content</code>/<code>blocks</code> are ignored while it is set. The slash is
+        stroked with the cell's own top/left border, so it picks up the table's grid weight
+        and colour. See <code>samples/two-way-table.html</code> for both directions side by side.
+      </p>
+    </section>
+
     <section id="ex-rich-cells">
       <h3>Rich table cells</h3>
       <p>

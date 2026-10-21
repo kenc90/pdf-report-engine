@@ -157,6 +157,11 @@ h1, h2 { margin-bottom: 4pt; }           /* list */</code></pre>
             <td>Cell heatmap: <code>min=0;max=100;from=#eef4ff;to=#1e3a8a;text=false</code>. Omit <code>min</code>/<code>max</code> to derive the range from the column's data across the table; dark fills switch the text to white unless <code>text=false</code>.</td>
           </tr>
           <tr>
+            <td><code>&lt;th&gt;/&lt;td&gt; data-diagonal</code></td>
+            <td><code>CellNode.diagonal</code></td>
+            <td>Turn a cell into a diagonal split corner header (two-way / cross-tab table): a corner-to-corner slash with one label in each triangle. The cell's own text is the upper (<code>top</code>) label; <code>data-diagonal-bottom</code> sets the lower one, or override both with <code>data-diagonal-top</code>. <code>data-diagonal="tr"</code> flips the slash to run top-right → bottom-left; <code>data-diagonal-line="false"</code> draws the two labels with no slash.</td>
+          </tr>
+          <tr>
             <td><code>&lt;td&gt;</code> with block children</td>
             <td><code>CellNode.blocks</code></td>
             <td><code>&lt;img&gt;</code>, a nested <code>&lt;table&gt;</code>, <code>&lt;p&gt;</code>, a declarative chart/barcode element — a block stack laid out inside the padded cell. Inline children are wrapped into a synthetic paragraph.</td>
@@ -196,7 +201,7 @@ h1, h2 { margin-bottom: 4pt; }           /* list */</code></pre>
         <tbody>
           <tr><td><code>heading</code></td><td><code>content</code>, <code>level</code>, style/box props, <code>outline</code></td></tr>
           <tr><td><code>paragraph</code></td><td><code>content</code> (string | number | span | array), style/box props</td></tr>
-          <tr><td><code>table</code></td><td><code>columns</code>, <code>headerRows</code>, <code>footerRows</code>, <code>staticRows</code>, <code>dataSource</code>, <code>detail</code>, <code>groups</code>, <code>showGrid</code>, <code>striped</code>, <code>repeatHeader</code>, <code>rowStyle</code>; conditional: <code>visible</code>, <code>styleWhen</code>, <code>colorScale</code>, <code>blocks</code> on rows/cells</td></tr>
+          <tr><td><code>table</code></td><td><code>columns</code>, <code>headerRows</code>, <code>footerRows</code>, <code>staticRows</code>, <code>dataSource</code>, <code>detail</code>, <code>groups</code>, <code>showGrid</code>, <code>striped</code>, <code>repeatHeader</code>, <code>rowStyle</code>; conditional: <code>visible</code>, <code>styleWhen</code>, <code>colorScale</code>, <code>diagonal</code>, <code>blocks</code> on rows/cells</td></tr>
           <tr><td><code>image</code></td><td><code>src</code> (path / data: / bytes / URL), <code>width</code>, <code>height</code>, <code>intrinsic</code>, <code>alt</code></td></tr>
           <tr><td><code>chart</code></td><td><code>kind</code>, <code>title</code>, <code>categories</code>, <code>series</code>, <code>stacked</code> (<code>true</code>/<code>'100%'</code>), <code>legend</code>, <code>colors</code>, <code>showValues</code>, <code>valueAxis</code>, <code>rightAxis</code>, <code>totals</code>, <code>waterfallColors</code>, <code>categoryLabels</code>, <code>innerRadius</code>, <code>plotHeight</code></td></tr>
           <tr><td><code>toc</code></td><td><code>title</code>, <code>maxLevel</code>, <code>leaders</code>, <code>indent</code>, <code>pageNumbers</code>, <code>gap</code></td></tr>
@@ -225,6 +230,7 @@ h1, h2 { margin-bottom: 4pt; }           /* list */</code></pre>
           <tr><td><code>CellNode.blocks</code></td><td>Rich cell content: a stack of any flow <code>Block</code> (image, barcode, chart, nested table, paragraph…). Blocks are laid out at the cell's inner width, stacked with their margins, and painted with the cell's padding and vertical alignment. <code>content</code> wins when both are set.</td></tr>
           <tr><td><code>CellNode.visible</code></td><td><code>boolean | Expr</code>. A hidden cell keeps its grid slot, borders and fill but paints no content.</td></tr>
           <tr><td><code>CellNode.colorScale</code></td><td>Per-cell background heatmap, merged on top of <code>columns[].colorScale</code>. Dark fills repaint the text white unless <code>text: false</code>; an explicit cell background wins over the scale.</td></tr>
+          <tr><td><code>CellNode.diagonal</code></td><td>A corner split header: <code>{ top?, bottom?, dir?, line? }</code>. Draws a corner-to-corner slash and lays <code>top</code>/<code>bottom</code> into the two triangles (each label wraps toward its own corner so it never crosses the slash). <code>dir: 'tl'</code> (default) runs top-left → bottom-right with <code>top</code> upper-right; <code>dir: 'tr'</code> mirrors it. <code>line: false</code> keeps the labels but omits the slash. It takes over the cell's paint, so inline <code>content</code>/<code>blocks</code> are ignored while it is set.</td></tr>
           <tr><td>Accepted, ignored</td><td><code>widows</code>, <code>orphans</code>, <code>showRowSeparators</code>, <code>groupStyle</code>, <code>subtotalToken</code>, <code>CellNode.subtotal</code>, <code>GroupNode.label</code>, <code>GroupNode.headerRepeat</code>, <code>RowNode.breakInside</code> (a row is already atomic) and <code>pageBreak.always</code>. They are still in the types so existing reports compile; nothing reads them.</td></tr>
         </tbody>
       </table>
@@ -333,16 +339,26 @@ h1, h2 { margin-bottom: 4pt; }           /* list */</code></pre>
       <pre data-copy><code>ColumnNode: { width?, grow?, minWidth?, align?, style?, key?, colorScale? }
 CellNode:   { content?, blocks?, colSpan?, rowSpan?, align?, verticalAlign?, style?,
               backgroundColor?, border?, padding*?, visible?, styleWhen?, colorScale?,
-              subtotal?, format? }
+              diagonal?, subtotal?, format? }
 
 StyleCondition: { when: string | Expr, style?: Partial&lt;BoxProps&gt; }
-ColorScale:     { min?, max?, from?, to?, text? }</code></pre>
+ColorScale:     { min?, max?, from?, to?, text? }
+DiagonalHeader: { top?: Content, bottom?: Content, dir?: 'tl' | 'tr', line?: boolean }</code></pre>
       <p>
         <code>blocks</code> turns a cell into a rich cell: any flow block (image, barcode,
         chart, nested table, paragraph) is laid out at the cell's inner width and stacked with
         its margins. <code>visible</code> hides content while keeping the grid slot,
         <code>styleWhen</code> merges conditional props in order, and <code>colorScale</code>
         turns the cell's numeric value into a heatmap fill.
+      </p>
+      <p>
+        <code>diagonal</code> turns a cell into a corner split header for a two-way
+        (cross-tabulation) table: a corner-to-corner slash with one label in each
+        triangle. In the IR, <code>{ diagonal: { top, bottom, dir?, line? } }</code>;
+        in HTML, tag the cell <code>data-diagonal</code> (its text becomes the upper
+        label) with <code>data-diagonal-bottom</code> for the lower one. The row grows
+        to fit both labels, and each wraps toward its own corner so neither crosses the
+        slash. See <code>samples/two-way-table.html</code>.
       </p>
 
       <h3>Content &amp; bindings</h3>
@@ -723,6 +739,7 @@ formatNumber(Infinity, '#,##0.00')                // ∞</code></pre>
         <code>BandContent</code>, <code>BandType</code>, <code>StyleProps</code>, <code>BoxProps</code>,
         <code>Content</code>, <code>ContentSpan</code>, <code>ColumnNode</code>, <code>RowNode</code>,
         <code>CellNode</code>, <code>GroupNode</code>, <code>DataSource</code>, <code>Expr</code>,
+        <code>DiagonalHeader</code>,
         <code>FontReference</code>, <code>RenderOptions</code>, <code>ImageResolveOptions</code>,
         <code>FontResolveOptions</code>, <code>HtmlOptions</code>.
       </p>

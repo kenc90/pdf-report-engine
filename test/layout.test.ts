@@ -155,6 +155,52 @@ describe('table layout', () => {
     const maxHoriz = Math.max(...horizontals.map((c) => Math.abs(c.x2 - c.x1)));
     expect(maxHoriz).toBeGreaterThan(90 * 0.55);
   });
+
+  it('draws a diagonal corner header with a slash and both axis labels', () => {
+    const ctx = makeCtx();
+    const table = {
+      type: 'table',
+      columns: [{ grow: 1 }, { grow: 1 }, { grow: 1 }],
+      showGrid: true,
+      headerRows: [
+        {
+          kind: 'header',
+          cells: [
+            { diagonal: { top: 'Preferred Pet', bottom: 'Gender' } },
+            { content: 'Dog' },
+            { content: 'Cat' },
+          ],
+        } as never,
+      ],
+      staticRows: [{ kind: 'detail', cells: [{ content: 'Girl' }, { content: '2' }, { content: '5' }] }],
+    } as unknown as TableBlock;
+    const frags = layoutBlock(table, ctx, opts(180));
+    const header = frags[0]!;
+    // Both axis labels are typeset into the corner cell.
+    const text = fragmentText(header);
+    expect(text).toContain('Preferred');
+    expect(text).toContain('Gender');
+    // A true diagonal line (both axes move) is emitted across the corner cell.
+    const diag = lineSegs(header).find((c) => Math.abs(c.x1 - c.x2) > 0.01 && Math.abs(c.y1 - c.y2) > 0.01);
+    expect(diag).toBeDefined();
+    // The row grows to stack both label bands (taller than a single-line row).
+    expect(header.height).toBeGreaterThan(frags[1]!.height);
+  });
+
+  it('flips the corner slash for a mirrored diagonal header', () => {
+    const ctx = makeCtx();
+    const table = {
+      type: 'table',
+      columns: [{ grow: 1 }, { grow: 1 }],
+      showGrid: true,
+      headerRows: [{ kind: 'header', cells: [{ diagonal: { top: 'Region', bottom: 'Quarter', dir: 'tr' } }, { content: 'North' }] } as never],
+    } as unknown as TableBlock;
+    const header = layoutBlock(table, ctx, opts(120))[0]!;
+    // 'tr' runs top-right → bottom-left: x decreases as y increases.
+    const diag = lineSegs(header).find((c) => Math.abs(c.x1 - c.x2) > 0.01 && Math.abs(c.y1 - c.y2) > 0.01);
+    expect(diag).toBeDefined();
+    expect(diag!.x1).toBeGreaterThan(diag!.x2);
+  });
 });
 
 describe('image layout', () => {

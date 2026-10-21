@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Two-Way Table — Diagonal Corner Header</title>
+    <style>
+      body { font-family: Arial; font-size: 11pt; color: #1f2933; line-height: 1.5; }
+      h1 { font-size: 20pt; color: #0f2f57; margin-bottom: 2pt; }
+      h2 { font-size: 13pt; color: #0f2f57; margin-top: 20pt; margin-bottom: 6pt;
+           border-bottom: 2px solid #e08a1e; padding-bottom: 3pt; }
+      p.lead { color: #52606d; font-size: 9.5pt; margin-top: 0; margin-bottom: 10pt; }
+      .cap { font-size: 8pt; color: #7b8794; margin: 4pt 0 18pt 0; }
+
+      /* Cross-tab styling: a light-green shade on the header band and the stub
+         (first) column, black grid lines, bold labels. */
+      table.xtab { border-collapse: collapse; }
+      table.xtab th, table.xtab td { border: 1.5px solid #1a1a1a; padding: 10pt 8pt; text-align: center; }
+      table.xtab .axis { background-color: #e6efdc; font-weight: bold; }
+      table.xtab .corner { background-color: #e6efdc; font-weight: bold; }
+      table.xtab .total { background-color: #e6efdc; font-weight: bold; }
+    </style>
+  </head>
+  <body>
+    <h1>Two-Way (Cross-Tabulation) Table</h1>
+    <p class="lead">
+      The corner cell carries a <strong>diagonal split header</strong>: one label
+      names the column axis (upper triangle) and the other names the row axis
+      (lower triangle), separated by a corner-to-corner slash.
+    </p>
+
+    <!-- ===== Table 1: the classic ↘ diagonal corner ===== -->
+    <h2>1. Preferred pet by gender</h2>
+    <p class="lead">
+      <code>data-diagonal</code> turns the first header cell into a corner cell;
+      its own text becomes the upper label and <code>data-diagonal-bottom</code>
+      the lower one.
+    </p>
+    <table class="xtab">
+      <thead>
+        <tr>
+          <th class="corner" data-diagonal data-diagonal-bottom="Gender">Preferred Pet</th>
+          <th class="axis">Dog</th>
+          <th class="axis">Cat</th>
+          <th class="axis">Other</th>
+          <th class="axis">TOTAL</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="axis">Girl</td>
+          <td>2</td>
+          <td>5</td>
+          <td>1</td>
+          <td class="total">8</td>
+        </tr>
+        <tr>
+          <td class="axis">Boy</td>
+          <td>4</td>
+          <td>3</td>
+          <td>2</td>
+          <td class="total">9</td>
+        </tr>
+        <tr>
+          <td class="total">Total</td>
+          <td class="total">6</td>
+          <td class="total">8</td>
+          <td class="total">3</td>
+          <td class="total">17</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="cap">Table 1 &mdash; a default <code>data-diagonal</code> slash running top-left → bottom-right.</p>
+
+    <!-- ===== Table 2: mirrored ↙ diagonal ===== -->
+    <h2>2. Mirrored slash (<code>data-diagonal="tr"</code>)</h2>
+    <p class="lead">
+      Setting the value to <code>tr</code> flips the line to run top-right →
+      bottom-left, so the row-axis label moves to the upper-right triangle.
+    </p>
+    <table class="xtab">
+      <thead>
+        <tr>
+          <th class="corner" data-diagonal="tr" data-diagonal-top="Region" data-diagonal-bottom="Quarter">Sales</th>
+          <th class="axis">North</th>
+          <th class="axis">South</th>
+          <th class="axis">TOTAL</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="axis">Q1</td>
+          <td>120</td>
+          <td>90</td>
+          <td class="total">210</td>
+        </tr>
+        <tr>
+          <td class="axis">Q2</td>
+          <td>135</td>
+          <td>110</td>
+          <td class="total">245</td>
+        </tr>
+        <tr>
+          <td class="total">Total</td>
+          <td class="total">255</td>
+          <td class="total">200</td>
+          <td class="total">455</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="cap">Table 2 &mdash; both labels given explicitly via <code>data-diagonal-top</code> / <code>-bottom</code>, slash flipped with <code>="tr"</code>.</p>
+  </body>
+</html>

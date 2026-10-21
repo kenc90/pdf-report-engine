@@ -95,6 +95,31 @@ describe('htmlToReportDoc: tables', () => {
     expect(cell.content).toBe('Paid');
   });
 
+  it('maps a diagonal corner header cell from data-diagonal attributes', () => {
+    const doc = htmlToReportDoc(
+      '<table><thead><tr><th data-diagonal data-diagonal-bottom="Gender">Preferred Pet</th><th>Dog</th></tr></thead><tbody><tr><td>Girl</td><td>2</td></tr></tbody></table>',
+    );
+    const t = doc.body![0] as TableBlock;
+    const corner = t.headerRows![0]!.cells[0]!;
+    // The cell's own text becomes the upper label; the attribute is the lower one.
+    expect(corner.diagonal?.top).toBe('Preferred Pet');
+    expect(corner.diagonal?.bottom).toBe('Gender');
+    expect(corner.diagonal?.dir).toBe('tl');
+    // The inline content is moved into the diagonal, so it is no longer a plain cell.
+    expect(corner.content).toBeUndefined();
+  });
+
+  it('flips the diagonal direction and honours explicit top/bottom labels', () => {
+    const doc = htmlToReportDoc(
+      '<table><tr><th data-diagonal="tr" data-diagonal-top="Region" data-diagonal-bottom="Quarter">Sales</th></tr></table>',
+    );
+    const t = doc.body![0] as TableBlock;
+    const corner = t.headerRows![0]!.cells[0]!;
+    expect(corner.diagonal?.dir).toBe('tr');
+    expect(corner.diagonal?.top).toBe('Region');
+    expect(corner.diagonal?.bottom).toBe('Quarter');
+  });
+
   it('maps a bound table with data-each and per-cell binds', () => {
     const doc = htmlToReportDoc(
       '<table data-each="row in $data.items"><thead><tr><th>Name</th></tr></thead><tbody><tr><td data-bind="name"></td></tr></tbody></table>',

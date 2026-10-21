@@ -40,6 +40,7 @@ import type {
   TocBlock,
   BarcodeBlock,
   BarcodeSymbology,
+  DiagonalHeader,
 } from '../ir/schema.js';
 
 // --- tiny, forgiving HTML tokenizer/parser ---------------------------------
@@ -1012,6 +1013,24 @@ function toCellNode(td: HElement, opts: HtmlOptions): CellNode {
   if (conditions) cell.styleWhen = conditions;
   const scale = colorScaleAttr(td);
   if (scale) cell.colorScale = scale;
+  // Diagonal split header: `data-diagonal` turns the cell into a corner cell
+  // with a slash; `data-diagonal-top`/`-bottom` name the two axes (the top one
+  // defaults to the cell's own text), `data-diagonal="tr"` flips the slash.
+  const diag = td.attrs['data-diagonal'];
+  if (diag !== undefined) {
+    const dirRaw = diag.trim().toLowerCase();
+    const diagonal: DiagonalHeader = {
+      dir: dirRaw === 'tr' || dirRaw === 'bl' || dirRaw === 'reverse' ? 'tr' : 'tl',
+    };
+    const top = td.attrs['data-diagonal-top'] ?? cell.content;
+    const bottom = td.attrs['data-diagonal-bottom'];
+    if (top !== undefined) diagonal.top = top as Content;
+    if (bottom !== undefined) diagonal.bottom = bottom;
+    if (td.attrs['data-diagonal-line'] !== undefined) diagonal.line = boolAttr(td, 'data-diagonal-line', true);
+    cell.diagonal = diagonal;
+    cell.content = undefined;
+    cell.blocks = undefined;
+  }
   return cell;
 }
 

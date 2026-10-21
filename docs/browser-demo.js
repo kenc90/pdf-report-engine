@@ -56,7 +56,8 @@ const DEMO_DATA = {
 // (combo, 100% stacked and waterfall included), rich inline formatting (highlights +
 // links), an embedded image, a data-bound table with conditional formatting and
 // colour-scale heatmaps, rich block cells (image / QR / sparkline / nested table),
-// merged cells, QR/Code 128/EAN-13 barcodes, a page break, and base-14 fallback.
+// merged cells, a diagonal corner-header two-way (cross-tab) table, QR/Code 128/EAN-13
+// barcodes, a page break, and base-14 fallback.
 const DEFAULT_HTML = `<!-- ══ Web fonts straight from the HTML: the engine collects the charset from
      the IR, passes it as text= to Google's CSS API, fetches only the needed glyphs (tiny subset),
      and embeds them. In Node a bot UA yields TTF directly; in a browser WOFF2 is decoded. ══ -->
@@ -220,6 +221,37 @@ const DEFAULT_HTML = `<!-- ══ Web fonts straight from the HTML: the engine c
     <td style="padding:6pt">January</td><td style="padding:6pt; text-align:right">$400</td>
   </tr>
   <tr><td style="padding:6pt">February</td><td style="padding:6pt; text-align:right">$600</td></tr>
+</table>
+
+<!-- ══ Diagonal corner header: a two-way (cross-tabulation) table. The corner cell
+     splits into two triangles with a slash — the column axis names the upper one
+     (the cell's own text) and data-diagonal-bottom names the row axis. ══ -->
+<h2 id="twoway" class="section-title">Two-way table</h2>
+<p style="font-size:8.5pt; color:#94a3b8">A <code>data-diagonal</code> corner cell: one label per triangle, split by a corner-to-corner slash.</p>
+<table data-grid="1.5px solid #1a1a1a" style="border-collapse:collapse">
+  <thead>
+    <tr>
+      <th data-diagonal data-diagonal-bottom="Gender" style="background:#e6efdc; font-weight:bold; padding:10pt 8pt; text-align:center">Preferred Pet</th>
+      <th style="background:#e6efdc; font-weight:bold; padding:10pt 8pt; text-align:center">Dog</th>
+      <th style="background:#e6efdc; font-weight:bold; padding:10pt 8pt; text-align:center">Cat</th>
+      <th style="background:#e6efdc; font-weight:bold; padding:10pt 8pt; text-align:center">Other</th>
+      <th style="background:#e6efdc; font-weight:bold; padding:10pt 8pt; text-align:center">TOTAL</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="background:#e6efdc; font-weight:bold; padding:8pt; text-align:center">Girl</td>
+      <td style="padding:8pt; text-align:center">2</td><td style="padding:8pt; text-align:center">5</td><td style="padding:8pt; text-align:center">1</td><td style="background:#e6efdc; font-weight:bold; padding:8pt; text-align:center">8</td>
+    </tr>
+    <tr>
+      <td style="background:#e6efdc; font-weight:bold; padding:8pt; text-align:center">Boy</td>
+      <td style="padding:8pt; text-align:center">4</td><td style="padding:8pt; text-align:center">3</td><td style="padding:8pt; text-align:center">2</td><td style="background:#e6efdc; font-weight:bold; padding:8pt; text-align:center">9</td>
+    </tr>
+    <tr>
+      <td style="background:#e6efdc; font-weight:bold; padding:8pt; text-align:center">Total</td>
+      <td style="background:#e6efdc; font-weight:bold; padding:8pt; text-align:center">6</td><td style="background:#e6efdc; font-weight:bold; padding:8pt; text-align:center">8</td><td style="background:#e6efdc; font-weight:bold; padding:8pt; text-align:center">3</td><td style="background:#e6efdc; font-weight:bold; padding:8pt; text-align:center">17</td>
+    </tr>
+  </tbody>
 </table>
 
 <!-- ══ Rich cells: a <td> holds flow blocks — embedded image, vector QR, a 40pt sparkline

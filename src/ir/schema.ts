@@ -360,6 +360,27 @@ export interface ColumnNode {
 /** Cell content: inline `Content`, or a stack of blocks (images, codes, charts…). */
 export type CellContent = Content | CellNode;
 
+/**
+ * A corner ("bivariate") header cell split by a diagonal line, as used in a
+ * two-way / cross-tabulation table: one label names the column axis, the other
+ * the row axis. The slash runs corner-to-corner and the two labels sit in the
+ * opposite triangles.
+ */
+export interface DiagonalHeader {
+  /** Label in the upper triangle (typically the column-axis name). */
+  top?: Content;
+  /** Label in the lower triangle (typically the row-axis name). */
+  bottom?: Content;
+  /**
+   * Which diagonal is drawn. `'tl'` (default) runs top-left → bottom-right, so
+   * `top` sits upper-right and `bottom` lower-left; `'tr'` runs top-right →
+   * bottom-left, mirroring the placement.
+   */
+  dir?: 'tl' | 'tr';
+  /** Draw the corner-to-corner slash (default true). Set false for labels only. */
+  line?: boolean;
+}
+
 export interface CellNode {
   content?: CellContent;
   /**
@@ -386,6 +407,12 @@ export interface CellNode {
   styleWhen?: StyleCondition[];
   /** Numeric heatmap fill derived from the cell's value. */
   colorScale?: ColorScale;
+  /**
+   * Turn this cell into a diagonal split header: a corner-to-corner slash with a
+   * label in each triangle (see `DiagonalHeader`). Takes over the cell's paint,
+   * so its inline `content`/`blocks` are ignored when present.
+   */
+  diagonal?: DiagonalHeader;
   /**
    * @deprecated Accepted and ignored. Group totals are pre-computed for the whole group;
    * read them in a footer with `$group.<key>_sum` (or `$group.rowCount`).

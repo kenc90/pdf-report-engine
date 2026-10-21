@@ -24,6 +24,7 @@ import type {
   ResolvedBorder,
   ColorScale,
   Block,
+  DiagonalHeader,
 } from '../ir/schema.js';
 import { exprSource, type ExprContext } from '../expr/eval.js';
 import { toPt } from '../core/units.js';
@@ -269,8 +270,21 @@ function sampleTexts(units: Unit[], col: number): string[] {
 }
 
 function preview(cell: CellContent): string {
-  const c = asCellNode(cell).content;
+  const node = asCellNode(cell);
+  if (node.diagonal) {
+    // A diagonal cell has no inline content; sample its two labels so the column
+    // is at least wide enough for their longest unbreakable token.
+    return `${contentText(node.diagonal.top)} ${contentText(node.diagonal.bottom)}`.trim();
+  }
+  const c = node.content;
   if (typeof c === 'string' || typeof c === 'number') return String(c);
+  return '';
+}
+
+/** Best-effort plain text of a `Content` node, for width sampling only. */
+function contentText(content: Content | undefined): string {
+  if (typeof content === 'string' || typeof content === 'number') return String(content);
+  if (Array.isArray(content)) return content.map((p) => (typeof p === 'string' || typeof p === 'number' ? String(p) : '')).join(' ');
   return '';
 }
 
@@ -304,6 +318,21 @@ interface CellLayout {
   fill: ColorInput | undefined;
   borders: Sides;
   vAlign: 'top' | 'middle' | 'bottom';
+  /** Present when the cell is a diagonal split header (see `layoutDiagonal`). */
+  diagonal?: DiagonalLayout;
+}
+
+/** A diagonal header cell's two typeset label stacks and slash settings. */
+interface DiagonalLayout {
+  top: Line[];
+  bottom: Line[];
+  topH: number;
+  bottomH: number;
+  /** Typeset width of each label box (the rest of the cell is slash margin). */
+  topW: number;
+  bottomW: number;
+  dir: 'tl' | 'tr';
+  line: boolean;
 }
 
 function layoutRow(unit: Extract<Unit, { t: 'header' | 'footer' | 'detail' }>, uc: UnitCtx, isFirstVisual: boolean): Fragment {
@@ -355,6 +384,7 @@ function layoutRow(unit: Extract<Unit, { t: 'header' | 'footer' | 'detail' }>, u
       fill: cell.backgroundColor ?? props.backgroundColor ?? scaled?.fill ?? stripedFill,
       borders: cellSides(cell.border ?? gridShorthand(grid), 0.5),
       vAlign: cell.verticalAlign ?? 'top',
+      diagonal: payload.diagonal,
     });
     maxContent = Math.max(maxContent, payload.contentH + pad.top + pad.bottom);
     x += w;
@@ -366,7 +396,8 @@ function layoutRow(unit: Extract<Unit, { t: 'header' | 'footer' | 'detail' }>, u
 
   for (const cl of layouts) {
     if (cl.fill) commands.push({ op: 'fillRect', x: cl.x, y: 0, w: cl.w, h: rowHeight, color: toRGB(cl.fill) });
-    paintCellContent(commands, cl, contentTop(cl, rowHeight));
+    if (cl.diagonal) paintDiagonal(commands, cl.pad, cl.diagonal, cl.x, 0, cl.w, rowHeight, cl.borders.top ?? cl.borders.left);
+    else paintCellContent(commands, cl, contentTop(cl, rowHeight));
     drawSides(commands, cl.borders, cl.x, 0, cl.w, rowHeight);
   }
 
@@ -418,6 +449,90 @@ function paintCellContent(
 }
 
 /**
+ * Typeset a diagonal split header's two labels. Each label is confined to its
+ * own triangle: it is wrapped toward roughly half the cell (so a long label
+ * cannot run past the slash into the opposite triangle) but never below its
+ * widest unbreakable word, and aligned to the far corner of its triangle.
+ */
+function layoutDiagonal(
+  diag: DiagonalHeader,
+  style: ResolvedStyle,
+  ctx: LayoutContext,
+  scope: ExprContext,
+  innerW: number,
+): DiagonalLayout {
+  const dir: 'tl' | 'tr' = diag.dir === 'tr' ? 'tr' : 'tl';
+  // 'tl' (↘ slash) leaves the upper-right and lower-left triangles free; 'tr'
+  // (↙ slash) mirrors that, so the alignment of each label flips with the dir.
+  const topAlign: ResolvedStyle['align'] = dir === 'tl' ? 'right' : 'left';
+  const bottomAlign: ResolvedStyle['align'] = dir === 'tl' ? 'left' : 'right';
+  const topInlines = resolveContent(diag.top as Content, ctx, style, scope);
+  const bottomInlines = resolveContent(diag.bottom as Content, ctx, style, scope);
+  const topW = triangleLabelWidth(topInlines, style, innerW);
+  const bottomW = triangleLabelWidth(bottomInlines, style, innerW);
+  const top = typeset(topInlines, topW, { align: topAlign }).lines;
+  const bottom = typeset(bottomInlines, bottomW, { align: bottomAlign }).lines;
+  const topH = top.reduce((s, l) => s + l.height, 0);
+  const bottomH = bottom.reduce((s, l) => s + l.height, 0);
+  return { top, bottom, topH, bottomH, topW, bottomW, dir, line: diag.line !== false };
+}
+
+/**
+ * Width to wrap a triangle label to: about half the cell so it hugs its corner,
+ * but at least as wide as its longest word (splitting a word would only let it
+ * cross the slash anyway) and never wider than the cell.
+ */
+function triangleLabelWidth(inlines: InlineSource[], style: ResolvedStyle, innerW: number): number {
+  let widest = 0;
+  const text = inlines.map((i) => i.text).join('');
+  for (const token of findBreaks(text)) {
+    if (token.space || token.hard) continue;
+    const w = style.handle.widthOf(token.text, style.fontSize, style.features) + style.letterSpacing * Array.from(token.text).length;
+    if (w > widest) widest = w;
+  }
+  return Math.min(innerW, Math.max(innerW * 0.5, widest));
+}
+
+/**
+ * Paint one diagonal header cell into the full box (x, y, w, h): the top label
+ * stacked down from the top edge against one corner, the bottom label stacked up
+ * from the bottom edge against the opposite corner, and the corner-to-corner
+ * slash stroked with the cell's own border.
+ */
+function paintDiagonal(
+  commands: DrawCommand[],
+  pad: typeof CELL_PAD,
+  diag: DiagonalLayout,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  border: ResolvedBorder | undefined,
+): void {
+  const innerW = Math.max(1, w - pad.left - pad.right);
+  // The top label sits in the upper triangle on the far side of the slash; the
+  // bottom label mirrors it below. Flush each to its corner so it clears the line.
+  const topFlushRight = diag.dir === 'tl';
+  const bottomFlushRight = diag.dir === 'tr';
+  const topX = x + pad.left + (topFlushRight ? Math.max(0, innerW - diag.topW) : 0);
+  let lineY = y + pad.top;
+  for (const line of diag.top) {
+    commands.push({ op: 'text', x: topX, baselineY: lineY + line.ascent, runs: line.runs, gapWidth: line.gapWidth, decorations: [] });
+    lineY += line.height;
+  }
+  const bottomX = x + pad.left + (bottomFlushRight ? Math.max(0, innerW - diag.bottomW) : 0);
+  let bottomY = y + h - pad.bottom - diag.bottomH;
+  for (const line of diag.bottom) {
+    commands.push({ op: 'text', x: bottomX, baselineY: bottomY + line.ascent, runs: line.runs, gapWidth: line.gapWidth, decorations: [] });
+    bottomY += line.height;
+  }
+  if (!diag.line) return;
+  const b: ResolvedBorder = border ?? { width: 0.5, style: 'solid', color: [0.6, 0.6, 0.6] };
+  const [x1, y1, x2, y2] = diag.dir === 'tr' ? [x + w, y, x, y + h] : [x, y, x + w, y + h];
+  commands.push({ op: 'line', x1, y1, x2, y2, color: borderRGB(b), lineWidth: b.width, dash: borderDash(b) });
+}
+
+/**
  * Lay out one cell's payload. Inline content goes through one `typeset` pass;
  * rich cells stack flow blocks with the same before/height/after rhythm
  * pagination uses, so nested margins behave the way authors expect.
@@ -431,9 +546,13 @@ function layoutCellContent(
   innerW: number,
   autoBind: boolean,
   visible: boolean,
-): { lines: Line[]; blocks: PlacedBlock[]; contentH: number } {
+): { lines: Line[]; blocks: PlacedBlock[]; contentH: number; diagonal?: DiagonalLayout } {
   if (!visible) return { lines: [], blocks: [], contentH: 0 };
   const node = asCellNode(cell);
+  if (node.diagonal) {
+    const diagonal = layoutDiagonal(node.diagonal, style, ctx, scope, innerW);
+    return { lines: [], blocks: [], contentH: diagonal.topH + diagonal.bottomH, diagonal };
+  }
   const blocks = node.blocks ?? [];
   const hasInline = node.content !== undefined && node.content !== '';
   if (!hasInline && blocks.length > 0) {
@@ -540,6 +659,7 @@ interface AnchorCell {
   fill: ColorInput | undefined;
   borders: Sides;
   vAlign: 'top' | 'middle' | 'bottom';
+  diagonal?: DiagonalLayout;
 }
 
 function layoutMergedRun(run: RowUnit[], uc: UnitCtx, isFirstVisual: boolean): Fragment {
@@ -612,6 +732,7 @@ function layoutMergedRun(run: RowUnit[], uc: UnitCtx, isFirstVisual: boolean): F
         fill: cell.backgroundColor ?? props.backgroundColor ?? scaled?.fill ?? stripedFill,
         borders: cellSides(cell.border ?? gridShorthand(grid), 0.5),
         vAlign: cell.verticalAlign ?? 'top',
+        diagonal: payload.diagonal,
       });
     }
   }
@@ -646,7 +767,8 @@ function layoutMergedRun(run: RowUnit[], uc: UnitCtx, isFirstVisual: boolean): F
     for (let k = 0; k < a.rowSpan; k += 1) rectH += rowH[a.row + k]!;
     const ry = yTop[a.row]!;
     if (a.fill) commands.push({ op: 'fillRect', x: a.x, y: ry, w: a.w, h: rectH, color: toRGB(a.fill) });
-    paintCellContent(commands, a, ry + contentTop(a, rectH));
+    if (a.diagonal) paintDiagonal(commands, a.pad, a.diagonal, a.x, ry, a.w, rectH, a.borders.top ?? a.borders.left);
+    else paintCellContent(commands, a, ry + contentTop(a, rectH));
     drawSides(commands, a.borders, a.x, ry, a.w, rectH);
   }
 
@@ -855,6 +977,7 @@ const CELL_ONLY_KEYS = new Set([
   'styleWhen',
   'colorScale',
   'subtotal',
+  'diagonal',
   'paddingTop',
   'paddingRight',
   'paddingBottom',
