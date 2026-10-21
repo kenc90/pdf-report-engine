@@ -1,6 +1,9 @@
+/* Light-theme tokens (default). The site is dark-first for the header/footer/code
+   plates, so only content surfaces/accents change between themes. */
 :root {
-  --bg: #0f1720;
-  --bg-soft: #16212e;
+  color-scheme: light dark;
+  --bg: #0f1720;            /* footer plate (brand) */
+  --bg-soft: #16212e;       /* reserved */
   --card: #ffffff;
   --ink: #1f2933;
   --muted: #5b6b7b;
@@ -9,6 +12,79 @@
   --accent: #e08a1e;
   --code-bg: #0f1a24;
   --maxw: 960px;
+
+  /* Theme-aware content surfaces & accents (light values) */
+  --page-bg: #f6f8fa;
+  --heading: #1a3d6d;
+  --th-bg: #eef3f8;
+  --tr-hover: #fafcfe;
+  --toc-hover: #eef3f8;
+  --scroll-hover: #c4cedb;
+  --inline-code-bg: #eef2f6;
+  --inline-code-fg: #b3410a;
+  --note-bg: #fff7e6;
+  --note-line: #f0c674;
+  --note-ink: #6b4e16;
+
+  /* Constant brand chrome (same in both themes) */
+  --hero-end: #12304f;
+  --on-brand: #ffffff;
+  --nav-text: #dbe6f2;
+  --hero-lead: #cdd9e8;
+  --badge-bg: rgba(255, 255, 255, 0.12);
+  --badge-line: rgba(255, 255, 255, 0.18);
+  --badge-text: #e8f0f8;
+  --on-code: #e6edf3;
+  --copy-bg: #22303c;
+  --copy-line: #33424f;
+  --copy-hover-bg: #2c3d4c;
+  --footer-text: #9fb0c0;
+  --footer-head: #7d90a4;
+  --footer-link: #cdd9e5;
+  --footer-line: rgba(255, 255, 255, 0.09);
+  --on-accent: #24160a;
+}
+
+/* Explicit user choice: dark. */
+[data-theme="dark"] {
+  --card: #16222f;
+  --ink: #d7e0ea;
+  --muted: #93a3b4;
+  --line: #2b3b4d;
+  --page-bg: #0e1720;
+  --heading: #7fb0e0;
+  --th-bg: #1c2b3a;
+  --tr-hover: #182634;
+  --toc-hover: #1c2b3a;
+  --scroll-hover: #46596d;
+  --inline-code-bg: #22303f;
+  --inline-code-fg: #f0b48a;
+  --note-bg: #241f11;
+  --note-line: #6b561f;
+  --note-ink: #e6cf9a;
+  --code-bg: #0b141d;
+}
+
+/* Follow the OS when the user hasn't chosen explicitly. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --card: #16222f;
+    --ink: #d7e0ea;
+    --muted: #93a3b4;
+    --line: #2b3b4d;
+    --page-bg: #0e1720;
+    --heading: #7fb0e0;
+    --th-bg: #1c2b3a;
+    --tr-hover: #182634;
+    --toc-hover: #1c2b3a;
+    --scroll-hover: #46596d;
+    --inline-code-bg: #22303f;
+    --inline-code-fg: #f0b48a;
+    --note-bg: #241f11;
+    --note-line: #6b561f;
+    --note-ink: #e6cf9a;
+    --code-bg: #0b141d;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -20,7 +96,7 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   color: var(--ink);
   line-height: 1.6;
-  background: #f6f8fa;
+  background: var(--page-bg);
 }
 
 a { color: var(--brand); text-decoration: none; }
@@ -32,7 +108,7 @@ a:hover { text-decoration: underline; }
   top: 0;
   z-index: 10;
   background: var(--brand);
-  color: #fff;
+  color: var(--on-brand);
   border-bottom: 3px solid var(--accent);
 }
 .site-header .wrap {
@@ -48,34 +124,61 @@ a:hover { text-decoration: underline; }
   font-weight: 800;
   font-size: 1.15rem;
   letter-spacing: 0.2px;
-  color: #fff;
+  color: var(--on-brand);
 }
 .brand .dot, .site-footer .fbrand .dot { color: var(--accent); }
 .nav { margin-left: auto; display: flex; gap: 4px; flex-wrap: wrap; }
 .nav a {
-  color: #dbe6f2;
+  color: var(--nav-text);
   padding: 6px 12px;
   border-radius: 6px;
   font-size: 0.92rem;
 }
 .nav a:hover { background: rgba(255,255,255,0.12); text-decoration: none; }
-.nav a.active { background: var(--accent); color: #24160a; font-weight: 700; }
+.nav a.active { background: var(--accent); color: var(--on-accent); font-weight: 700; }
+
+/* ---------- Theme toggle ---------- */
+.theme-toggle {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.10);
+  color: var(--on-brand);
+  cursor: pointer;
+  transition: background 0.18s, border-color 0.18s, transform 0.12s;
+}
+.theme-toggle:hover { background: rgba(255, 255, 255, 0.20); border-color: rgba(255, 255, 255, 0.5); }
+.theme-toggle:active { transform: scale(0.92); }
+.theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.theme-toggle svg { width: 17px; height: 17px; }
+.theme-toggle .i-sun { display: none; }
+.theme-toggle .i-moon { display: block; }
+[data-theme="dark"] .theme-toggle .i-sun { display: block; }
+[data-theme="dark"] .theme-toggle .i-moon { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .theme-toggle .i-sun { display: block; }
+  :root:not([data-theme]) .theme-toggle .i-moon { display: none; }
+}
 
 /* ---------- Hero ---------- */
 .hero {
-  background: linear-gradient(180deg, var(--brand), #12304f);
-  color: #fff;
+  background: linear-gradient(180deg, var(--brand), var(--hero-end));
+  color: var(--on-brand);
   padding: 56px 20px 64px;
 }
 .hero .wrap { max-width: var(--maxw); margin: 0 auto; }
 .hero h1 { margin: 0 0 10px; font-size: 2.3rem; line-height: 1.15; }
-.hero p.lead { margin: 0 0 22px; font-size: 1.15rem; color: #cdd9e8; max-width: 62ch; }
+.hero p.lead { margin: 0 0 22px; font-size: 1.15rem; color: var(--hero-lead); max-width: 62ch; }
 .hero .cta { display: flex; gap: 12px; flex-wrap: wrap; }
 .badges { margin-top: 22px; display: flex; gap: 8px; flex-wrap: wrap; }
 .badge {
-  background: rgba(255,255,255,0.12);
-  border: 1px solid rgba(255,255,255,0.18);
-  color: #e8f0f8;
+  background: var(--badge-bg);
+  border: 1px solid var(--badge-line);
+  color: var(--badge-text);
   padding: 3px 10px;
   border-radius: 999px;
   font-size: 0.8rem;
@@ -88,18 +191,95 @@ a:hover { text-decoration: underline; }
   border-radius: 8px;
   font-weight: 700;
   background: var(--accent);
-  color: #24160a;
+  color: var(--on-accent);
   border: none;
 }
 .btn:hover { text-decoration: none; filter: brightness(1.05); }
-.btn.ghost { background: transparent; color: #fff; border: 1.5px solid rgba(255,255,255,0.5); }
+.btn.ghost { background: transparent; color: var(--on-brand); border: 1.5px solid rgba(255,255,255,0.5); }
+
+/* ---------- Side table of contents ----------
+   Built at runtime by site.js: it wraps the <main> sections in .doc-body and
+   prepends a sticky .toc. Only long pages get the two-column layout (the `has-toc`
+   class is added conditionally); short pages are left untouched. */
+main.has-toc {
+  max-width: 1180px;
+  display: flex;
+  align-items: flex-start;
+  gap: 36px;
+}
+main.has-toc .toc { flex: 0 0 232px; }
+main.has-toc .doc-body { flex: 1 1 auto; min-width: 0; }
+
+.toc {
+  position: sticky;
+  top: 78px;
+  align-self: flex-start;
+  max-height: calc(100vh - 96px);
+  overflow: auto;
+  padding-right: 6px;
+  font-size: 0.9rem;
+}
+/* Slim scrollbar for the TOC list. Chromium/WebKit honour the ::-webkit-scrollbar
+   pseudo-elements (6px); Firefox ignores them and uses scrollbar-width instead.
+   The standard `scrollbar-width` overrides the pseudo width in Chromium, so it is
+   applied only where the pseudo-elements are unsupported. */
+.toc::-webkit-scrollbar { width: 6px; }
+.toc::-webkit-scrollbar-track { background: transparent; }
+.toc::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+.toc::-webkit-scrollbar-thumb:hover { background: var(--scroll-hover); }
+@supports not selector(::-webkit-scrollbar) {
+  .toc { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+}
+.toc > .toc-title {
+  margin: 0 0 10px;
+  font-size: 0.74rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 700;
+}
+.toc ul { list-style: none; margin: 0; padding: 0; }
+.toc li { margin: 0; }
+.toc a {
+  display: block;
+  padding: 4px 10px;
+  color: var(--muted);
+  border-left: 2px solid var(--line);
+  line-height: 1.35;
+}
+.toc a:hover { color: var(--heading); text-decoration: none; background: var(--toc-hover); }
+.toc a.active { color: var(--heading); border-left-color: var(--accent); font-weight: 700; }
+.toc .toc-sub { margin-left: 8px; }
+.toc .toc-sub a {
+  font-size: 0.83rem;
+  padding: 3px 10px;
+  border-left: 2px solid transparent;
+}
+.toc .toc-sub a.active { border-left-color: var(--accent); }
+
+/* Give in-page anchor jumps room to clear the sticky header. */
+main [id] { scroll-margin-top: 84px; }
+
+@media (max-width: 900px) {
+  main.has-toc { display: block; max-width: var(--maxw); }
+  .toc {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    margin: 0 0 28px;
+    padding: 14px 16px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+}
 
 /* ---------- Layout ---------- */
 main { max-width: var(--maxw); margin: 0 auto; padding: 34px 20px 60px; }
 section { margin-bottom: 40px; }
-h2 { font-size: 1.6rem; color: var(--brand); border-bottom: 2px solid var(--accent);
+h2 { font-size: 1.6rem; color: var(--heading); border-bottom: 2px solid var(--accent);
      padding-bottom: 6px; margin: 0 0 18px; }
-h3 { font-size: 1.15rem; color: var(--brand); margin: 24px 0 8px; }
+h3 { font-size: 1.15rem; color: var(--heading); margin: 24px 0 8px; }
 
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
 .card {
@@ -108,13 +288,13 @@ h3 { font-size: 1.15rem; color: var(--brand); margin: 24px 0 8px; }
   border-radius: 10px;
   padding: 16px 18px;
 }
-.card h4 { margin: 0 0 6px; font-size: 1rem; color: var(--brand); }
+.card h4 { margin: 0 0 6px; font-size: 1rem; color: var(--heading); }
 .card p { margin: 0; color: var(--muted); font-size: 0.93rem; }
 
 /* ---------- Code ---------- */
 pre {
   background: var(--code-bg);
-  color: #e6edf3;
+  color: var(--on-code);
   padding: 16px 18px;
   border-radius: 10px;
   overflow: auto;
@@ -124,8 +304,8 @@ pre {
 }
 code { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; }
 :not(pre) > code {
-  background: #eef2f6;
-  color: #b3410a;
+  background: var(--inline-code-bg);
+  color: var(--inline-code-fg);
   padding: 1px 6px;
   border-radius: 5px;
   font-size: 0.86em;
@@ -135,30 +315,30 @@ pre code { color: inherit; background: none; padding: 0; }
   position: absolute;
   top: 8px;
   right: 8px;
-  background: #22303c;
-  color: #cdd9e5;
-  border: 1px solid #33424f;
+  background: var(--copy-bg);
+  color: var(--on-code);
+  border: 1px solid var(--copy-line);
   border-radius: 6px;
   font-size: 0.72rem;
   padding: 3px 8px;
   cursor: pointer;
 }
-.copy:hover { background: #2c3d4c; }
+.copy:hover { background: var(--copy-hover-bg); }
 
 /* ---------- Tables ---------- */
 table { width: 100%; border-collapse: collapse; margin: 8px 0 4px; font-size: 0.92rem; }
 th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
-th { background: #eef3f8; color: var(--brand); font-weight: 700; }
-tr:hover td { background: #fafcfe; }
+th { background: var(--th-bg); color: var(--heading); font-weight: 700; }
+tr:hover td { background: var(--tr-hover); }
 
 /* ---------- Note ---------- */
 .note {
-  background: #fff7e6;
-  border: 1px solid #f0c674;
+  background: var(--note-bg);
+  border: 1px solid var(--note-line);
   border-left: 4px solid var(--accent);
   padding: 12px 16px;
   border-radius: 8px;
-  color: #6b4e16;
+  color: var(--note-ink);
   font-size: 0.93rem;
 }
 
@@ -167,7 +347,7 @@ tr:hover td { background: #fafcfe; }
    Mirrors the header (dark plate, accent rule) instead of floating two unaligned spans. */
 .site-footer {
   background: var(--bg);
-  color: #9fb0c0;
+  color: var(--footer-text);
   font-size: 0.92rem;
   margin-top: 44px;
   border-top: 3px solid var(--accent);
@@ -185,12 +365,12 @@ tr:hover td { background: #fafcfe; }
   font-size: 0.76rem;
   letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: #7d90a4;
+  color: var(--footer-head);
 }
-.site-footer a { color: #cdd9e5; }
-.site-footer a:hover { color: #fff; text-decoration: none; }
+.site-footer a { color: var(--footer-link); }
+.site-footer a:hover { color: var(--on-brand); text-decoration: none; }
 .site-footer nav { display: flex; flex-direction: column; gap: 7px; }
-.site-footer .fbrand { display: block; margin-bottom: 10px; font-weight: 800; font-size: 1.05rem; color: #fff; }
+.site-footer .fbrand { display: block; margin-bottom: 10px; font-weight: 800; font-size: 1.05rem; color: var(--on-brand); }
 .site-footer .fbrand:hover { text-decoration: none; }
 .site-footer .fabout p { max-width: 46ch; }
 .site-footer .finstall {
@@ -200,7 +380,7 @@ tr:hover td { background: #fafcfe; }
   background: rgba(255,255,255,0.07);
   border: 1px solid rgba(255,255,255,0.14);
   border-radius: 8px;
-  color: #e6edf3;
+  color: var(--on-code);
   font-size: 0.82rem;
   line-height: 1.4;
   white-space: nowrap;
@@ -216,9 +396,34 @@ tr:hover td { background: #fafcfe; }
   flex-wrap: wrap;
   padding: 14px 20px;
   font-size: 0.85rem;
-  color: #7d90a4;
+  color: var(--footer-head);
 }
-.fbar .totop { white-space: nowrap; }
+
+/* Floating scroll-to-top button (injected by site.js). Replaces the old footer link. */
+.to-top {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 20;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  background: var(--brand);
+  color: var(--on-brand);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(10px);
+  transition: opacity 0.2s, transform 0.2s, visibility 0.2s, background 0.2s;
+}
+.to-top.show { opacity: 1; visibility: visible; transform: none; }
+.to-top:hover { background: var(--accent); color: #24160a; }
 @media (max-width: 760px) {
   .site-footer > .wrap { grid-template-columns: 1fr 1fr; }
   .site-footer .fabout { grid-column: 1 / -1; }

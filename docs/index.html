@@ -5,6 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>pdf-report-engine — pure-JS paginated PDF report engine</title>
   <meta name="description" content="A pure-JavaScript paginated PDF report engine: report IR or HTML to real vector PDFs with charts, bookmarks, barcodes, selectable text and Jasper-style pagination. No Chromium." />
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('pre-theme');
+        if (t !== 'light' && t !== 'dark') {
+          t = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    })();
+  </script>
   <link rel="stylesheet" href="assets/styles.css" />
 </head>
 <body>
@@ -18,6 +29,10 @@
         <a href="api.html">API</a>
         <a href="browser-demo.html">Browser demo</a>
       </nav>
+      <button class="theme-toggle" type="button" aria-label="Toggle light or dark theme" title="Toggle light / dark theme">
+        <svg class="i-moon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+      </button>
     </div>
   </header>
 
@@ -204,7 +219,6 @@ fs.writeFileSync('report.pdf', pdf);</code></pre>
     <div class="fbar">
       <div class="wrap">
         <span>© <span data-year>2026</span> pdf-report-engine contributors · released under the MIT license</span>
-        <a class="totop" href="#top">Back to top ↑</a>
       </div>
     </div>
   </footer>
