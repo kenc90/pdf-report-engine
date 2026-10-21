@@ -167,7 +167,24 @@ h1, h2 { margin-bottom: 4pt; }           /* list */</code></pre>
           <tr><td><code>toc</code></td><td><code>title</code>, <code>maxLevel</code>, <code>leaders</code>, <code>indent</code>, <code>pageNumbers</code>, <code>gap</code></td></tr>
           <tr><td><code>barcode</code></td><td><code>symbology</code>, <code>value</code>, <code>moduleSize</code>, <code>errorCorrection</code>, <code>quietZone</code>, <code>showText</code>, <code>color</code></td></tr>
           <tr><td><code>spacer</code></td><td><code>size</code></td></tr>
-          <tr><td><code>pageBreak</code></td><td><code>always</code></td></tr>
+          <tr><td><code>pageBreak</code></td><td>no content fields (<code>always</code> is accepted and ignored)</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Table knobs</h3>
+      <table>
+        <thead><tr><th>Knob</th><th>What it really does</th></tr></thead>
+        <tbody>
+          <tr><td><code>columns[]</code></td><td><code>width</code> pins a column in points; <code>grow</code> is the weight sharing whatever the pinned columns left (defaulting to 1 when <code>width</code> is unset, 0 when it is set); <code>minWidth</code> floors it, and the floor is never less than the widest unbreakable word found in its sampled cells; <code>align</code> and <code>style</code> are defaults for the column's cells. The column count is the widest row's cell count, so <code>columns</code> may be shorter than the table.</td></tr>
+          <tr><td><code>columns[].key</code></td><td>Names the field: an empty cell in a data-driven detail row auto-binds to it (with the cell's <code>format</code>, if any), it produces the group aggregates <code>$group.&lt;key&gt;_sum</code> / <code>_avg</code> / <code>_min</code> / <code>_max</code> / <code>_count</code> plus <code>$group.rowCount</code>, and it feeds column measurement. Authored header/footer cells left blank stay blank.</td></tr>
+          <tr><td><code>dataSource</code> + <code>detail</code></td><td>An array, <code>{ bind }</code> or <code>{ each, of }</code>, expanded through one shared <code>detail</code> template with <code>$row</code> and <code>$index</code> in scope. Without <code>detail</code> the rows produce no cells at all.</td></tr>
+          <tr><td><code>staticRows</code></td><td>Authored body rows, rendered between the header and the data, each keeping its own per-cell styling — a heatmap or a status table. They see an empty <code>$row</code>, so bind nothing and write the values in.</td></tr>
+          <tr><td><code>headerRows</code> / <code>footerRows</code></td><td>Header rows repeat automatically on every page the table continues onto; <code>repeatHeader: false</code> switches that off. Footer rows are placed once, after the last data row.</td></tr>
+          <tr><td><code>groups[]</code></td><td>Partitions <em>consecutive</em> rows by <code>by</code>, emitting a <code>header</code> band (bold by default) and a <code>footer</code> band styled by <code>headerStyle</code> / <code>footerStyle</code>, with <code>$group</code> totals in scope. <code>pageBreak: true</code> starts each group on a new page; <code>resetPageNumber: true</code> restarts <code>$page.number</code> there. A group band stretches across the whole table width — it is not laid out per column.</td></tr>
+          <tr><td><code>showGrid</code></td><td><code>true</code> is a 0.5pt solid <code>#999</code> cell grid; a <code>BorderShorthand</code> sets width/style/colour. Cell borders from <code>border</code> override it.</td></tr>
+          <tr><td><code>striped</code></td><td>Shades every second <em>data</em> row (odd <code>$index</code>) in <code>#f2f2f2</code>, or in <code>{ color }</code>. Authored and static rows are never shaded, and a cell's own <code>backgroundColor</code> wins.</td></tr>
+          <tr><td><code>rowStyle</code></td><td>Object or <code>(row, index) =&gt; props</code>, applied under the column style and the cell style. For non-data rows it is called with <code>({}, 0)</code>.</td></tr>
+          <tr><td>Accepted, ignored</td><td><code>widows</code>, <code>orphans</code>, <code>showRowSeparators</code>, <code>groupStyle</code>, <code>subtotalToken</code>, <code>CellNode.subtotal</code>, <code>GroupNode.label</code>, <code>GroupNode.headerRepeat</code>, <code>RowNode.breakInside</code> (a row is already atomic) and <code>pageBreak.always</code>. They are still in the types so existing reports compile; nothing reads them.</td></tr>
         </tbody>
       </table>
 
@@ -276,6 +293,356 @@ CellNode:   { content?, colSpan?, rowSpan?, align?, verticalAlign?, style?,
       </p>
     </section>
 
+    <section id="expr">
+      <h2>Expression language</h2>
+      <p>
+        Bindings, data sources, group keys and chart series all speak the same tiny
+        language. Every example below is asserted by <code>test/expr.test.ts</code>, so
+        the output column is what the engine really prints.
+      </p>
+
+      <h3>Two forms</h3>
+      <table>
+        <thead><tr><th>Form</th><th>Written as</th><th>How it resolves</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Field path</strong></td>
+            <td><code>'amount'</code>, <code>'$row.amount'</code>, <code>'$data.company'</code>, <code>'$row.items[0].sku'</code>, <code>'customer.city'</code></td>
+            <td>No code is generated. The current row is tried first, then the report
+              <code>data</code> root. The leading <code>$</code> is optional, so
+              <code>'$amount'</code> reads as “row field, else data field”.</td>
+          </tr>
+          <tr>
+            <td><strong>Expression</strong></td>
+            <td><code>'$row.qty &gt;= 3 ? "bulk" : "standard"'</code>, <code>"concat('Total: ', money($vars.grandTotal))"</code></td>
+            <td>Anything with an operator, a ternary or a call. Compiled once per distinct
+              source and reused for every row. Bare field names are <em>not</em> in scope:
+              <code>'amount * 2'</code> throws <code>amount is not defined</code> — write
+              <code>'$row.amount * 2'</code>.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Both forms are accepted wherever <code>Content</code> or <code>Expr</code> appear:
+        <code>ContentSpan.bind</code>, <code>dataSource</code> (<code>{ bind }</code> or
+        <code>{ each, of }</code>), <code>groups[].by</code>/<code>label</code>,
+        <code>info.title</code>, chart <code>categories</code> and
+        <code>series[].values</code>, and the HTML adapter’s <code>data-bind</code> /
+        <code>data-each</code> / <code>data-format</code>.
+      </p>
+      <div class="note">
+        <code>visible</code> is the exception: only the literal <code>false</code> hides a
+        block. <code>visible: { expr: '$row.flag' }</code> type-checks but is ignored today —
+        filter the IR before rendering, or bind the <em>content</em> conditionally.
+      </div>
+
+      <h3>Scope roots</h3>
+      <table>
+        <thead><tr><th>Root</th><th>What it holds</th><th>Where it is populated</th></tr></thead>
+        <tbody>
+          <tr><td><code>$row</code></td><td>the current detail row, e.g. <code>$row.customer.city</code></td><td>table detail cells, <code>groups[].by</code>/<code>label</code>, <code>rowStyle</code> callbacks. Static and authored rows see <code>{}</code>.</td></tr>
+          <tr><td><code>$index</code></td><td>0-based row position</td><td>detail rows only. It <strong>restarts at 0 in each group</strong> when the table is grouped; otherwise it runs over the whole data source.</td></tr>
+          <tr><td><code>$group</code></td><td>pre-computed totals for the enclosing group: <code>&lt;key&gt;_sum</code>, <code>_avg</code>, <code>_min</code>, <code>_max</code>, <code>_count</code>, plus <code>rowCount</code></td><td>group header and group footer bands only, and only for columns that declare a <code>key</code>.</td></tr>
+          <tr><td><code>$data</code></td><td>the report’s <code>data</code> object</td><td>everywhere. <code>$report</code> is an alias for the same object.</td></tr>
+          <tr><td><code>$vars</code></td><td>the report’s <code>variables</code> (JS-precomputed values)</td><td>everywhere.</td></tr>
+          <tr><td><code>$page</code></td><td><code>{ number, total }</code> — <code>number</code> is the <em>logical</em> page, after any <code>resetPageNumber</code></td><td>real values in <code>pageHeader</code>/<code>pageFooter</code>/<code>title</code>/<code>summary</code> bands (Pass C). A body block still shows the Pass-A placeholder <code>1 / 1</code>.</td></tr>
+        </tbody>
+      </table>
+      <pre data-copy><code>const scope = {
+  $row:   { region: 'EMEA', amount: 1200, qty: 3, customer: { city: 'Lisbon' }, items: [{ sku: 'A-1' }] },
+  $group: { amount_sum: 3600, rowCount: 3 },
+  $page:  { number: 2, total: 5 },
+  $data:  { company: 'Acme', rate: 1.21 },
+  $vars:  { grandTotal: 48120 },
+  $index: 4,
+};</code></pre>
+      <table>
+        <thead><tr><th>Expression</th><th>Result</th></tr></thead>
+        <tbody>
+          <tr><td><code>$row.customer.city</code></td><td><code>Lisbon</code></td></tr>
+          <tr><td><code>$row.items[0].sku</code></td><td><code>A-1</code></td></tr>
+          <tr><td><code>$row.amount * $data.rate</code></td><td><code>1452</code></td></tr>
+          <tr><td><code>$row.qty &gt;= 3 ? "bulk" : "standard"</code></td><td><code>bulk</code></td></tr>
+          <tr><td><code>$row.missing?.amount ?? 0</code></td><td><code>0</code></td></tr>
+          <tr><td><code>$data['company']</code></td><td><code>Acme</code></td></tr>
+          <tr><td><code>'Page ' + $page.number + ' of ' + $page.total</code></td><td><code>Page 2 of 5</code></td></tr>
+          <tr><td><code>concat(upper($row.region), ' — ', money($group.amount_sum))</code></td><td><code>EMEA — $3,600.00</code></td></tr>
+          <tr><td><code>iif($row.amount &gt; 1000, "high", "low")</code></td><td><code>high</code></td></tr>
+          <tr><td><code>$index + 1</code></td><td><code>5</code></td></tr>
+        </tbody>
+      </table>
+
+      <h3>Grammar</h3>
+      <p>
+        Literals (numbers, <code>'strings'</code>, <code>"strings"</code>, template
+        literals, booleans, <code>null</code>, arrays and object literals), member and
+        index access, <code>?.</code>, <code>??</code>, arithmetic
+        (<code>+ - * / % **</code>), comparison, logical <code>&amp;&amp; || !</code>,
+        ternary <code>? :</code>, calls of library functions — and calls on values you
+        already hold, such as <code>$row.region.toUpperCase()</code> or
+        <code>$row.items.map(x =&gt; x.sku)</code>. There are no statements, no
+        assignment, no <code>new</code>, and no <code>this</code>.
+      </p>
+      <p>
+        <strong>Row aggregates.</strong> <code>sum</code>, <code>min</code> and
+        <code>max</code> in the library are plain numeric helpers over their arguments
+        (arrays are flattened) — they cannot see the row set, because an expression is
+        evaluated once per row. Row-set totals come from layout instead:
+        <code>money($group.amount_sum)</code>, <code>$group.qty_count</code>,
+        <code>$group.rowCount</code>. For something ad hoc, read the array you already
+        have: <code>sum($data.rows.map(r =&gt; r.amount))</code>. The <code>rows</code>
+        parameter mentioned in some sources is reserved and always empty today.
+      </p>
+
+      <h3>Sandbox guards</h3>
+      <p>
+        A binding is compiled into a strict-mode function, but it is <em>not</em> given the
+        host realm: every ECMAScript and Node global (<code>eval</code>,
+        <code>Function</code>, <code>Date</code>, <code>Math</code>, <code>JSON</code>,
+        <code>Object</code>, <code>Array</code>, <code>Promise</code>,
+        <code>process</code>, <code>require</code>, <code>fetch</code>, …) is shadowed by a
+        parameter bound to <code>undefined</code>, and the closure is invoked detached so
+        <code>this</code> is undefined. Prototype plumbing is rejected at compile time —
+        <code>constructor</code>, <code>prototype</code>, <code>__proto__</code> and any
+        dunder name, in <em>every</em> access form (<code>.constructor</code> and
+        <code>['constructor']</code> included), plus <code>this</code>,
+        <code>arguments</code>, <code>globalThis</code>, <code>process</code>,
+        <code>require</code>, <code>import</code>, <code>export</code> and
+        <code>module</code> as free identifiers. Incoming data is walked and those keys are
+        stripped before evaluation, so a hostile JSON payload cannot be used as a stepping
+        stone.
+      </p>
+      <pre data-copy><code>throw new Error(...)   // rejected: forbidden identifier
+$row.region.constructor.constructor('return 6*7')()   // rejected: constructor
+Date.now()             // Date is undefined here — use now() / date()
+Math.PI                // Math is undefined — there is no pi; use a $vars entry
+JSON.stringify($row)   // JSON is undefined</code></pre>
+      <div class="note">
+        Because the check is a source scan, those words are also unavailable inside string
+        literals — <code>concat('read the ', $row.note)</code> is fine, but a literal that
+        says <code>'process'</code> or <code>'constructor'</code> is refused. Treat a report
+        template as an input you author, not as an untrusted interpreter: the guards make
+        accidents expensive to hit, they are not a OS-level jail.
+      </div>
+
+      <h3>Function library</h3>
+      <table>
+        <thead><tr><th>Function</th><th>Example</th><th>Result</th></tr></thead>
+        <tbody>
+          <tr><td><code>format(value, pattern?)</code></td><td><code>format(1234.5, '#,##0.00')</code><br><code>format(date, 'dd/MM/yyyy')</code><br><code>format(null, '#,##0')</code></td><td><code>1,234.50</code><br><code>20/10/2026</code><br><em>empty</em></td></tr>
+          <tr><td><code>money(value, pattern?)</code> — default <code>$#,##0.00</code></td><td><code>money(1234.5)</code><br><code>money(-1234.5)</code></td><td><code>$1,234.50</code><br><code>-$1,234.50</code></td></tr>
+          <tr><td><code>percent(value, pattern?)</code> — default <code>#,##0.0%</code></td><td><code>percent(0.1842)</code></td><td><code>18.4%</code></td></tr>
+          <tr><td><code>number(value, pattern?)</code> — default <code>#,##0.###</code></td><td><code>number(1234567.891)</code><br><code>number(1.5)</code></td><td><code>1,234,567.891</code><br><code>1.5</code></td></tr>
+          <tr><td><code>date(value, pattern?)</code> — default <code>yyyy-MM-dd</code></td><td><code>date('2026-10-20T14:05:09')</code></td><td><code>2026-10-20</code></td></tr>
+          <tr><td><code>now()</code> — the render clock (injectable via <code>RenderOptions.now</code>)</td><td><code>format(now(), 'yyyy-MM-dd')</code></td><td>today’s date</td></tr>
+          <tr><td><code>upper</code> / <code>lower</code> / <code>title</code> / <code>trim</code></td><td><code>title('quarterly report')</code></td><td><code>Quarterly Report</code></td></tr>
+          <tr><td><code>concat(...parts)</code> — <code>null</code>/<code>undefined</code> become empty</td><td><code>concat('Total: ', 12.5, null, 'x')</code></td><td><code>Total: 12.5x</code></td></tr>
+          <tr><td><code>substring(value, start, end?)</code></td><td><code>substring('invoice-2026', 8)</code></td><td><code>2026</code></td></tr>
+          <tr><td><code>replace(value, search, replacement)</code> — every occurrence</td><td><code>replace('a-b-c', '-', '+')</code></td><td><code>a+b+c</code></td></tr>
+          <tr><td><code>pad(value, width, char?)</code></td><td><code>pad('7', 3, '0')</code></td><td><code>007</code></td></tr>
+          <tr><td><code>length(value)</code> — array items or characters</td><td><code>length([1,2,3])</code>, <code>length('abc')</code></td><td><code>3</code>, <code>3</code></td></tr>
+          <tr><td><code>defaultValue(value, fallback)</code> — empty string counts as blank</td><td><code>defaultValue('', 'n/a')</code></td><td><code>n/a</code></td></tr>
+          <tr><td><code>round(value, digits?)</code> — half away from zero</td><td><code>round(2.675, 2)</code><br><code>round(-2.5)</code></td><td><code>2.68</code><br><code>-3</code></td></tr>
+          <tr><td><code>abs</code> / <code>ceil</code> / <code>floor</code></td><td><code>abs(-3)</code>, <code>ceil(1.2)</code>, <code>floor(1.8)</code></td><td><code>3</code>, <code>2</code>, <code>1</code></td></tr>
+          <tr><td><code>min</code> / <code>max</code> / <code>sum</code> — numbers only, arrays flattened</td><td><code>min(4, 2, 9)</code><br><code>sum([1,2], [3])</code></td><td><code>2</code><br><code>6</code></td></tr>
+          <tr><td><code>iif(cond, a, b)</code> — named <code>iif</code> because <code>if</code> is a reserved word</td><td><code>iif(1 &gt; 2, 'a', 'b')</code></td><td><code>b</code></td></tr>
+          <tr><td><code>isBlank(value)</code> — null, undefined, '' or []</td><td><code>isBlank([])</code>, <code>isBlank('x')</code></td><td><code>true</code>, <code>false</code></td></tr>
+          <tr><td><code>coalesce(...args)</code> — first value that is not null/undefined/''</td><td><code>coalesce(null, '', 7)</code></td><td><code>7</code></td></tr>
+        </tbody>
+      </table>
+
+      <h3>Number patterns</h3>
+      <p>
+        A pattern is the ICU/Java shape used by <code>format</code>, <code>money</code>,
+        <code>number</code>, <code>percent</code> and every <code>format</code> field on a
+        span, cell or chart axis.
+      </p>
+      <table>
+        <thead><tr><th>Token</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>0</code></td><td>digit, padded with a zero when absent (<code>0000</code> + <code>42</code> → <code>0042</code>).</td></tr>
+          <tr><td><code>#</code></td><td>digit, left blank when absent (<code>#,##0.###</code> + <code>1.5</code> → <code>1.5</code>, not <code>1.500</code>).</td></tr>
+          <tr><td><code>.</code> <code>,</code></td><td>decimal separator and grouping separator (grouping is dropped if it sits in the fraction). Rounded half away from zero: <code>#,##0</code> + <code>1234.5</code> → <code>1,235</code>, <code>1234.4</code> → <code>1,234</code>.</td></tr>
+          <tr><td><code>%</code> <code>‰</code></td><td>multiply by 100 / 1000. The scale applies wherever the sign sits, but a leading one stays a prefix: <code>#,##0%</code> + <code>0.1234</code> → <code>12%</code>, <code>%#,##0.0</code> → <code>%12.3</code>.</td></tr>
+          <tr><td><code>¤</code></td><td>currency symbol from the active symbols table (<code>$</code> by default); a literal <code>$</code> in the pattern works too, and the negative sign is printed <em>before</em> it: <code>-$52.00</code>.</td></tr>
+          <tr><td><code>E</code></td><td>exponential notation — the digits after <code>E</code> set the minimum exponent length: <code>0.###E0</code> + <code>123456</code> → <code>1.235E5</code>.</td></tr>
+          <tr><td><code>'text'</code> <code>"text"</code> <code>''</code></td><td>quoted literals: <code>'€'#,##0.00</code> → <code>€12.50</code>; a quoted <code>"%"</code> is text, <em>not</em> a scale.</td></tr>
+          <tr><td><code>*c</code></td><td>pad character: <code>*0#,##0</code> + <code>42</code> → <code>0042</code>.</td></tr>
+          <tr><td><code>;</code></td><td>section separator, in the order positive; negative; zero; text.</td></tr>
+          <tr><td><code>[Red]</code></td><td>parsed into a colour for the section (see the note below).</td></tr>
+          <tr><td><code>-</code> <code>(</code> <code>)</code> <code>space</code></td><td>ordinary literal affixes, so a section can be a label only: <code>#,##0;(#,##0);"-"</code> prints <code>-</code> for zero.</td></tr>
+        </tbody>
+      </table>
+      <pre data-copy><code>formatNumber(1234.5, '#,##0.00')                 // 1,234.50
+formatNumber(1.5, '#,##0.###')                    // 1.5
+formatNumber(42, '0000')                          // 0042
+formatNumber(-52, '$#,##0.00')                    // -$52.00
+formatNumber(-52, '$#,##0.00;[Red]-$#,##0.00')    // -$52.00   (see the colour note)
+formatNumber(0.1234, '#,##0%')                    // 12%
+formatNumber(0.1234, '#,##0.0‰')                  // 123.4‰
+formatNumber(123456, '0.###E0')                   // 1.235E5
+formatNumber(12.5, "'€'#,##0.00")                 // €12.50
+formatNumber(42, '*0#,##0')                       // 0042
+formatNumber(0, '#,##0;-#,##0;(0);@')             // (0)
+formatNumber(NaN, '#,##0.00')                     // NaN
+formatNumber(Infinity, '#,##0.00')                // ∞</code></pre>
+      <div class="note">
+        Non-finite values never take a numeric section: <code>NaN</code> prints
+        <code>NaN</code> and ±<code>Infinity</code> prints <code>∞</code>, so a bad binding
+        shows up as a token rather than pattern-shaped noise. A <code>[Red]</code>-style
+        colour section is recognised by the parser but its colour is <strong>not applied
+        today</strong> — only the text is used. Paint a negative red by choosing the span
+        style yourself (a <code>format</code> + <code>style</code> pair, or an
+        <code>iif(...)</code> in HTML).
+      </div>
+
+      <h3>Date patterns</h3>
+      <table>
+        <thead><tr><th>Token</th><th>Prints</th></tr></thead>
+        <tbody>
+          <tr><td><code>yyyy</code> / <code>yy</code></td><td><code>2026</code> / <code>26</code></td></tr>
+          <tr><td><code>MMMM</code> / <code>MMM</code> / <code>MM</code> / <code>M</code></td><td><code>October</code> / <code>Oct</code> / <code>10</code> / <code>10</code></td></tr>
+          <tr><td><code>dd</code> / <code>d</code></td><td><code>20</code> / <code>20</code></td></tr>
+          <tr><td><code>EEEE</code> / <code>EEE</code></td><td><code>Tuesday</code> / <code>Tue</code></td></tr>
+          <tr><td><code>HH</code> / <code>H</code> / <code>hh</code> / <code>h</code></td><td>24-hour and 12-hour hours, padded and bare</td></tr>
+          <tr><td><code>mm</code> / <code>ss</code> / <code>SSS</code></td><td>minutes, seconds, milliseconds (<code>14:05:09.123</code>)</td></tr>
+          <tr><td><code>a</code></td><td><code>AM</code> / <code>PM</code> — <code>h:mm a</code> → <code>2:05 PM</code></td></tr>
+          <tr><td><code>'text'</code></td><td>quoted literal, e.g. <code>yyyy-MM-dd'T'HH:mm</code> → <code>2026-10-20T14:05</code></td></tr>
+        </tbody>
+      </table>
+      <p>
+        Input may be a <code>Date</code>, a parseable string or an epoch number. Unknown
+        tokens are passed through unchanged rather than guessed, and there is
+        <strong>no support for quarters, week-of-year, eras or timezone offsets</strong>
+        (<code>QQQQ</code> prints <code>QQQQ</code>). Names are English only.
+      </p>
+      <p>
+        A pattern is read as numeric if it contains <code>0</code>, <code>#</code>,
+        <code>%</code> or <code>‰</code>; anything else goes to the date formatter — which is
+        why <code>format(value, 'dd/MM/yyyy')</code> and <code>format(value, '#,##0.00')</code>
+        share one entry point.
+      </p>
+    </section>
+
+    <section id="style">
+      <h2>Style &amp; box properties</h2>
+      <p>
+        Every block carries two bags: <code>StyleProps</code>, which <em>inherits</em> down the
+        node tree, and <code>BoxProps</code> (its superset), which sizes one box and does not
+        inherit. Both are sparse — a property left <code>undefined</code> keeps the parent's value
+        — and layout collapses them into a dense <code>ResolvedStyle</code> per node, so setting a
+        family and size once on <code>ReportDoc.style</code> and overriding one cell is normal.
+      </p>
+
+      <h3>Text properties (<code>StyleProps</code>)</h3>
+      <table>
+        <thead><tr><th>Property</th><th>Accepts</th><th>Default</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><code>fontFamily</code></td><td>family or stack (string | string[])</td><td>first registered face</td><td>The first stack entry that has a registered face wins. If none of them is registered, the nearest face in the registry (by weight, then style) is used rather than a random one, and only an empty registry falls back to heuristic metrics. Per-glyph fallback moves any code point the chosen face does not cover into one that does (ending at the registry's fallback family, <code>Helvetica</code> by default).</td></tr>
+          <tr><td><code>fontSize</code></td><td>number, <strong>points</strong></td><td><code>12</code></td><td>Not a <code>Length</code>: <code>'10pt'</code> is not accepted here. The HTML adapter converts CSS sizes to points for you.</td></tr>
+          <tr><td><code>fontWeight</code></td><td><code>100</code>…<code>900</code>, <code>'normal'</code>, <code>'bold'</code></td><td><code>400</code></td><td>CSS font matching: the nearest registered weight of the family wins, preferring lighter below 500 and heavier above. A family with no bold face is drawn with its regular face — bold is never synthesised.</td></tr>
+          <tr><td><code>fontStyle</code></td><td><code>'normal' | 'italic' | 'oblique'</code></td><td><code>'normal'</code></td><td><code>oblique</code> resolves as <code>italic</code>.</td></tr>
+          <tr><td><code>color</code></td><td><code>ColorInput</code></td><td><code>[0,0,0]</code></td><td>Text fill; also accepted as a bare colour by <code>border</code>.</td></tr>
+          <tr><td><code>backgroundColor</code></td><td><code>ColorInput</code></td><td>none</td><td>On a block it paints the whole line box; on a span (or a run inside text) only the glyphs' own rectangle.</td></tr>
+          <tr><td><code>opacity</code></td><td><code>0</code>…<code>1</code></td><td><code>1</code></td><td>On a <code>band.style</code> it fades everything inside the band — the watermark case.</td></tr>
+          <tr><td><code>lineHeight</code></td><td>multiplier (<code>1.4</code>) or <code>'normal'</code></td><td>face's natural height, floored at 1.15</td><td>A ratio, never a length: absolute line height = <code>lineHeight × fontSize</code>.</td></tr>
+          <tr><td><code>letterSpacing</code></td><td>number, points</td><td><code>0</code></td><td>Added to every glyph advance in measurement <em>and</em> drawing, so tracking cannot break a line early.</td></tr>
+          <tr><td><code>align</code></td><td><code>'left' | 'center' | 'right' | 'justify'</code></td><td><code>'left'</code></td><td>Justify stretches the inter-word gaps of every line except the last one and except a line that ended in a hard break. On an <code>image</code> the same value positions the picture inside the content box.</td></tr>
+          <tr><td><code>verticalAlign</code></td><td><code>'top' | 'middle' | 'bottom'</code></td><td><code>'top'</code></td><td>Read from a <strong><code>CellNode</code> only</strong>. A style bag (or a cell's <code>style</code>) carrying it is resolved and then ignored — there is no box to align inside a plain paragraph.</td></tr>
+          <tr><td><code>textDecoration</code></td><td><code>['underline' | 'line-through']</code></td><td><code>[]</code></td><td>Unions with the inherited list instead of replacing it, so a link inside underlined prose keeps both.</td></tr>
+          <tr><td><code>features</code></td><td>OpenType tags, e.g. <code>{ tnum: true }</code></td><td>none</td><td>Merged additively with inherited tags and passed to both measurement and drawing. Only has an effect if the embedded font implements the tag.</td></tr>
+          <tr><td><code>fontVariant</code></td><td><code>'normal' | 'small-caps' | 'tabular-nums'</code></td><td><code>'normal'</code></td><td>Only <code>tabular-nums</code> does anything — it is shorthand for the <code>tnum</code> feature. <code>small-caps</code> is accepted and ignored.</td></tr>
+          <tr><td><code>whiteSpace</code></td><td><code>'normal' | 'nowrap' | 'pre-wrap'</code></td><td><code>'normal'</code></td><td>Taken from the paragraph's first run: <code>nowrap</code> suppresses wrapping, <code>pre-wrap</code> keeps runs of spaces and <code>\n</code>.</td></tr>
+          <tr><td><code>textTransform</code></td><td><code>'none' | 'uppercase' | 'lowercase' | 'capitalize'</code></td><td><code>'none'</code></td><td>Applied before measuring, so wrap points, TOC rows and PDF bookmarks show the transformed text.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Box properties (<code>BoxProps</code>)</h3>
+      <p>These do not inherit: set them where you want them to take effect.</p>
+      <table>
+        <thead><tr><th>Property</th><th>Where it is honoured</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><code>marginTop</code> / <code>Right</code> / <code>Bottom</code> / <code>Left</code></td><td>every block</td><td>Numbers in points (or unit strings). Left/right shrink the content box; top/bottom become the first/last fragment's spacing, so a paragraph that splits across pages only pays them once per side.</td></tr>
+          <tr><td><code>paddingTop</code>…<code>Left</code></td><td>paragraphs, headings, charts, table cells</td><td>Cells fall back to a built-in 1pt / 3pt / 1pt / 3pt padding for any side you do not set.</td></tr>
+          <tr><td><code>width</code>, <code>height</code></td><td><code>image</code>, <code>chart</code> (height), <code>barcode</code> (1D bar height)</td><td><strong>Not</strong> a general layout model: a paragraph or heading ignores <code>width</code> (the content box plus margins decides it), and a table's width is the sum of its <code>columns[].width</code>. An image keeps its intrinsic aspect ratio and is clamped to the content width.</td></tr>
+          <tr><td><code>minHeight</code></td><td>table rows</td><td>Row height = <code>max(content, minHeight)</code>.</td></tr>
+          <tr><td><code>border</code>, <code>borderTop</code>, <code>borderRight</code>, <code>borderBottom</code>, <code>borderLeft</code></td><td>blocks and cells</td><td>Shorthand forms: a bare colour, <code>[width, colour]</code> or <code>[width, style, colour]</code>. Default width is 1pt (0.5pt inside tables). <code>solid</code>/<code>dashed</code>/<code>dotted</code> map to no dash, <code>[4,3]</code> and <code>[1,2]</code>; <code>double</code> draws as one solid line. On a split paragraph, top/bottom edges are drawn once (first/last fragment) and left/right run the full height.</td></tr>
+          <tr><td><code>breakBefore</code>, <code>breakAfter</code></td><td>blocks</td><td><code>'page'</code> forces a break (never a trailing blank page, and never a break at the top of a page). <code>'avoid'</code> is accepted and ignored.</td></tr>
+          <tr><td><code>breakInside</code></td><td>blocks</td><td><code>'avoid'</code> chains the block's fragments so pagination moves them as one unit.</td></tr>
+          <tr><td><code>keepWithNext</code></td><td>blocks</td><td>Glues this block to the one after it — the usual way to hold a heading with its first paragraph.</td></tr>
+          <tr><td><code>id</code></td><td>every block</td><td>Defines a named destination that <code>#id</code> links jump to; also the anchor a TOC entry or bookmark resolves to.</td></tr>
+          <tr><td><code>visible</code></td><td>top-level blocks</td><td>Only the literal <code>false</code> is consulted (the block lays out to nothing). An expression form is not evaluated, and rows/cells do not carry it.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Lengths and colours</h3>
+      <p>
+        A <code>Length</code> is a number — always points — or a string with a unit:
+        <code>pt</code>, <code>mm</code>, <code>cm</code>, <code>in</code>, <code>pc</code> (12pt) and
+        <code>px</code> (the CSS 96dpi reference pixel, ×0.75). <code>%</code> is <em>not</em> resolved
+        against a container; it is read as points, so prefer explicit sizes or leave a column
+        unpinned and use <code>grow</code>. Internal coordinates are points end to end: layout never
+        sees DPI.
+      </p>
+      <p>
+        A <code>ColorInput</code> is <code>[r,g,b]</code> in 0…1 or a string: <code>#rgb</code>,
+        <code>#rrggbb</code> (with optional alpha, ignored for painting), <code>rgb()</code> /
+        <code>rgba()</code> in 0–255, 0–1 or percent forms, or a name from a fixed ~50-entry list
+        (<code>crimson</code>, <code>steelblue</code>, <code>lightgray</code>…). Anything else throws
+        at layout time; note that <code>transparent</code> resolves to white, not to “no paint”.
+      </p>
+
+      <h3>What the HTML adapter understands</h3>
+      <p>
+        Declarations are parsed from <code>&lt;style&gt;</code> sheets, <code>class</code> matches and
+        inline <code>style</code> attributes, ordered by CSS-ish specificity
+        (<code>ids × 10000 + classes × 100 + tags</code>, source order breaking ties), with inline
+        styles last. A trailing <code>!important</code> is simply removed from the value, so
+        specificity and source order alone decide which declaration wins.
+      </p>
+      <table>
+        <thead><tr><th>Parsed into the IR</th><th>Recognised but dropped</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>
+              <code>font-size</code>, <code>font-family</code>, <code>font-weight</code>,
+              <code>font-style</code>, <code>color</code>, <code>background</code> /
+              <code>background-color</code>, <code>text-align</code>, <code>text-decoration</code>
+              (<code>underline</code> / <code>line-through</code>), <code>opacity</code>,
+              <code>line-height</code>, <code>letter-spacing</code>, <code>white-space</code>,
+              <code>text-transform</code>, <code>width</code>, <code>height</code>,
+              <code>min-height</code>, <code>vertical-align</code> (lifted onto
+              <code>CellNode</code>), <code>margin</code>/<code>padding</code> shorthand and sides,
+              <code>border</code>, <code>border-top</code>, <code>border-bottom</code>,
+              <code>break-before</code>/<code>page-break-before</code>,
+              <code>break-after</code>/<code>page-break-after</code>,
+              <code>break-inside</code>/<code>page-break-inside</code>
+            </td>
+            <td>
+              <code>border-left</code> / <code>border-right</code> and <code>border-width</code> /
+              <code>border-style</code> / <code>border-color</code> (the IR supports side borders,
+              the adapter does not parse them), <code>font-variant</code>,
+              <code>font-feature-settings</code>, the <code>font</code> shorthand (write the
+              longhands),
+              <code>display</code> (including <code>none</code>), <code>visibility</code>,
+              <code>text-indent</code>, <code>word-spacing</code>, <code>border-spacing</code>,
+              <code>float</code>, <code>position</code>, flex and grid properties — unknown
+              properties are skipped silently, so a report never fails on CSS it cannot use
+            </td>
+          </tr>
+          <tr>
+            <td><code>line-height: 1.5</code> or <code>normal</code> — a ratio</td>
+            <td><code>line-height: 18px</code> — a fixed line height cannot be scaled against an
+              unknown font size, so it is ignored rather than mis-multiplied</td>
+          </tr>
+          <tr>
+            <td><code>background: #eee repeat-x …</code> — the first token is taken as the colour</td>
+            <td>every other <code>background</code> layer, gradient or image</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
     <section id="types">
       <h2>Exported types</h2>
       <p>
@@ -343,6 +710,7 @@ CellNode:   { content?, colSpan?, rowSpan?, align?, verticalAlign?, style?,
         <a href="getting-started.html#first-report">Your first report</a>
         <a href="getting-started.html#charts">Charts</a>
         <a href="getting-started.html#navigation">TOC, bookmarks &amp; links</a>
+        <a href="getting-started.html#breaks">Breaks &amp; keep-together</a>
         <a href="getting-started.html#barcodes">Barcodes</a>
         <a href="getting-started.html#web-fonts">Web fonts &amp; CJK</a>
         <a href="getting-started.html#cli">Command line</a>
@@ -353,6 +721,8 @@ CellNode:   { content?, colSpan?, rowSpan?, align?, verticalAlign?, style?,
         <a href="api.html#ir">IR block types</a>
         <a href="api.html#options">Render options</a>
         <a href="api.html#html-options">HTML adapter options</a>
+        <a href="api.html#expr">Expression language</a>
+        <a href="api.html#style">Style &amp; box properties</a>
         <a href="examples.html">Example recipes</a>
         <a href="examples.html#ex-tour">Full worked example</a>
         <a href="browser-demo.html">Browser demo</a>

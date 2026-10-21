@@ -1,14 +1,12 @@
 /**
  * Function library exposed to report expressions, plus the aggregation engine.
  *
- * Aggregates need the row collection, which an expression cannot see from inside
- * a single row, so they take it explicitly:
- *
- *   `sum(rows, 'amount')`              — path shorthand
- *   `sum(rows, r => r.total * 1.2)`    — full control
- *
- * The layout engine binds `rows` to the current group's row array before
- * evaluating, and pre-computes group totals for `{TOP}`/`{BOTTOM}` tokens.
+ * Note the split: `sum`/`min`/`max` in the *library* are plain numeric helpers
+ * over their arguments (arrays are flattened), not row aggregates —
+ * `sum(1, 2, 3)`, `sum(rows.map(r => r.amount))`. Row-set aggregation happens in
+ * layout, which pre-computes the enclosing group's totals and exposes them as
+ * `$group.<key>_sum | _avg | _min | _max | _count` plus `rowCount` (they need
+ * `columns[].key`), and binds `rows` to the group's row array for that pass.
  */
 import { formatNumber, formatDate, DEFAULT_SYMBOLS, type NumberSymbols } from './format.js';
 

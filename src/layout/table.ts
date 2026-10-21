@@ -176,8 +176,8 @@ function sampleTexts(units: Unit[], col: number): string[] {
   return out;
 }
 
-function preview(cell: CellNode): string {
-  const c = cell.content;
+function preview(cell: CellContent): string {
+  const c = asCellNode(cell).content;
   if (typeof c === 'string' || typeof c === 'number') return String(c);
   return '';
 }
@@ -238,7 +238,7 @@ function layoutRow(unit: Extract<Unit, { t: 'header' | 'footer' | 'detail' }>, u
       left: cell.paddingLeft ?? CELL_PAD.left,
     };
     const innerW = Math.max(1, w - pad.left - pad.right);
-    const result = typeset(cellInlines(cell, column, style, ctx, scope), innerW);
+    const result = typeset(cellInlines(cell, column, style, ctx, scope, unit.t === 'detail' && unit.static !== true), innerW);
     const contentH = result.lines.reduce((sum, l) => sum + l.height, 0);
 
     layouts.push({
@@ -272,7 +272,17 @@ function layoutRow(unit: Extract<Unit, { t: 'header' | 'footer' | 'detail' }>, u
     drawSides(commands, cl.borders, cl.x, 0, cl.w, rowHeight);
   }
 
-  const role = unit.t === 'header' ? 'header' : unit.t === 'footer' ? 'footer' : 'detail';
+  // Header rows repeat on every page the table spans, with or without the flag; the
+  // paginator keys the replay off `role: 'header'`, so `repeatHeader: false` is the
+  // only thing this knob can meaningfully do — opt the repetition out.
+  const role =
+    unit.t === 'header'
+      ? uc.block.repeatHeader === false
+        ? 'detail'
+        : 'header'
+      : unit.t === 'footer'
+        ? 'footer'
+        : 'detail';
   return {
     height: rowHeight,
     before: isFirstVisual ? uc.margin.top : 0,
@@ -377,7 +387,7 @@ function layoutMergedRun(run: RowUnit[], uc: UnitCtx, isFirstVisual: boolean): F
         left: cell.paddingLeft ?? CELL_PAD.left,
       };
       const innerW = Math.max(1, w - pad.left - pad.right);
-      const result = typeset(cellInlines(cell, column, style, ctx, scope), innerW);
+      const result = typeset(cellInlines(cell, column, style, ctx, scope, unit.t === 'detail' && unit.static !== true), innerW);
       const contentH = result.lines.reduce((sum, l) => sum + l.height, 0);
       const x = uc.contentLeft + columns.slice(0, startCol).reduce((s, c) => s + c.width, 0);
 
@@ -441,7 +451,7 @@ function layoutMergedRun(run: RowUnit[], uc: UnitCtx, isFirstVisual: boolean): F
 
   const allHeader = run.every((u) => u.t === 'header');
   const allFooter = run.every((u) => u.t === 'footer');
-  const role = allHeader ? 'header' : allFooter ? 'footer' : 'detail';
+  const role = allHeader && uc.block.repeatHeader !== false ? 'header' : allFooter ? 'footer' : 'detail';
   return {
     height: totalH,
     before: isFirstVisual ? uc.margin.top : 0,
@@ -515,13 +525,30 @@ function bandContent(band: Content | undefined, group: GroupNode, value: unknown
 
 // --- helpers ---------------------------------------------------------------
 
-function cellInlines(cell: CellNode, column: ResolvedColumn | undefined, style: ResolvedStyle, ctx: LayoutContext, scope: ExprContext): InlineSource[] {
-  let content = cell.content as CellContent | undefined;
+function cellInlines(
+  cell: CellContent,
+  column: ResolvedColumn | undefined,
+  style: ResolvedStyle,
+  ctx: LayoutContext,
+  scope: ExprContext,
+  autoBind: boolean,
+): InlineSource[] {
+  let content = asCellNode(cell).content as CellContent | undefined;
   if (content && typeof content === 'object' && !Array.isArray(content) && 'content' in content) {
     content = (content as CellNode).content;
   }
-  if ((content === undefined || content === '') && column?.key) content = { bind: column.key, format: cell.format } as Content;
+  // An empty cell in a data-driven detail row inherits its column's `key` as a
+  // binding. Only there: an authored header/footer cell left blank must stay blank,
+  // never turn into a binding of the column name.
+  if (autoBind && (content === undefined || content === '') && column?.key) {
+    content = { bind: column.key, format: cellFormat(cell) } as Content;
+  }
   return resolveContent(content as Content, ctx, style, scope);
+}
+
+/** Cell-level `format`, for the auto-bound case. */
+function cellFormat(cell: CellContent): string | undefined {
+  return cell && typeof cell === 'object' && !Array.isArray(cell) ? (cell as CellNode).format : undefined;
 }
 
 function gridShorthand(grid: GridSpec): BorderShorthand | undefined {
@@ -583,9 +610,21 @@ function detailCells(block: TableBlock): CellNode[] {
 }
 
 function asCellNode(c: CellContent): CellNode {
-  if (c && typeof c === 'object' && !Array.isArray(c) && 'content' in c) return c as CellNode;
+  if (c && typeof c === 'object' && !Array.isArray(c)) {
+    const obj = c as Record<string, unknown>;
+    const keys = Object.keys(obj);
+    // A `text`/`bind`/`children` carrier is always the cell's content; otherwise an
+    // empty object or one holding cell-only keys is a `CellNode` whose content may
+    // be blank (auto-bound from the column key in `cellInlines`).
+    if (obj.text === undefined && obj.bind === undefined && obj.children === undefined) {
+      if (keys.length === 0 || keys.some((k) => CELL_ONLY_KEYS.has(k))) return c as CellNode;
+    }
+  }
   return { content: c as Content };
 }
+
+/** Keys that exist on `CellNode` but never on a `ContentSpan`. */
+const CELL_ONLY_KEYS = new Set(['content', 'colSpan', 'rowSpan', 'align', 'verticalAlign', 'border', 'backgroundColor', 'subtotal', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft']);
 
 function buildGrouped(block: TableBlock, ctx: LayoutContext, scope: ExprContext, data: Array<Record<string, unknown>>, detailRow: RowNode): Unit[] {
   const group = block.groups![0]!;

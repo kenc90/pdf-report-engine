@@ -78,6 +78,13 @@ export function layoutBlock(block: Block, ctx: LayoutContext, opts: BlockLayoutO
     default:
       frags = [];
   }
+  // `breakInside: 'avoid'` (CSS `page-break-inside: avoid`) keeps the block on one
+  // page. A paragraph becomes one fragment per line, so the cheapest faithful
+  // implementation is to chain its fragments: pagination moves a keep-with-next run
+  // as a unit, which is exactly the machinery table rows already rely on.
+  if (block.breakInside === 'avoid') {
+    for (let i = 0; i < frags.length - 1; i += 1) frags[i]!.keepWithNext = true;
+  }
   // Any block with an `id` defines a named destination at its first fragment,
   // which is what `#id` links resolve against.
   if (block.id && frags.length && !frags[0]!.anchor) frags[0]!.anchor = block.id;

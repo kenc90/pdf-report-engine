@@ -33,6 +33,8 @@ export interface FormatResult {
 interface ParsedSection {
   pattern: string;
   literal: string;
+  /** True when the section carries no digit placeholder at all (`"—"`, `"N/A"`). */
+  literalOnly: boolean;
   minIntegerDigits: number;
   minFractionDigits: number;
   maxFractionDigits: number;
@@ -49,6 +51,11 @@ interface ParsedSection {
 
 const ESCAPED = /^'([^']|'')*'/;
 const QUOTED_LITERAL = /^"([^"]*)"/;
+
+/** Drop `'…'` / `"…"` quoted spans, so a literal `'%'` is not read as an attribute. */
+function stripQuoted(pattern: string): string {
+  return pattern.replace(/'[^']*'|"[^"]*"/g, '');
+}
 
 function parseSection(pattern: string, symbols: NumberSymbols): ParsedSection {
   let prefix = '';
@@ -74,9 +81,13 @@ function parseSection(pattern: string, symbols: NumberSymbols): ParsedSection {
   const body = pattern.slice(numericStart, matchedEnd(pattern, numericStart));
   const exp = /(?:[eE])([0#]*)$/.exec(body);
   const mantissa = exp ? body.slice(0, exp.index) : body;
-  const percentScale = mantissa.includes(symbols.percent) || /%/.test(mantissa);
-  const permilleScale = /‰/.test(mantissa);
-  const currency = /¤/.test(mantissa) || prefix.includes(symbols.currency) || suffix.includes(symbols.currency);
+  // Scaling and currency belong to the *whole* section: in `#,##0.0%` the percent
+  // sign sits in the suffix (matchedEnd moves it out of `body`), so testing only
+  // the numeric body silently dropped the ×100. Quoted spans are stripped first.
+  const bare = stripQuoted(pattern);
+  const percentScale = bare.includes('%') || bare.includes(symbols.percent);
+  const permilleScale = bare.includes('‰');
+  const currency = bare.includes('¤') || prefix.includes(symbols.currency) || suffix.includes(symbols.currency);
 
   const [intPartRaw, fracPartRaw = ''] = splitDecimal(mantissa);
   const intPart = intPartRaw.replace(/[,%‰¤]/g, '');
@@ -99,6 +110,7 @@ function parseSection(pattern: string, symbols: NumberSymbols): ParsedSection {
   return {
     pattern,
     literal: '',
+    literalOnly: numericStart >= pattern.length,
     minIntegerDigits: exp ? 1 : Math.max(1, minIntegerDigits),
     minFractionDigits,
     maxFractionDigits,
@@ -123,8 +135,16 @@ function matchedEnd(pattern: string, numericStart: number): number {
 }
 
 function findNumericStart(pattern: string): number {
-  const m = /[0#]/.exec(pattern);
-  return m ? m.index : pattern.length;
+  // `*X` is the ICU pad escape: the character after `*` is padding, not a digit
+  // placeholder, so the scan for the numeric body has to step over the pair.
+  for (let i = 0; i < pattern.length; i += 1) {
+    if (pattern[i] === '*' && i + 1 < pattern.length) {
+      i += 1;
+      continue;
+    }
+    if (pattern[i] === '0' || pattern[i] === '#') return i;
+  }
+  return pattern.length;
 }
 
 function splitDecimal(body: string): [string, string] {
@@ -246,6 +266,9 @@ function group(digits: string, size: number, sep: string): string {
 }
 
 function applyPattern(value: number, sec: ParsedSection, symbols: NumberSymbols): string {
+  // A section with no digit placeholder is a label (`#,##0;-#,##0;—`): print the
+  // affixes only — padding a synthetic `0` onto it read as "—0" in a total column.
+  if (sec.literalOnly) return `${sec.prefix}${sec.suffix}`;
   let v = value;
   if (sec.percentScale) v *= 100;
   if (sec.permilleScale) v *= 1000;
@@ -272,8 +295,12 @@ function applyPattern(value: number, sec: ParsedSection, symbols: NumberSymbols)
     text = fracDigits ? `${intDigits}${symbols.decimal}${fracDigits}` : intDigits;
   }
   if (sec.padChar) text = text.padStart(text.length + 2, sec.padChar);
-  const sign = negative ? symbols.minus : '';
-  return `${sec.prefix}${sign}${text}${sec.suffix}`;
+  // ICU/Java put the negative sign *before* the prefix (`-$1,234.50`), and when the
+  // section's own affixes already carry one (`[Red]-$#,##0.00`) the affix supplies
+  // it — emitting ours as well produced the doubled `-$-52.00`.
+  const affixSigned = sec.prefix.includes(symbols.minus) || sec.suffix.includes(symbols.minus);
+  const sign = negative && !affixSigned ? symbols.minus : '';
+  return `${sign}${sec.prefix}${text}${sec.suffix}`;
 }
 
 function roundTo(value: number, digits: number): number {
@@ -293,9 +320,14 @@ export function formatNumber(
   pattern = '#,##0.###',
   symbols: NumberSymbols = DEFAULT_SYMBOLS,
 ): FormatResult {
+  // Non-finite input never takes a numeric section: like ICU/Java it prints a fixed
+  // token, so a bad binding shows up as `NaN` rather than the pattern-shaped
+  // `NaN.00` the digit loop used to produce.
+  if (Number.isNaN(value)) return { text: 'NaN' };
+  if (!Number.isFinite(value)) return { text: `${value < 0 ? symbols.minus : ''}\u221e` };
   const sections = parsePattern(pattern, symbols);
   const negative = value < 0;
-  const zero = value === 0 || Number.isNaN(value);
+  const zero = value === 0;
   let sec: ParsedSection;
   if (zero && sections.length >= 3) sec = sections[2]!;
   else if (negative && sections.length >= 2) sec = sections[1]!;

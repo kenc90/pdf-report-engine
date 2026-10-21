@@ -15,7 +15,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
-import { createReport, renderToBuffer, readFontFiles, type ReportDoc, type FontSource } from '../src/index.js';
+import { createReport, renderToBuffer, readFontFiles, type ReportDoc, type FontSource, type Page, type PlacedFragment } from '../src/index.js';
 
 const ARIAL = 'C:/Windows/Fonts/arial.ttf';
 const hasArial = fs.existsSync(ARIAL);
@@ -48,14 +48,22 @@ function multiPageReport(rows: number): ReportDoc {
   };
 }
 
-function footerText(page: ReturnType<typeof createReport>['pages'][number]): string {
+/** Concatenated text drawn by one placed fragment. */
+function placedText(placed: PlacedFragment): string {
   let out = '';
-  for (const placed of page.footer) {
-    for (const cmd of placed.fragment.commands) {
-      if (cmd.op === 'text') out += cmd.runs.map((r) => r.text).join('');
-    }
+  for (const cmd of placed.fragment.commands) {
+    if (cmd.op === 'text') out += cmd.runs.map((r) => r.text).join('');
   }
   return out;
+}
+
+function footerText(page: Page): string {
+  return page.footer.map(placedText).join('');
+}
+
+/** All text the page flowed into its body area. */
+function bodyText(page: Page): string {
+  return page.body.map(placedText).join('');
 }
 
 describe('pagination + running tokens', () => {
@@ -86,6 +94,50 @@ describe('pagination + running tokens', () => {
       expect(text).toContain(String(i + 1)); // this page's logical number
       expect(text).toContain(String(total)); // {TOTAL}
     });
+  });
+
+  it('honours breakAfter: "page", and never leaves a trailing blank page', () => {
+    const doc = (body: ReportDoc['body']): ReportDoc => ({ page: { size: 'a4', margin: 51 }, body });
+    const { pages } = createReport(
+      doc([
+        { type: 'paragraph', content: 'first', breakAfter: 'page' },
+        { type: 'paragraph', content: 'second' },
+      ]),
+      {},
+    );
+    expect(pages).toHaveLength(2);
+    expect(bodyText(pages[0]!)).toContain('first');
+    expect(bodyText(pages[1]!)).toContain('second');
+
+    // The same break at the very end of the document must not add an empty page.
+    const trailing = createReport(
+      doc([
+        { type: 'paragraph', content: 'only' },
+        { type: 'paragraph', content: 'tail', breakAfter: 'page' },
+      ]),
+      {},
+    );
+    expect(trailing.pages).toHaveLength(1);
+  });
+
+  it('keeps a breakInside: "avoid" paragraph on one page, and splits it without the flag', () => {
+    const lines = 'one two three four five six seven eight nine ten';
+    const body = (breakInside?: 'avoid'): ReportDoc['body'] => [
+      { type: 'paragraph', content: 'filler' },
+      { type: 'paragraph', content: lines, ...(breakInside ? { breakInside } : {}) },
+    ];
+    // 37pt of content height, four 12pt lines need ~56: enough to force a split.
+    const doc: ReportDoc = { page: { size: [100, 45], margin: 4 }, body: body() };
+    const split = createReport(doc, {});
+    expect(split.pages).toHaveLength(2);
+    expect(bodyText(split.pages[1]!)).toContain('five');
+
+    // With `avoid` the paragraph is chained into one atomic run: never split, so it
+    // stays on the page it started on (and overruns rather than breaking in half).
+    const kept = createReport({ ...doc, body: body('avoid') }, {});
+    expect(kept.pages).toHaveLength(1);
+    expect(bodyText(kept.pages[0]!)).toContain('one');
+    expect(bodyText(kept.pages[0]!)).toContain('ten');
   });
 });
 

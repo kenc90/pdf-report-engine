@@ -3,10 +3,11 @@
  * aggregates. Design constraints:
  *
  *  - no `eval` of arbitrary host globals: the expression runs inside a strict
- *    `Function` whose scope is a proxy whitelist.
- *  - no property access on `Object.prototype` and friends (`__proto__`,
- *    `constructor`, `prototype` are rejected) so a report template cannot reach
- *    the runtime through a data object.
+ *    `Function` whose scope is a proxy whitelist, and every ECMAScript built-in
+ *    is shadowed by a parameter bound to `undefined`.
+ *  - no prototype reachability: `__proto__` / `constructor` / `prototype` and any
+ *    dunder property are rejected in the source, in *every* access form (`.x`,
+ *    `['x']`, bare), so a template cannot walk from a data value to `Function`.
  *  - identifiers starting with `$` are the data scope; bare names are functions
  *    from the function library.
  *
@@ -15,7 +16,33 @@
  * totals without becoming a language project.
  */
 
-const FORBIDDEN = new Set(['__proto__', 'constructor', 'prototype', 'globalThis', 'process', 'require', 'import']);
+/** Property names that may never be read, whatever the access form. */
+const FORBIDDEN_PROPS = ['__proto__', 'constructor', 'prototype'];
+
+/** Reserved words and host handles that may never appear as an identifier. */
+const FORBIDDEN_WORDS = ['eval', 'globalThis', 'global', 'process', 'require', 'import', 'export', 'module', 'this', 'arguments', 'super'];
+
+/**
+ * ECMAScript / host globals neutralised by shadowing them with an `undefined`
+ * parameter. Report templates get the whitelist below, never the realm's globals:
+ * `Date`/`Math`/`JSON`/`Function` are simply not there. (`eval`/`arguments` cannot
+ * be parameter names in strict code, so they are rejected by the scan instead.)
+ */
+const SHADOWED_GLOBALS = [
+  'Function', 'Date', 'Math', 'JSON', 'Object', 'Array', 'String', 'Number', 'Boolean', 'BigInt', 'Symbol',
+  'Reflect', 'Proxy', 'WeakMap', 'WeakSet', 'Map', 'Set', 'Promise', 'RegExp', 'Error', 'TypeError', 'RangeError',
+  'ReferenceError', 'SyntaxError', 'EvalError', 'URIError', 'ArrayBuffer', 'SharedArrayBuffer', 'DataView',
+  'Int8Array', 'Uint8Array', 'Int16Array', 'Uint16Array', 'Int32Array', 'Uint32Array', 'Float32Array', 'Float64Array',
+  'TextEncoder', 'TextDecoder', 'URL', 'URLSearchParams', 'Intl', 'WebAssembly', 'Atomics', 'structuredClone',
+  'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval', 'queueMicrotask', 'fetch', 'XMLHttpRequest',
+  'window', 'document', 'self', 'top', 'parent', 'Buffer',
+];
+
+/**
+ * Keys stripped from incoming data and refused by the scope proxy. Deliberately
+ * narrow: ordinary report fields must survive `harden()`.
+ */
+const FORBIDDEN_KEYS = new Set([...FORBIDDEN_PROPS, 'globalThis', 'process', 'require', 'import']);
 
 /**
  * The scope roots exposed as direct identifiers in a compiled expression, in the
@@ -51,7 +78,7 @@ export function exprSource(expr: unknown): string | undefined {
 }
 
 function isSafeKey(key: unknown): boolean {
-  return typeof key === 'string' ? !FORBIDDEN.has(key) : true;
+  return typeof key === 'string' ? !FORBIDDEN_KEYS.has(key) : true;
 }
 
 /** Recursive guard: data objects coming from user JSON can carry hostile keys. */
@@ -80,22 +107,38 @@ export class CompiledExpr {
   private readonly fn: (...args: unknown[]) => unknown;
   /** Library function values, ordered to match the parameter names bound below. */
   private readonly libArgs: unknown[];
+  /** One `undefined` per shadowed global, so those names can never resolve. */
+  private readonly shadowArgs: unknown[];
 
   constructor(source: string, functions: Record<string, (...args: never[]) => unknown>) {
     this.source = source;
-    // Validate before wrapping: reject forbidden identifiers entirely.
-    for (const forbidden of FORBIDDEN) {
+    // Validate before wrapping. Forbidden *properties* are matched even after a
+    // dot or inside a bracket string, because `.constructor` is precisely how a
+    // template would climb from a data value to `Function`.
+    for (const forbidden of FORBIDDEN_PROPS) {
+      if (new RegExp(`(^|[^$\\w])${forbidden}\\b`).test(source)) {
+        throw new Error(`Expression references a forbidden identifier "${forbidden}": ${source}`);
+      }
+    }
+    for (const forbidden of FORBIDDEN_WORDS) {
       if (new RegExp(`(^|[^$\\w.])${forbidden}\\b`).test(source)) {
         throw new Error(`Expression references a forbidden identifier "${forbidden}": ${source}`);
       }
     }
+    // Any dunder (`__defineGetter__`, `__lookupGetter__`, …) is prototype plumbing.
+    if (/__\w/.test(source)) {
+      throw new Error(`Expression may not access a dunder property: ${source}`);
+    }
     // Scope roots are declared as parameters so a template can write them
     // directly (`$page.number`, `$row.amount * 1.2`, `$group.total`). The `$`
     // proxy stays for `$.whatever` member access; everything else is a library
-    // function from the whitelist.
+    // function from the whitelist. Globals are shadowed last so they can never
+    // resolve to the host realm's.
     const libNames = Object.keys(functions);
-    const names = ['$', 'rows', ...SCOPE_PARAM_NAMES, ...libNames];
+    const shadowed = SHADOWED_GLOBALS.filter((g) => !libNames.includes(g) && !SCOPE_PARAM_NAMES.includes(g as never));
+    const names = ['$', 'rows', ...SCOPE_PARAM_NAMES, ...libNames, ...shadowed];
     this.libArgs = libNames.map((n) => functions[n]);
+    this.shadowArgs = shadowed.map(() => undefined);
     try {
       // eslint-disable-next-line no-new-func
       this.fn = new Function(...names, `"use strict"; return (${source});`) as (
@@ -155,7 +198,11 @@ export class CompiledExpr {
       $index: ctx.$index ?? 0,
     };
     const scopeArgs = SCOPE_PARAM_NAMES.map((name) => rootValues[name]);
-    return this.fn(proxy, rows ?? [], ...scopeArgs, ...this.libArgs);
+    // Call detached (not `this.fn(...)`), so in strict mode `this` inside the
+    // closure is `undefined` rather than this instance — a template cannot read
+    // the engine's own objects off the receiver.
+    const fn = this.fn;
+    return fn(proxy, rows ?? [], ...scopeArgs, ...this.libArgs, ...this.shadowArgs);
   }
 }
 

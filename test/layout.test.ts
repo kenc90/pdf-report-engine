@@ -37,6 +37,17 @@ describe('block layout', () => {
     expect(frags[0]!.before).toBeCloseTo(12, 3);
     expect(frags.at(-1)!.after).toBeCloseTo(6, 3);
   });
+
+  it('chains breakInside: "avoid" fragments so pagination moves them as one run', () => {
+    const ctx = makeCtx();
+    const para: ParagraphBlock = { type: 'paragraph', content: 'aaa bbb ccc', breakInside: 'avoid' };
+    const frags = layoutBlock(para, ctx, opts(20)); // wraps to 3 lines
+    expect(frags).toHaveLength(3);
+    expect(frags.slice(0, -1).every((f) => f.keepWithNext === true)).toBe(true);
+    expect(frags.at(-1)!.keepWithNext).toBeFalsy();
+    // Without the flag a wrapped paragraph is free to break line by line.
+    expect(layoutBlock({ type: 'paragraph', content: 'aaa bbb ccc' }, ctx, opts(20)).some((f) => f.keepWithNext)).toBe(false);
+  });
 });
 
 describe('table layout', () => {
@@ -76,6 +87,30 @@ describe('table layout', () => {
     const ctx = makeCtx();
     const frags = layoutBlock(sampleTable(), ctx, opts(140));
     for (const f of frags) expect(f.avoidSplit).toBe(true);
+  });
+
+  it('keeps authored literal header cells literal even when columns carry keys', () => {
+    const ctx = makeCtx();
+    const block = sampleTable();
+    // The loose form (plain strings in a header row) must render as text, not be
+    // mistaken for a missing binding of the column key.
+    block.headerRows = [{ kind: 'header', cells: ['Name', 'Qty'] } as never];
+    const texts = layoutBlock(block, ctx, opts(140)).map(fragmentText);
+    expect(texts[0]).toContain('Name');
+    expect(texts[0]).toContain('Qty');
+    expect(texts[1]).toContain('apple');
+  });
+
+  it('auto-binds a blank detail cell and leaves a blank header cell blank', () => {
+    const ctx = makeCtx();
+    const block = sampleTable();
+    block.detail = { cells: [{} as never, {} as never] };
+    block.headerRows = [{ kind: 'header', cells: [{}, {}] as never }];
+    const texts = layoutBlock(block, ctx, opts(140)).map(fragmentText);
+    expect(texts[0]).toBe('');
+    expect(texts[1]).toContain('apple');
+    expect(texts[1]).toContain('3');
+    expect(texts[2]).toContain('banana');
   });
 
   it('lays a rowspan cell over its full merged height (vertical merge)', () => {

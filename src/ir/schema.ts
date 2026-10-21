@@ -75,10 +75,12 @@ export interface BoxProps extends StyleProps {
   borderRight?: BorderShorthand;
   borderBottom?: BorderShorthand;
   borderLeft?: BorderShorthand;
-  /** Pagination behaviour. */
+  /** Pagination behaviour. Only `'page'` (break before/after) and `'avoid'`
+   * (`breakInside`) are implemented; `'avoid'` on `breakBefore`/`breakAfter` is ignored. */
   breakBefore?: 'auto' | 'page' | 'avoid';
   breakAfter?: 'auto' | 'page' | 'avoid';
   breakInside?: 'auto' | 'avoid';
+  /** Glue this block to the next one, so a heading never ends a page alone. */
   keepWithNext?: boolean;
 }
 
@@ -120,7 +122,10 @@ export interface SpacerBlock extends BlockBase {
 
 export interface PageBreakBlock extends BlockBase {
   type: 'pageBreak';
-  /** Only force a break if we are not already at the top of a page. */
+  /**
+   * @deprecated Accepted and ignored. A break is never taken at the top of a page, so
+   * consecutive `pageBreak` blocks cannot leave a blank page.
+   */
   always?: boolean;
 }
 
@@ -260,14 +265,19 @@ export interface BarcodeBlock extends BlockBase {
 export interface RowNode {
   cells: CellNode[];
   kind?: 'header' | 'detail' | 'groupHeader' | 'groupFooter' | 'subtotal' | 'grandTotal';
-  /** Row level pagination hints. */
+  /** Row level pagination hints. A row is already one atomic fragment, so
+   * `breakInside` changes nothing; `keepWithNext` glues it to the following row. */
   breakInside?: 'auto' | 'avoid';
   keepWithNext?: boolean;
   minHeight?: number;
 }
 
 export interface ColumnNode {
-  /** Fixed length, or a fraction of the available content width (0..1). */
+  /**
+   * Fixed length in points (a `Length`; a percentage is *not* resolved against the
+   * table). Leave it unset and give the column a `grow` weight to share whatever
+   * the pinned columns did not take.
+   */
   width?: number | string;
   /** Weight used when the table must stretch to the available width. */
   grow?: number;
@@ -295,7 +305,10 @@ export interface CellNode {
   paddingBottom?: number;
   paddingLeft?: number;
   backgroundColor?: ColorInput;
-  /** Aggregate to compute for the enclosing group, written back into `{TOP}` style tokens. */
+  /**
+   * @deprecated Accepted and ignored. Group totals are pre-computed for the whole group;
+   * read them in a footer with `$group.<key>_sum` (or `$group.rowCount`).
+   */
   subtotal?: 'sum' | 'count' | 'min' | 'max' | 'avg' | 'none';
   format?: string;
 }
@@ -308,6 +321,7 @@ export type DataSource =
 export interface GroupNode {
   /** Expression evaluated per row; rows where it changes start a new group. */
   by: string | Expr;
+  /** @deprecated Accepted and ignored (it is only collected for font subsetting). Put the text in `header`. */
   label?: string | Expr;
   header?: Content;
   footer?: Content;
@@ -317,6 +331,10 @@ export interface GroupNode {
   pageBreak?: boolean;
   /** Reset `{PAGE}` numbering at the group boundary (Jasper's "reset page number"). */
   resetPageNumber?: boolean;
+  /**
+   * @deprecated Accepted and ignored. A group header is printed once, where its group
+   * starts; the table's own `headerRows` are what repeat on every page.
+   */
   headerRepeat?: 'once' | 'everyPage';
 }
 
@@ -334,18 +352,24 @@ export interface TableBlock extends BlockBase {
   dataSource?: DataSource;
   detail?: RowNode | { cells: CellContent[]; style?: Partial<StyleProps> };
   groups?: GroupNode[];
-  /** Repeat `headerRows` at the top of every page the table spans. */
+  /**
+   * `headerRows` repeat at the top of every page the table spans automatically; this
+   * knob only has one meaningful value — `false` opts the repetition out.
+   */
   repeatHeader?: boolean;
-  /** Draw alternating row shading. */
+  /** Draw alternating row shading (default fill `#f2f2f2`, or pass `{ color }`). */
   striped?: boolean | { color: ColorInput };
   showGrid?: boolean | BorderShorthand;
+  /** @deprecated Accepted and ignored: the paginator draws no row-only separators yet. Use `showGrid`. */
   showRowSeparators?: boolean | BorderShorthand;
   rowStyle?: Partial<StyleProps> | ((row: Record<string, unknown>, index: number) => Partial<StyleProps>);
+  /** @deprecated Accepted and ignored. Style group bands through `groups[].headerStyle` / `footerStyle`. */
   groupStyle?: Partial<StyleProps>;
-  /** Minimum rows kept together at the bottom/top of a page. */
+  /** @deprecated Accepted and ignored: there is no widow/orphan control yet. */
   widows?: number;
+  /** @deprecated Accepted and ignored: there is no widow/orphan control yet. */
   orphans?: number;
-  /** Column name used for a `{TOP}`-style running subtotal token, if any. */
+  /** @deprecated Accepted and ignored; `{TOP}` / `$page.top` is never populated. */
   subtotalToken?: string;
 }
 

@@ -224,6 +224,12 @@ export function paginate(input: PaginateInput): Page[] {
       current!.body.push({ fragment: f, x: contentLeft, y: cursorY });
       cursorY += f.height + f.after;
     }
+    // `breakAfter: 'page'` (CSS `page-break-after: always`) closes the page the run
+    // just ended on. Skipped for the final run: a break at the end of the document
+    // must not leave a blank page behind.
+    if (run.length && bodyFragments[run[run.length - 1]!]!.breakAfter === 'page' && r < runs.length - 1) {
+      startNewPage();
+    }
   }
 
   function startNewPage(): void {

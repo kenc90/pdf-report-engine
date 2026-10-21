@@ -154,8 +154,8 @@ const pdf = await renderToBuffer(report, {
     <section id="data-table">
       <h2>Data-driven tables</h2>
       <p>Feed an array into <code>dataSource</code>; the <code>detail</code> template expands once
-      per row, <code>groups</code> produce breaks and subtotal footers, and <code>repeatHeader</code>
-      keeps column headers on every page.</p>
+      per row, <code>groups</code> produce breaks and subtotal footers, and column headers repeat on
+      every page the table spans (set <code>repeatHeader: false</code> to opt out).</p>
       <pre data-copy><code>const rows = [
   { region: 'North', product: 'Widget', qty: 12, amount: 2400 },
   { region: 'South', product: 'Gizmo',  qty:  3, amount:  990 },
@@ -194,6 +194,97 @@ const report = {
     ] },
   }],
 };</code></pre>
+    </section>
+
+    <section id="breaks">
+      <h2>Breaks &amp; keep-together</h2>
+      <p>
+        Pagination fills a vertical cursor down the page, one <em>fragment</em> at a time. A
+        paragraph becomes one fragment per typeset line — that is why prose flows freely across
+        pages — while a table row, an image, a chart, a barcode and a table-of-contents row are
+        each a single fragment and therefore atomic: if they do not fit below, they move whole to
+        the next page.
+      </p>
+
+      <h3>Forcing a break</h3>
+      <pre data-copy><code>{ type: 'pageBreak' }                                  // a block of its own
+{ type: 'heading', level: 1, content: 'Annex', breakBefore: 'page' }
+{ type: 'paragraph', content: 'End of part one', breakAfter: 'page' }</code></pre>
+      <p>
+        In HTML: <code>&lt;div style="page-break-before: always"&gt;</code> (or the modern
+        <code>break-before</code>), and the same for <code>page-break-after</code> /
+        <code>break-after</code>. A break is never taken twice: a forced break at the top of a page
+        — including a <code>pageBreak</code> block that follows another break — is swallowed, and a
+        <code>breakAfter: 'page'</code> on the last block does not add a blank page.
+      </p>
+
+      <h3>Keeping things together</h3>
+      <table>
+        <thead><tr><th>Goal</th><th>What to write</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>A heading must not sit alone at the foot of a page</td>
+            <td><code>keepWithNext: true</code> on the heading. It glues that block to the next one;
+              the chain keeps going, so two consecutive <code>keepWithNext</code> blocks plus their
+              shared follower move together.</td>
+          </tr>
+          <tr>
+            <td>A short paragraph, note or signature line must stay whole</td>
+            <td><code>breakInside: 'avoid'</code> on the block (in HTML,
+              <code>page-break-inside: avoid</code>). Its lines are chained into one run.</td>
+          </tr>
+          <tr>
+            <td>A small table should not be cut in half</td>
+            <td><code>breakInside: 'avoid'</code> on the table block — every row then travels with
+              every other row.</td>
+          </tr>
+          <tr>
+            <td>Column headers on every page of a long table</td>
+            <td>Nothing: <code>headerRows</code> repeat automatically whenever the table continues on
+              a new page. <code>repeatHeader: false</code> turns the repetition off;
+              <code>repeatHeader: true</code> is the default written out.</td>
+          </tr>
+          <tr>
+            <td>A group header stuck to its first data row</td>
+            <td>Automatic — group headers carry <code>keepWithNext</code> for you.</td>
+          </tr>
+          <tr>
+            <td>One group per page</td>
+            <td><code>groups: [{ by: '$row.region', pageBreak: true }]</code>, optionally with
+              <code>resetPageNumber: true</code> to restart <code>{PAGE}</code> from 1 on that page
+              (<code>$page.total</code> still counts the whole document).</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="note">
+        A keep-together chain is moved as a unit, and a chain taller than the page cannot be
+        satisfied: it is placed anyway and overruns the bottom margin, exactly as a browser does
+        with an oversized <code>page-break-inside: avoid</code> box. Keep the guarded content short.
+      </p>
+      <p>
+        <code>groups[].by</code> partitions <em>consecutive</em> rows, Jasper-style: the group ends
+        whenever the value changes. Sort the data by the grouping key first — interleaved
+        <code>North, South, North, …</code> input yields one group per row.
+      </p>
+
+      <h3>What pagination does not do</h3>
+      <p>
+        There are no widow/orphan controls (<code>widows</code>, <code>orphans</code> are accepted and
+        ignored), and <code>'avoid'</code> as a <em>break</em> value (<code>breakBefore: 'avoid'</code>,
+        <code>breakAfter: 'avoid'</code>) does nothing — express that with <code>keepWithNext</code> on
+        the block before instead. A group footer is the usual casualty: it can still be pushed onto
+        the next page alone, since its only hint is advisory. Also note that
+        <code>{TOP}</code> / <code>$page.top</code> (the height of the current page's content area) is
+        never populated, and <code>pageBreak</code> blocks ignore <code>always</code>.
+      </p>
+
+      <h3>Looking at the result</h3>
+      <p>
+        <code>createReport()</code> returns the model before any PDF is written, so break behaviour is
+        inspectable without a viewer:
+      </p>
+      <pre data-copy><code>const { pages } = createReport(report, {});
+pages.forEach((p, i) =&gt; console.log(i + 1, p.height, p.body.map((f) =&gt; f.fragment.height)));</code></pre>
     </section>
 
     <section id="charts">
@@ -502,6 +593,18 @@ npx tsx src/cli/html-to-pdf.ts samples/testimonial.html \
 
 # Build the sample multi-page report -> output/demo.pdf
 npm run demo</code></pre>
+      <table>
+        <thead><tr><th>Flag</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>&lt;input…&gt;</code></td><td>One or more HTML files and/or directories. A directory contributes its top-level <code>*.html</code>/<code>*.htm</code>. Each input is written as a same-named <code>.pdf</code>.</td></tr>
+          <tr><td><code>-o</code>, <code>--out &lt;path&gt;</code></td><td>Output location. A directory (or no <code>-o</code>) keeps each input's base name; a <code>.pdf</code> path is used verbatim, but only for a <em>single</em> input. Parent directories are created.</td></tr>
+          <tr><td><code>-d</code>, <code>--data &lt;file&gt;</code></td><td>JSON file whose object becomes the report <code>data</code> root for <code>data-each</code>/<code>data-bind</code>. If omitted, an adjacent <code>&lt;name&gt;.data.json</code> is auto-paired when present (so directory runs populate bound tables).</td></tr>
+          <tr><td><code>-f</code>, <code>--font &lt;spec&gt;</code></td><td>Register an embeddable font; repeatable. Accepts <code>&lt;path&gt;</code> (family inferred from the filename) or <code>&lt;family&gt;=&lt;path&gt;[:weight]</code>, and for a TrueType collection append <code>#&lt;PostScriptName&gt;</code> to pick a face (e.g. <code>mingliu.ttc#PMingLiU</code>). Explicit fonts override auto-detected ones per family + weight.</td></tr>
+          <tr><td><code>--page &lt;pt&gt;</code></td><td><strong>Base font size in points</strong> for the document (default 11) — <em>not</em> the page size. Must be a positive number.</td></tr>
+          <tr><td><code>--no-auto-fonts</code></td><td>Skip automatic system-font loading; use only the <code>-f</code> fonts you pass.</td></tr>
+          <tr><td><code>-h</code>, <code>--help</code></td><td>Show usage. Printed when no input is given.</td></tr>
+        </tbody>
+      </table>
       <p>
         By default the CLI auto-detects fonts <strong>per platform</strong> — Windows
         (<code>C:/Windows/Fonts</code>), macOS (<code>/System/Library/Fonts/Supplemental</code>),
@@ -513,6 +616,12 @@ npm run demo</code></pre>
         only — CJK will not render). Note that Georgia uses <strong>old-style figures</strong>
         (digits of mixed height); choose a lining-figure font such as Times New Roman or Arial if
         numerals must align with capitals.
+      </p>
+      <p>
+        Multiple inputs are processed independently: each file is converted in its own
+        try/catch, so one broken input is reported as <code>FAILED …</code> and the rest still
+        render. Any failure leaves a non-zero exit code, and relative image paths resolve
+        against each HTML file's own folder.
       </p>
       <p>Then explore the runnable library scripts in the <a href="examples.html">Examples</a> page,
       or read the full surface on the <a href="api.html">API reference</a>.</p>
@@ -537,6 +646,7 @@ npm run demo</code></pre>
         <a href="getting-started.html#first-report">Your first report</a>
         <a href="getting-started.html#charts">Charts</a>
         <a href="getting-started.html#navigation">TOC, bookmarks &amp; links</a>
+        <a href="getting-started.html#breaks">Breaks &amp; keep-together</a>
         <a href="getting-started.html#barcodes">Barcodes</a>
         <a href="getting-started.html#web-fonts">Web fonts &amp; CJK</a>
         <a href="getting-started.html#cli">Command line</a>
@@ -547,6 +657,8 @@ npm run demo</code></pre>
         <a href="api.html#ir">IR block types</a>
         <a href="api.html#options">Render options</a>
         <a href="api.html#html-options">HTML adapter options</a>
+        <a href="api.html#expr">Expression language</a>
+        <a href="api.html#style">Style &amp; box properties</a>
         <a href="examples.html">Example recipes</a>
         <a href="examples.html#ex-tour">Full worked example</a>
         <a href="browser-demo.html">Browser demo</a>

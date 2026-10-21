@@ -18,11 +18,12 @@ glyph embedding all happen in-process via [`pdfkit`](https://pdfkit.org) +
   characters (including CJK).
 - **Band-based pagination** (Jasper-style): `title`, `pageHeader`, `detail`,
   `groupHeader`, `groupFooter`, `pageFooter`, `summary`.
-- **Repeated table column headers** on every page a table spills onto.
-- **Group breaks** with per-group subtotal footers, plus **keep rules** and
-  **widow/orphan** control.
-- **Running tokens** `{PAGE}` / `{TOTAL}` / `{TOP}` (and `$page.number` / `$page.total` /
-  `$page.top` in expressions) resolved per page.
+- **Repeated table column headers** on every page a table spills onto (automatic;
+  `repeatHeader: false` opts out).
+- **Group breaks** with per-group subtotal footers, plus **keep rules** —
+  `keepWithNext` chains and `break-inside: avoid`.
+- **Running tokens** `{PAGE}` / `{TOTAL}` (and `$page.number` / `$page.total` in expressions)
+  resolved per page inside bands.
 - **Sandboxed expression evaluator** — data bindings run inside a `Proxy`-whitelisted
   scope with a small function library; there is no raw `eval` of globals.
 - **HTML-subset adapter** so you can author with plain markup.
@@ -276,9 +277,10 @@ const pdf = await renderToBuffer(report, { fonts: await readFontFiles([
   clipped to the text runs, and TOC rows link to their heading automatically.
 - **Highlights:** `<mark>` paints the browser-style `#fff2a8` run background unless the
   element sets its own `background-color`.
-- **Running tokens:** `{PAGE}`, `{TOTAL}`, `{TOP}` are rewritten into `$page.*` bindings. They
-  resolve to real per-page values inside a `data-band` header/footer; in plain body flow they
-  show the measure-time value.
+- **Running tokens:** `{PAGE}` and `{TOTAL}` are rewritten into `$page.number` / `$page.total`
+  bindings and resolve to real per-page values inside a `data-band` header/footer; in plain body
+  flow they show the measure-time placeholder (`1 of 1`). `{TOP}` maps to `$page.top`, which the
+  paginator never populates, so it renders empty.
 - **Inline `style` subset:** `font-size` (px → pt), `font-family`, `font-weight`,
   `font-style`, `color`, `background(-color)`, `opacity`, `text-align`, `text-decoration`,
   unitless `line-height`, `letter-spacing`, `white-space`, `text-transform`,
@@ -391,6 +393,10 @@ authoring family names samples use:
 Explicit `--font` entries are merged **with** these, so you can add a family (e.g. Times New
 Roman) without losing the CJK font. If no fonts are found (or with `--no-auto-fonts` and no
 `--font`), it renders with the standard PDF base-14 fonts (Latin-1 only — CJK will not render).
+
+A directory input contributes its **top-level** `*.html` / `*.htm` (no recursion). Each input
+is converted independently — one failing file is logged as `FAILED …` while the rest still
+render — and any failure sets a non-zero exit code.
 
 #### Sample HTML
 
@@ -578,7 +584,7 @@ Scope roots available inside expressions:
 | `$row` | current detail row |
 | `$group` | current group aggregate (e.g. `$group.amount_sum`) |
 | `$report` | report-level values |
-| `$page` | `{ number, total, top }` — running page tokens |
+| `$page` | `{ number, total }` — running page tokens, real values inside bands |
 | `$data` | the document's `data` object |
 | `$vars` | JS-precomputed report variables |
 | `$index` | current row index |
@@ -593,10 +599,16 @@ whole-report total the simplest approach is a `variables` entry referenced via `
 `createReport` runs a three-pass paginator:
 
 1. **Pass A** — measure fixed bands (headers/footers) with a placeholder page number.
-2. **Pass B** — flow the body, honouring `breakBefore`/`breakAfter`/`breakInside`,
-   keep-with-next runs, repeated table headers, group breaks and page resets.
+2. **Pass B** — flow the body one fragment at a time (a paragraph contributes a fragment per
+   typeset line; a table row, image, chart, barcode or TOC row is one atomic fragment), honouring
+   `breakBefore: 'page'`, `breakAfter: 'page'`, `pageBreak` blocks, `breakInside: 'avoid'` and
+   `keepWithNext` chains, automatic table-header repeats, group breaks and page-number resets.
 3. **Pass C** — re-flow headers/footers on each page with the real `$page` values, so
    `{PAGE}`/`{TOTAL}` are correct.
+
+There is no widow/orphan control, `'avoid'` as a *break* value is ignored (express that with
+`keepWithNext` on the block before), and a keep-together chain taller than the page is placed
+anyway rather than split.
 
 When the body contains a `toc` block, `createReport` wraps the passes in a fixed-point loop:
 lay out → paginate → collect the heading outline entries → rebuild the TOC with their real
