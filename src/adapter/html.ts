@@ -35,6 +35,8 @@ import type {
   FontReference,
   ChartBlock,
   ChartKind,
+  ColorScale,
+  StyleCondition,
   TocBlock,
   BarcodeBlock,
   BarcodeSymbology,
@@ -106,7 +108,10 @@ function lowerAttr(name: string): string {
 export function parseHtml(html: string): HElement {
   const root: HElement = { type: 'element', tag: '#root', attrs: {}, children: [] };
   const stack: HElement[] = [root];
-  const tagRe = /<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<!\w[^>]*>|<\/([a-zA-Z][\w:-]*)\s*>|<([a-zA-Z][\w:-]*)((?:\s+[^<>]*?)?)\s*(\/?)>/g;
+  // Quoted attribute values may legally contain `<`/`>` (e.g. `data-if="$row.amount > 0"`),
+  // so the tag body is scanned as quoted spans plus bare non-`>` characters.
+  const tagRe =
+    /<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<!\w[^>]*>|<\/([a-zA-Z][\w:-]*)\s*>|<([a-zA-Z][\w:-]*)((?:\s+(?:"[^"]*"|'[^']*'|[^>"'])*)?)\s*(\/?)>/g;
   const attrRe = /([a-zA-Z_][\w:.-]*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+)))?/g;
 
   const top = (): HElement => stack[stack.length - 1]!;
@@ -639,13 +644,18 @@ function numAttr(el: HElement, name: string): number | undefined {
 
 function chartKind(value: string | undefined, fallback: ChartKind = 'bar'): ChartKind {
   const v = (value ?? '').trim().toLowerCase();
-  return v === 'bar' || v === 'line' || v === 'area' || v === 'pie' || v === 'donut' ? v : fallback;
+  return v === 'bar' || v === 'line' || v === 'area' || v === 'pie' || v === 'donut' || v === 'combo' || v === 'waterfall'
+    ? v
+    : fallback;
 }
 
 function applyChartOptions(el: HElement, block: ChartBlock): void {
   const colors = el.attrs['data-colors'];
   if (colors) block.colors = colors.split(',').map((c) => c.trim()).filter(Boolean);
-  if (el.attrs['data-stacked'] !== undefined) block.stacked = boolAttr(el, 'data-stacked', true);
+  if (el.attrs['data-stacked'] !== undefined) {
+    const raw = el.attrs['data-stacked'].trim().toLowerCase();
+    block.stacked = raw === '100%' || raw === '100' || raw === 'percent' ? '100%' : boolAttr(el, 'data-stacked', true);
+  }
   if (el.attrs['data-show-values'] !== undefined) block.showValues = boolAttr(el, 'data-show-values', true);
   if (el.attrs['data-category-labels'] !== undefined) block.categoryLabels = boolAttr(el, 'data-category-labels', true);
   const legend = el.attrs['data-legend'];
@@ -667,6 +677,51 @@ function applyChartOptions(el: HElement, block: ChartBlock): void {
   if (el.attrs['data-axis-labels'] !== undefined) axis.labels = boolAttr(el, 'data-axis-labels', true);
   if (el.attrs['data-grid-lines'] !== undefined) axis.gridLines = boolAttr(el, 'data-grid-lines', true);
   if (Object.keys(axis).length > 0) block.valueAxis = axis;
+
+  // Combo charts: the secondary axis and per-series type/axis hints.
+  const right: NonNullable<ChartBlock['rightAxis']> = {};
+  const rMin = numAttr(el, 'data-right-min');
+  const rMax = numAttr(el, 'data-right-max');
+  const rTicks = numAttr(el, 'data-right-ticks');
+  if (rMin !== undefined) right.min = rMin;
+  if (rMax !== undefined) right.max = rMax;
+  if (rTicks !== undefined) right.ticks = rTicks;
+  if (el.attrs['data-right-format']) right.format = el.attrs['data-right-format'];
+  if (el.attrs['data-right-axis-labels'] !== undefined) right.labels = boolAttr(el, 'data-right-axis-labels', true);
+  if (Object.keys(right).length > 0) block.rightAxis = right;
+
+  // Waterfall: total indices and colour overrides.
+  const totals = el.attrs['data-totals'];
+  if (totals !== undefined && totals.trim() !== '') {
+    block.totals = totals
+      .split(',')
+      .map((s) => Number(s.trim()))
+      .filter((n) => Number.isFinite(n));
+  }
+  const waterfall = el.attrs['data-waterfall-colors'];
+  if (waterfall) {
+    const wf: NonNullable<ChartBlock['waterfallColors']> = {};
+    for (const part of waterfall.split(/[;,]/)) {
+      const [key, value] = part.split('=');
+      const k = (key ?? '').trim().toLowerCase();
+      const v = (value ?? '').trim();
+      if (!v) continue;
+      if (k === 'increase' || k === 'decrease' || k === 'total') wf[k] = v;
+    }
+    if (Object.keys(wf).length > 0) block.waterfallColors = wf;
+  }
+}
+
+/** `data-series-types="bar,line"` / `data-series-axes="left,right"`, aligned by index. */
+function applySeriesShape(el: HElement, block: ChartBlock): void {
+  const types = (el.attrs['data-series-types'] ?? '').split(',').map((s) => s.trim().toLowerCase());
+  const axes = (el.attrs['data-series-axes'] ?? '').split(',').map((s) => s.trim().toLowerCase());
+  for (let i = 0; i < block.series.length; i += 1) {
+    const type = types[i];
+    const axis = axes[i];
+    if (type === 'bar' || type === 'line' || type === 'area') block.series[i]!.type = type;
+    if (axis === 'left' || axis === 'right') block.series[i]!.axis = axis;
+  }
 }
 
 function chartFromElement(el: HElement, style: IrBox): ChartBlock {
@@ -695,6 +750,7 @@ function chartFromElement(el: HElement, style: IrBox): ChartBlock {
     ];
   }
   applyChartOptions(el, block);
+  applySeriesShape(el, block);
   return block;
 }
 
@@ -781,6 +837,19 @@ function barcodeFromElement(el: HElement, style: IrBox): BarcodeBlock {
 }
 
 function elToBlock(el: HElement, opts: HtmlOptions): Block[] {
+  const blocks = elToBlockCore(el, opts);
+  // Conditional formatting works on any block carrier (`data-if` / `data-when`).
+  const visible = visibleAttr(el);
+  const conditions = styleWhenAttr(el);
+  if (visible === undefined && !conditions) return blocks;
+  for (const block of blocks) {
+    if (visible !== undefined) block.visible = visible;
+    if (conditions) block.styleWhen = conditions;
+  }
+  return blocks;
+}
+
+function elToBlockCore(el: HElement, opts: HtmlOptions): Block[] {
   // Non-visual head/stylesheet elements never become report content.
   if (el.tag === 'style' || el.tag === 'script' || el.tag === 'link' || el.tag === 'meta' || el.tag === 'title') return [];
   const style = elementStyle(el, opts);
@@ -842,10 +911,84 @@ function cellsOf(tr: HElement): HElement[] {
   return tr.children.filter((c): c is HElement => c.type === 'element' && (c.tag === 'td' || c.tag === 'th'));
 }
 
+/** `data-if` on a table row/cell -> declarative conditional visibility. */
+function visibleAttr(el: HElement): boolean | { expr: string } | undefined {
+  const raw = el.attrs['data-if'];
+  if (raw === undefined) return undefined;
+  const source = exprSource(raw);
+  if (source === undefined) return undefined;
+  if (source === 'true' || source === 'false') return source === 'true';
+  return { expr: source };
+}
+
+/** `data-when` + `data-when-style` -> one declarative conditional style rule. */
+function styleWhenAttr(el: HElement): StyleCondition[] | undefined {
+  const when = el.attrs['data-when'];
+  if (when === undefined) return undefined;
+  const source = exprSource(when);
+  if (source === undefined) return undefined;
+  return [{ when: { expr: source }, style: cssToIr(el.attrs['data-when-style'] ?? '', []) as Partial<BoxProps> }];
+}
+
+/**
+ * `data-color-scale="min=0;max=100;from=#eef4ff;to=#1e3a8a;text=false"`.
+ * Omitted `min`/`max` are derived from the column's data.
+ */
+function colorScaleAttr(el: HElement): ColorScale | undefined {
+  const raw = el.attrs['data-color-scale'];
+  if (raw === undefined) return undefined;
+  const scale: ColorScale = {};
+  for (const part of raw.split(/[;,]/)) {
+    const [key, ...rest] = part.split('=');
+    const k = (key ?? '').trim().toLowerCase();
+    const v = rest.join('=').trim();
+    if (!k || v === '') continue;
+    if (k === 'min' || k === 'max') {
+      const n = Number(v);
+      if (Number.isFinite(n)) scale[k] = n;
+    } else if (k === 'from' || k === 'to') {
+      scale[k] = v;
+    } else if (k === 'text') {
+      scale.text = !/^(false|0|no|off)$/i.test(v);
+    }
+  }
+  return scale;
+}
+
+/**
+ * Rich cells: a `<td>` holding block-level children (`<img>`, a nested table,
+ * `<p>`, a chart carrier, …) becomes a block stack; everything else stays inline.
+ */
+function cellBlocks(td: HElement, opts: HtmlOptions): Block[] {
+  const hasBlock = td.children.some((c) => c.type === 'element' && isBlock(c));
+  if (!hasBlock) return [];
+  const out: Block[] = [];
+  let inline: HNode[] = [];
+  const flush = (): void => {
+    if (inline.length === 0) return;
+    // Reuse the normal paragraph path so inline formatting survives.
+    const wrapper: HElement = { type: 'element', tag: 'p', attrs: {}, children: inline };
+    out.push(...elToBlock(wrapper, opts));
+    inline = [];
+  };
+  for (const child of td.children) {
+    if (child.type === 'element' && isBlock(child)) {
+      flush();
+      out.push(...elToBlock(child, opts));
+    } else {
+      inline.push(child);
+    }
+  }
+  flush();
+  return out;
+}
+
 function toCellNode(td: HElement, opts: HtmlOptions): CellNode {
   const style = elementStyle(td, opts);
   const cell: CellNode = {};
+  const blocks = cellBlocks(td, opts);
   if (td.attrs['data-bind'] !== undefined) cell.content = [{ bind: exprSource(td.attrs['data-bind']), format: td.attrs['data-format'] }];
+  else if (blocks.length > 0) cell.blocks = blocks;
   else cell.content = inlineContent(td, opts, style);
   if (Object.keys(style).length) cell.style = style as Partial<StyleProps>;
   if (td.attrs['colspan']) cell.colSpan = Number(td.attrs['colspan']) || undefined;
@@ -862,11 +1005,23 @@ function toCellNode(td: HElement, opts: HtmlOptions): CellNode {
   if (s.paddingLeft !== undefined) cell.paddingLeft = s.paddingLeft as number;
   if (s.verticalAlign !== undefined) cell.verticalAlign = s.verticalAlign as CellNode['verticalAlign'];
   if (cell.align === undefined && s.align !== undefined) cell.align = s.align as CellNode['align'];
+  // Conditional formatting surface: visibility, conditional styles, heatmaps.
+  const visible = visibleAttr(td);
+  if (visible !== undefined) cell.visible = visible;
+  const conditions = styleWhenAttr(td);
+  if (conditions) cell.styleWhen = conditions;
+  const scale = colorScaleAttr(td);
+  if (scale) cell.colorScale = scale;
   return cell;
 }
 
 function toRowNode(tr: HElement, opts: HtmlOptions, kind: RowNode['kind']): RowNode {
-  return { kind, cells: cellsOf(tr).map((td) => toCellNode(td, opts)) };
+  const row: RowNode = { kind, cells: cellsOf(tr).map((td) => toCellNode(td, opts)) };
+  const visible = visibleAttr(tr);
+  if (visible !== undefined) row.visible = visible;
+  const conditions = styleWhenAttr(tr);
+  if (conditions) row.styleWhen = conditions;
+  return row;
 }
 
 function tableBlock(table: HElement, opts: HtmlOptions, style: IrBox): Block {
@@ -905,7 +1060,9 @@ function tableBlock(table: HElement, opts: HtmlOptions, style: IrBox): Block {
     block.dataSource = buildDataSource(table.attrs['data-each'], table.attrs['data-bind']);
     const template = dataRows[0];
     if (template) {
-      block.detail = { cells: cellsOf(template).map((td) => toCellNode(td, opts)) };
+      // Carry the template's row-level conditions onto the shared detail row.
+      const detail = toRowNode(template, opts, 'detail');
+      block.detail = { cells: detail.cells, visible: detail.visible, styleWhen: detail.styleWhen };
       block.columns = cellsOf(template).map((td) => columnOf(td, opts));
     }
   } else if (dataRows.length) {

@@ -29,9 +29,15 @@ glyph embedding all happen in-process via [`pdfkit`](https://pdfkit.org) +
 - **HTML-subset adapter** so you can author with plain markup.
 - **CSS stylesheet subset** — `<style>` rules with tag, class, id, descendant (` `) and
   child (`>`) selectors, resolved by CSS specificity; inline `style` still wins.
-- **Vector charts** — data-bound `bar`, `line`, `area`, `pie` and `donut` charts with
-  axes, grid lines, legends, stacked modes and value labels. Every mark is a real PDF
-  path/rectangle, so charts stay crisp at any zoom.
+- **Vector charts** — data-bound `bar`, `line`, `area`, `pie`, `donut`, `combo` and
+  `waterfall` charts with axes, grid lines, legends, stacked modes, 100% stacking, a secondary
+  axis and value labels. Every mark is a real PDF path/rectangle, so charts stay crisp at any zoom.
+- **Rich table cells** — a cell can hold a stack of blocks (images, QR/barcodes, charts, nested
+  tables, paragraphs), laid out inside the padded cell. Rows grow to fit and stay atomic, so
+  pagination is unchanged.
+- **Conditional formatting** — `visible`, `styleWhen` rules and numeric `colorScale` heatmaps work
+  on blocks, table rows and cells. Heatmap ranges can be derived automatically per column, and
+  dark fills repaint their text white.
 - **Table of contents, PDF bookmarks and hyperlinks** — a `toc` block with dot leaders
   and *real* page numbers (fixed-point pagination), a nested PDF outline generated from
   headings, external `http(s)` links and internal `#anchor` destinations.
@@ -202,6 +208,31 @@ const report: ReportDoc = {
     { type: 'chart', kind: 'donut', categories: ['North', 'South'],
       series: [{ values: [62, 38] }] },
 
+    // 100% stacking normalises each category to its own total (axis reads 0-100%).
+    { type: 'chart', kind: 'bar', stacked: '100%', title: 'Revenue mix', height: 160,
+      categories: ['Q1', 'Q2', 'Q3'],
+      series: [
+        { name: 'Product', values: [60, 55, 50] },
+        { name: 'Services', values: [40, 45, 50] },
+      ],
+      legend: 'bottom', showValues: true },
+
+    // Combo: bars on the left axis, a line on its own right axis.
+    { type: 'chart', kind: 'combo', title: 'Revenue and margin', height: 180,
+      categories: ['Q1', 'Q2', 'Q3', 'Q4'],
+      series: [
+        { name: 'Revenue', values: [12, 18, 15, 22] },
+        { name: 'Margin', values: [18, 19, 21, 24], type: 'line', axis: 'right' },
+      ],
+      rightAxis: { min: 0, max: 30, ticks: 5, format: '0"%"' },
+      legend: 'bottom' },
+
+    // Waterfall: totals[0] seeds the running balance, later totals summarise it.
+    { type: 'chart', kind: 'waterfall', title: 'Cash bridge', height: 180,
+      categories: ['Opening', 'Revenue', 'Costs', 'Closing'],
+      series: [{ name: 'Cash', values: [80, 30, -20, 0] }],
+      totals: [0, 3], showValues: true },
+
     { type: 'barcode', symbology: 'qr', value: 'https://example.com/report/2026-Q3' },
     { type: 'barcode', symbology: 'code128', value: 'RPT-2026-Q3-0042' },
     { type: 'barcode', symbology: 'ean13', value: '590123412345' }, // checksum appended
@@ -219,6 +250,62 @@ Chart values/categories also accept CSV strings (`'12,18,15'`) or bindings
 (`'$data.revenue'`); barcode `value` accepts a binding too, so codes can be data-driven.
 `bar`/`line`/`area` read one value per category per series; `pie`/`donut` read
 `series[0].values` and label the slices from `categories`.
+
+Chart depth:
+
+- **`combo`** draws each series with its own `type` (`'bar' | 'line' | 'area'`) and `axis`
+  (`'left' | 'right'`). Right-axis series scale against `rightAxis` (its own domain, ticks and
+  format) and are labelled in a reserved gutter on the right edge.
+- **`stacked: '100%'`** normalises every category against the sum of its series, so the value
+  axis reads 0–100% and value labels use a percent pattern automatically.
+- **`waterfall`** reads one delta series. Indices listed in `totals` draw a bar from zero to the
+  running balance; at `totals[0]` the value seeds that balance (an opening figure), elsewhere it
+  only marks the summary. Increases, decreases and totals are colour-coded (override with
+  `waterfallColors`), and dashed connectors join consecutive bars.
+
+Rich cells and conditional formatting are table features:
+
+```ts
+const report: ReportDoc = {
+  data: {
+    teams: [
+      { name: 'Alpha', code: 'alpha', score: 86, archived: false },
+      { name: 'Beta', code: 'beta', score: 34, archived: false },
+    ],
+  },
+  body: [{
+    type: 'table',
+    columns: [
+      { key: 'name', grow: 1 },
+      // Heatmap default for the whole column; min/max come from the data.
+      { key: 'score', width: 64, align: 'right',
+        colorScale: { from: '#eef4ff', to: '#1e3a8a' } },
+    ],
+    dataSource: { bind: '$data.teams' },
+    detail: {
+      visible: { expr: '!$row.archived' },                       // row filter
+      styleWhen: [{ when: '$row.score < 40',
+                    style: { backgroundColor: '#fff5f5' } }],   // row condition
+      cells: [
+        {
+          // Rich cell: any flow block stack, laid out in the padded cell.
+          blocks: [
+            { type: 'paragraph', content: { bind: 'name' } },
+            { type: 'barcode', symbology: 'qr', value: { bind: 'code' }, moduleSize: 1 },
+          ],
+        },
+        {},                                                       // auto-binds the score
+      ],
+    },
+  }],
+};
+```
+
+Cell style order is: heatmap text colour, row `rowStyle`/`styleWhen`, column `style`, the cell's
+own props, then the cell's `styleWhen` (later matches win). A hidden row is dropped before layout;
+a hidden cell keeps its grid slot and fill but paints no content. `colorScale` accepts explicit
+`min`/`max`, or derives them from the column's numeric data; `text: false` keeps the cell's own
+text colour instead of switching to white on dark fills.
 
 See `src/cli/demo.ts` for a complete, runnable example (grouping, subtotals, running
 tokens, embedded fonts with a base-14 fallback).
@@ -303,11 +390,17 @@ const pdf = await renderToBuffer(report, { fonts: await readFontFiles([
   leaf binds that node's text to an expression instead of its literal content.
 - **Declarative chart / TOC / barcode blocks:** a `div` (or `table`) carrying a
   `data-chart` attribute becomes a `ChartBlock`:
-  `data-chart="bar|line|area|pie|donut"`, `data-title`, `data-categories="Q1,Q2"`,
+  `data-chart="bar|line|area|pie|donut|combo|waterfall"`, `data-title`, `data-categories="Q1,Q2"`,
   `data-series="Actual:1,2;Plan:3,4"` (or `data-values` for a single series),
-  `data-colors`, `data-stacked`, `data-show-values`, `data-legend="none|top|bottom|right"`,
+  `data-colors`, `data-stacked` (`true` or `100%`), `data-show-values`,
+  `data-legend="none|top|bottom|right"`,
   `data-min`/`data-max`/`data-ticks`/`data-value-format`/`data-axis-labels`/`data-grid-lines`,
-  `data-inner-radius`, `data-plot-height`. A `<table data-chart="line">` reads its header
+  `data-inner-radius`, `data-plot-height`. For depth: `data-series-types="bar,line"` and
+  `data-series-axes="left,right"` shape a combo chart series by index, `data-right-min`/
+  `data-right-max`/`data-right-ticks`/`data-right-format`/`data-right-axis-labels` configure its
+  secondary axis, `data-totals="0,4"` marks waterfall totals and
+  `data-waterfall-colors="increase=#15803d; decrease=#b91c1c; total=#1e3a8a"` overrides the
+  waterfall palette. A `<table data-chart="line">` reads its header
   row as series names and its first column as categories, so an authored table can be
   shown as a chart without a second data source.
   A `div data-toc` becomes a TOC (`data-title`, `data-level`/`data-max-level`,
@@ -315,6 +408,14 @@ const pdf = await renderToBuffer(report, { fonts: await readFontFiles([
   `div data-barcode="qr|code128|ean13"` becomes a barcode (`data-value`, `data-bind`,
   `data-error-correction`, `data-module-size`, `data-quiet-zone`, `data-show-text`,
   `data-color`).
+- **Conditional formatting:** `data-if="<expr>"` on any block, `<tr>` or `<td>` filters it per
+  row (`$row`, `$index`, `$data` are in scope); `data-when="<expr>"` with
+  `data-when-style="background-color: #fff5f5"` adds a conditional style rule; and
+  `data-color-scale="min=0;max=100;from=#eef4ff;to=#1e3a8a;text=false"` shades a cell by its
+  number. Omitted `min`/`max` derive the range from the column's data across the whole table.
+- **Rich cells:** a `<td>` whose children are block-level elements (`<img>`, a nested `<table>`,
+  `<p>`, `<div data-chart>`, `<div data-barcode>`) becomes a block stack laid out inside the
+  cell; inline children are wrapped into a synthetic paragraph so mixed content still flows.
 - **Bands:** an element with `data-band="pageHeader | pageFooter | title | summary | background"`
   is lifted out of the body flow into a **repeated page band**, painted on every page.
   Band styles inherit into its blocks, so `opacity:0.05` on a `background` band produces a
@@ -414,6 +515,14 @@ The `samples/` folder demonstrates the supported subset:
 - `merge-cells.html` — **merged cells**: a `rowspan` table (a label centered over several rows),
   a `colspan` table (a subtotal spanning columns plus a full-width banner), and a third table
   that **combines** both merges in one grid.
+- `rich-cells.html` — **rich table cells**: an image, a QR code, a sparkline chart and a nested
+  mini table all laid out inside cells; the surrounding rows grow to fit each block stack.
+- `conditional-format.html` + `conditional-format.data.json` — **conditional formatting**:
+  block-level `data-if` / `data-when`, row filtering and row highlights on a data-bound portfolio
+  table, revenue/margin `data-color-scale` heatmaps with automatic ranges, and a filtered
+  "at risk" table. Data auto-pairs via `--data` or the adjacent `.data.json`.
+- `chart-depth.html` — **chart depth**: a combo chart with a secondary axis, 100% stacked bars,
+  and a waterfall with opening/closing totals and custom colours.
 - `image.html` (+ `assets/logo.png`) — **images**: intrinsic-size placement, width-only
   aspect scaling, alignment, a bordered box, and a letterhead logo repeated in a `pageHeader`
   band. `assets/logo.png` is a generated placeholder — regenerate it with

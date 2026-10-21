@@ -87,3 +87,29 @@ export function fillRect(fill: ColorInput | undefined, w: number, h: number): Dr
   if (!fill) return [];
   return [{ op: 'fillRect', x: 0, y: 0, w, h, color: toRGB(fill) }];
 }
+
+/**
+ * Shift a fragment's draw commands by (dx, dy). Layout emits everything in
+ * fragment-local space; this is how a nested layout (a block inside a table
+ * cell, or a cell nested in a merged grid) is placed without the writer
+ * needing to know about nesting.
+ */
+export function translateCommands(commands: DrawCommand[], dx: number, dy: number): DrawCommand[] {
+  if (dx === 0 && dy === 0) return commands;
+  return commands.map((cmd): DrawCommand => {
+    switch (cmd.op) {
+      case 'fillRect':
+      case 'strokeRect':
+      case 'image':
+        return { ...cmd, x: cmd.x + dx, y: cmd.y + dy };
+      case 'line':
+        return { ...cmd, x1: cmd.x1 + dx, y1: cmd.y1 + dy, x2: cmd.x2 + dx, y2: cmd.y2 + dy };
+      case 'underline':
+        return { ...cmd, x1: cmd.x1 + dx, y1: cmd.y1 + dy, x2: cmd.x2 + dx };
+      case 'poly':
+        return { ...cmd, points: cmd.points.map(([x, y]) => [x + dx, y + dy] as PolyPoint) };
+      case 'text':
+        return { ...cmd, x: cmd.x + dx, baselineY: cmd.baselineY + dy };
+    }
+  });
+}

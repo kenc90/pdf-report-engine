@@ -1,0 +1,13 @@
+{
+  "quarter": "Q3 2026",
+  "accounts": [
+    { "account": "Northwind Retail", "owner": "A. Chen", "revenue": 1284000, "margin": 0.284, "growth": 0.126, "status": "On track" },
+    { "account": "Contoso Health", "owner": "M. Okafor", "revenue": 964000, "margin": 0.112, "growth": -0.041, "status": "At risk" },
+    { "account": "Fabrikam Logistics", "owner": "S. Rossi", "revenue": 742000, "margin": 0.196, "growth": 0.058, "status": "On track" },
+    { "account": "Tailspin Travel", "owner": "J. Park", "revenue": 388000, "margin": 0.071, "growth": -0.132, "status": "At risk" },
+    { "account": "Adventure Works", "owner": "R. Singh", "revenue": 1105000, "margin": 0.241, "growth": 0.093, "status": "On track" },
+    { "account": "Litware Media", "owner": "T. Muller", "revenue": 596000, "margin": 0.148, "growth": 0.012, "status": "Watch" },
+    { "account": "Proseware Energy", "owner": "K. Novak", "revenue": 1382000, "margin": 0.312, "growth": 0.201, "status": "On track" },
+    { "account": "Wide World Imports", "owner": "L. Bianchi", "revenue": 421000, "margin": 0.089, "growth": -0.067, "status": "At risk" }
+  ]
+}

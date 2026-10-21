@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+  <body style="font-family: Arial; font-size: 10pt; color: #24303f">
+    <h1 style="color: #0f2f57; margin-bottom: 2pt">Chart depth</h1>
+    <p style="color: #64748b; margin-top: 0">
+      Three additions to the vector chart family: 100% stacked bars, combo charts with a secondary
+      axis, and waterfall bridges. All are still plain draw commands — vector, paginated and
+      dependency-free.
+    </p>
+
+    <h2 style="color: #0f2f57; font-size: 13pt; margin-bottom: 4pt">Combo + secondary axis</h2>
+    <p style="color: #64748b; margin-top: 0; font-size: 9pt">
+      Revenue bars read the left axis in millions; the margin line reads the right axis in percent.
+      <code>data-series-types</code> and <code>data-series-axes</code> are aligned with
+      <code>data-series</code> by index.
+    </p>
+    <div
+      data-chart="combo"
+      data-categories="Q1,Q2,Q3,Q4"
+      data-series="Revenue:8.1,9.0,10.2,11.6;Gross margin:21.4,22.8,24.1,25.6"
+      data-series-types="bar,line"
+      data-series-axes="left,right"
+      data-colors="#1e3a8a,#e08a1e"
+      data-value-format="#,##0.0'M'"
+      data-right-format="0.0'%'"
+      data-right-min="0"
+      data-right-max="30"
+      data-legend="bottom"
+      style="height: 210pt"
+    ></div>
+
+    <h2 style="color: #0f2f57; font-size: 13pt; margin-top: 14pt; margin-bottom: 4pt">100% stacked bars</h2>
+    <p style="color: #64748b; margin-top: 0; font-size: 9pt">
+      <code>data-stacked="100%"</code> normalises each category to its own total, so the value axis
+      reads 0–100% and the mix is comparable across years with different revenue.
+    </p>
+    <div
+      data-chart="bar"
+      data-stacked="100%"
+      data-categories="2022,2023,2024,2025,2026"
+      data-series="Platform:38,42,47,53,58;Analytics:24,26,28,29,30;Services:22,20,17,14,12;Other:16,12,8,4,0"
+      data-colors="#1e3a8a,#2f8f5b,#e08a1e,#94a3b8"
+      data-value-format="0'%'"
+      data-legend="bottom"
+      style="height: 210pt"
+    ></div>
+
+    <h2 style="color: #0f2f57; font-size: 13pt; margin-top: 14pt; margin-bottom: 4pt">Waterfall</h2>
+    <p style="color: #64748b; margin-top: 0; font-size: 9pt">
+      <code>data-totals="0,5"</code> marks the starting and ending balances; the bars in between are
+      deltas, connected by dashed running-total lines.
+    </p>
+    <div
+      data-chart="waterfall"
+      data-categories="Starting ARR,New,Expansion,Churn,Contraction,Ending ARR"
+      data-values="120,38,22,-14,-6,0"
+      data-totals="0,5"
+      data-show-values="true"
+      data-value-format="#,##0.0'M'"
+      data-plot-height="200"
+      data-waterfall-colors="increase=#15803d; decrease=#b91c1c; total=#1e3a8a"
+    ></div>
+
+    <p style="margin-top: 12pt; font-size: 8pt; color: #94a3b8; text-align: right">Page {PAGE} of {TOTAL}</p>
+  </body>
+</html>

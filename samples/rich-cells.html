@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+  <body style="font-family: Arial; font-size: 10pt; color: #24303f">
+    <h1 style="color: #0f2f57; margin-bottom: 2pt">Rich table cells</h1>
+    <p style="color: #64748b; margin-top: 0">
+      A cell can hold any flow block, not just text: images, QR codes, vector charts and even a
+      nested table are laid out inside the padded cell box, and the row grows to whichever cell is
+      tallest. Rows stay atomic, so pagination is unchanged.
+    </p>
+
+    <table style="border: 1px solid #dbe6f4; margin-top: 10pt">
+      <thead>
+        <tr>
+          <th style="background-color: #0f2f57; color: #ffffff; text-align: left; padding: 6pt">Account</th>
+          <th style="background-color: #0f2f57; color: #ffffff; text-align: center; padding: 6pt">Mark</th>
+          <th style="background-color: #0f2f57; color: #ffffff; text-align: center; padding: 6pt">Scan</th>
+          <th style="background-color: #0f2f57; color: #ffffff; padding: 6pt">H1 trend</th>
+          <th style="background-color: #0f2f57; color: #ffffff; text-align: left; padding: 6pt">Packages</th>
+          <th style="background-color: #0f2f57; color: #ffffff; text-align: right; padding: 6pt">Revenue</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="padding: 6pt">
+            <span style="font-weight: 700">Northwind Retail</span><br />
+            <span style="font-size: 8pt; color: #94a3b8">Enterprise &middot; EMEA</span>
+          </td>
+          <td style="padding: 4pt; text-align: center">
+            <img src="assets/logo.png" style="width: 26pt; height: 26pt" alt="Northwind" />
+          </td>
+          <td style="padding: 4pt; text-align: center">
+            <div data-barcode="qr" data-value="NW-RETAIL-001" data-module-size="1.2" data-quiet-zone="1"></div>
+          </td>
+          <td style="padding: 4pt">
+            <div
+              data-chart="bar"
+              data-values="4,6,5,8,9,12"
+              data-categories="Jan,Feb,Mar,Apr,May,Jun"
+              data-category-labels="false"
+              data-axis-labels="false"
+              data-grid-lines="false"
+              data-legend="none"
+              data-colors="#0f2f57,#7fb2e5"
+              style="height: 40pt"
+            ></div>
+          </td>
+          <td style="padding: 6pt">
+            <table style="border: 0; font-size: 8pt">
+              <tr>
+                <td style="padding: 0; color: #64748b">Core</td>
+                <td style="padding: 0; text-align: right; font-weight: 700">14</td>
+              </tr>
+              <tr>
+                <td style="padding: 0; color: #64748b">Add-ons</td>
+                <td style="padding: 0; text-align: right; font-weight: 700">6</td>
+              </tr>
+            </table>
+          </td>
+          <td style="padding: 6pt; text-align: right; font-weight: 700">$1,284,000</td>
+        </tr>
+        <tr>
+          <td style="padding: 6pt">
+            <span style="font-weight: 700">Contoso Health</span><br />
+            <span style="font-size: 8pt; color: #94a3b8">Mid-market &middot; APAC</span>
+          </td>
+          <td style="padding: 4pt; text-align: center">
+            <img src="assets/logo.png" style="width: 20pt; height: 20pt" alt="Contoso" />
+          </td>
+          <td style="padding: 4pt; text-align: center">
+            <div data-barcode="qr" data-value="CT-H-002" data-module-size="1.2" data-quiet-zone="1"></div>
+          </td>
+          <td style="padding: 4pt">
+            <div
+              data-chart="bar"
+              data-values="9,8,7,6,6,5"
+              data-categories="Jan,Feb,Mar,Apr,May,Jun"
+              data-category-labels="false"
+              data-axis-labels="false"
+              data-grid-lines="false"
+              data-legend="none"
+              data-colors="#7c2d12"
+              style="height: 40pt"
+            ></div>
+          </td>
+          <td style="padding: 6pt">
+            <table style="border: 0; font-size: 8pt">
+              <tr>
+                <td style="padding: 0; color: #64748b">Core</td>
+                <td style="padding: 0; text-align: right; font-weight: 700">9</td>
+              </tr>
+              <tr>
+                <td style="padding: 0; color: #64748b">Add-ons</td>
+                <td style="padding: 0; text-align: right; font-weight: 700">2</td>
+              </tr>
+            </table>
+          </td>
+          <td style="padding: 6pt; text-align: right; font-weight: 700">$964,000</td>
+        </tr>
+        <tr>
+          <td style="padding: 6pt">
+            <span style="font-weight: 700">Adventure Works</span><br />
+            <span style="font-size: 8pt; color: #94a3b8">Enterprise &middot; Americas</span>
+          </td>
+          <td style="padding: 4pt; text-align: center">
+            <img src="assets/logo.png" style="width: 26pt; height: 26pt" alt="Adventure" />
+          </td>
+          <td style="padding: 4pt; text-align: center">
+            <div data-barcode="ean13" data-value="400638133393" data-module-size="0.9" data-show-text="false"></div>
+          </td>
+          <td style="padding: 4pt">
+            <div
+              data-chart="line"
+              data-values="5,6,7,7,9,11"
+              data-categories="Jan,Feb,Mar,Apr,May,Jun"
+              data-category-labels="false"
+              data-axis-labels="false"
+              data-grid-lines="false"
+              data-legend="none"
+              data-colors="#1b7f4b"
+              style="height: 40pt"
+            ></div>
+          </td>
+          <td style="padding: 6pt">
+            <table style="border: 0; font-size: 8pt">
+              <tr>
+                <td style="padding: 0; color: #64748b">Core</td>
+                <td style="padding: 0; text-align: right; font-weight: 700">11</td>
+              </tr>
+              <tr>
+                <td style="padding: 0; color: #64748b">Add-ons</td>
+                <td style="padding: 0; text-align: right; font-weight: 700">4</td>
+              </tr>
+            </table>
+          </td>
+          <td style="padding: 6pt; text-align: right; font-weight: 700">$1,105,000</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p style="margin-top: 12pt; font-size: 8pt; color: #94a3b8; text-align: right">Page {PAGE} of {TOTAL}</p>
+  </body>
+</html>

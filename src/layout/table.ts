@@ -22,18 +22,21 @@ import type {
   StyleProps,
   BorderShorthand,
   ResolvedBorder,
+  ColorScale,
+  Block,
 } from '../ir/schema.js';
-import type { ExprContext } from '../expr/eval.js';
+import { exprSource, type ExprContext } from '../expr/eval.js';
 import { toPt } from '../core/units.js';
-import { toRGB, type ColorInput } from '../core/color.js';
+import { toRGB, type ColorInput, type RGB } from '../core/color.js';
 import { resolveContent, type LayoutContext } from './context.js';
 import { typeset, type Line, type InlineSource } from '../text/typeset.js';
 import type { ResolvedStyle } from '../text/style.js';
 import { findBreaks } from '../text/linebreak.js';
 import { resolveBox, parseBorder, borderRGB, borderDash, type Sides } from './box.js';
-import type { Fragment, DrawCommand } from './flow.js';
+import { translateCommands, type Fragment, type DrawCommand } from './flow.js';
 import { getPath, aggregate } from '../expr/functions.js';
-import type { BlockLayoutOptions } from './block.js';
+import { layoutBlock, type BlockLayoutOptions } from './block.js';
+import { applyConditions, isVisible, scaleFillFor } from './condition.js';
 
 const CELL_PAD = { top: 1, right: 3, bottom: 1, left: 3 };
 
@@ -42,6 +45,9 @@ interface ResolvedColumn {
   align: 'left' | 'center' | 'right' | 'justify';
   style?: Partial<StyleProps>;
   key?: string;
+  colorScale?: ColorScale;
+  /** Numeric domain derived from the column's data when the scale omits min/max. */
+  range?: { min: number; max: number };
 }
 
 type Unit =
@@ -76,7 +82,7 @@ export function layoutTable(block: TableBlock, ctx: LayoutContext, opts: BlockLa
   const availW = Math.max(1, opts.contentWidth - margin.left - margin.right);
 
   const units = buildUnits(block, ctx, opts.scope);
-  const columns = resolveColumns(block, units, availW, ctx, tableStyle);
+  const columns = resolveColumns(block, units, availW, ctx, tableStyle, opts.scope);
   const grid = resolveGrid(block);
   const groupKey = block.id ?? `table:${tableSeq++}`;
 
@@ -117,7 +123,14 @@ let tableSeq = 0;
 
 // --- column sizing ---------------------------------------------------------
 
-function resolveColumns(block: TableBlock, units: Unit[], availW: number, ctx: LayoutContext, tableStyle: ResolvedStyle): ResolvedColumn[] {
+function resolveColumns(
+  block: TableBlock,
+  units: Unit[],
+  availW: number,
+  ctx: LayoutContext,
+  tableStyle: ResolvedStyle,
+  scope: ExprContext,
+): ResolvedColumn[] {
   const declared: ColumnNode[] = block.columns ?? [];
   let n = declared.length;
   for (const u of units) {
@@ -155,12 +168,88 @@ function resolveColumns(block: TableBlock, units: Unit[], availW: number, ctx: L
     else widths.push(Math.max((remaining * grows[i]!) / (growSum || 1), minWidths[i]!));
   }
 
-  return widths.map((width, i) => ({
+  const resolved = widths.map((width, i) => ({
     width,
     align: (declared[i]?.align ?? 'left') as ResolvedColumn['align'],
     style: declared[i]?.style,
     key: declared[i]?.key,
+    colorScale: declared[i]?.colorScale,
   }));
+  assignScaleRanges(resolved, units, ctx, scope);
+  return resolved;
+}
+
+/**
+ * A heatmap that omits `min`/`max` takes its domain from the numbers the column
+ * actually prints, so one declaration shades the whole column without the author
+ * guessing bounds. Explicit bounds always win.
+ */
+function assignScaleRanges(columns: ResolvedColumn[], units: Unit[], ctx: LayoutContext, scope: ExprContext): void {
+  const numbers: number[][] = columns.map(() => []);
+  const scaled: boolean[] = columns.map((c) => c.colorScale !== undefined);
+  for (const u of units) {
+    if (u.t === 'groupHeader' || u.t === 'groupFooter') continue;
+    const rowScope: ExprContext = u.t === 'detail' ? { ...scope, $row: u.data, $index: u.index } : scope;
+    const autoBind = u.t === 'detail' && u.static !== true;
+    let ci = 0;
+    for (const cell of u.row.cells) {
+      const column = columns[ci];
+      // A scale declared on the cell (not the column) still needs a domain.
+      if (cell.colorScale) scaled[ci] = true;
+      if (column && (column.colorScale || cell.colorScale)) {
+        const value = numericValue(cell, column, ctx, rowScope, autoBind);
+        if (value !== undefined) numbers[ci]!.push(value);
+      }
+      ci += Math.max(1, cell.colSpan ?? 1);
+    }
+  }
+  for (let i = 0; i < columns.length; i += 1) {
+    const values = numbers[i]!;
+    if (!scaled[i] || values.length === 0) continue;
+    columns[i]!.range = { min: Math.min(...values), max: Math.max(...values) };
+  }
+}
+
+/**
+ * The number a cell prints, for colour scaling: a numeric literal, a numeric
+ * string (static rows routinely carry `'8.1'`), a binding, or a detail cell
+ * auto-bound from its column key. Non-numeric cells return `undefined`.
+ */
+function numericValue(
+  cell: CellContent,
+  column: ResolvedColumn | undefined,
+  ctx: LayoutContext,
+  scope: ExprContext,
+  autoBind: boolean,
+): number | undefined {
+  let content = asCellNode(cell).content as unknown;
+  if (content && typeof content === 'object' && !Array.isArray(content) && 'content' in content) {
+    content = (content as CellNode).content;
+  }
+  if (autoBind && (content === undefined || content === '') && column?.key) {
+    return toNumber(getPath((scope.$row as Record<string, unknown> | undefined) ?? {}, column.key));
+  }
+  if (content && typeof content === 'object' && !Array.isArray(content) && 'bind' in content) {
+    const source = exprSource((content as { bind: string | { expr: string } }).bind);
+    if (source === undefined) return undefined;
+    // Same resolution order as `resolveBind`: row first, then report data.
+    if (/^[$]?[\w.[\]]+$/.test(source) && !/[+\-*/?:()]/.test(source)) {
+      const row = scope.$row;
+      if (row && getPath(row, source) !== undefined) return toNumber(getPath(row, source));
+      if (getPath(ctx.data, source) !== undefined) return toNumber(getPath(ctx.data, source));
+    }
+    return toNumber(ctx.eval(source, scope));
+  }
+  return toNumber(content);
+}
+
+function toNumber(value: unknown): number | undefined {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : undefined;
+  }
+  return undefined;
 }
 
 function sampleTexts(units: Unit[], col: number): string[] {
@@ -196,11 +285,18 @@ function widestToken(texts: string[], style: ResolvedStyle): number {
 
 // --- rows ------------------------------------------------------------------
 
+interface PlacedBlock {
+  fragment: Fragment;
+  /** Offset of the nested fragment relative to the cell's content box top. */
+  y: number;
+}
+
 interface CellLayout {
   x: number;
   w: number;
   pad: typeof CELL_PAD;
   lines: Line[];
+  blocks: PlacedBlock[];
   contentH: number;
   fill: ColorInput | undefined;
   borders: Sides;
@@ -217,7 +313,8 @@ function layoutRow(unit: Extract<Unit, { t: 'header' | 'footer' | 'detail' }>, u
   let maxContent = 0;
   const detailIndex = unit.t === 'detail' ? unit.index : 0;
   const stripedFill = unit.t === 'detail' && detailIndex % 2 === 1 ? grid.stripedColor : undefined;
-  const rowStyle = resolveRowStyle(block, unit.t === 'detail' ? unit.data : {}, detailIndex);
+  const rowProps = rowStyleFor(block, unit, ctx, scope);
+  const autoBind = unit.t === 'detail' && unit.static !== true;
 
   let ci = 0;
   for (let c = 0; c < row.cells.length; c += 1) {
@@ -227,7 +324,11 @@ function layoutRow(unit: Extract<Unit, { t: 'header' | 'footer' | 'detail' }>, u
     for (let s = 0; s < span; s += 1) w += columns[ci + s]?.width ?? 0;
     const column = columns[ci];
 
-    const baseStyle = ctx.style({ ...rowStyle, ...(column?.style ?? {}), ...(cell.style ?? {}) }, tableStyle);
+    const scaled = scaledFill(cell, column, ctx, scope, autoBind);
+    // Keep the unresolved props: only explicitly merged backgrounds may paint a
+    // cell fill (an inherited table background must not mask the heatmap).
+    const props = cellProps(cell, column, rowProps, ctx, scope, scaled?.color);
+    const baseStyle = ctx.style(props, tableStyle);
     const align = (cell.align ?? column?.align ?? baseStyle.align) as ResolvedStyle['align'];
     const style = ctx.style({ align }, baseStyle);
 
@@ -238,20 +339,21 @@ function layoutRow(unit: Extract<Unit, { t: 'header' | 'footer' | 'detail' }>, u
       left: cell.paddingLeft ?? CELL_PAD.left,
     };
     const innerW = Math.max(1, w - pad.left - pad.right);
-    const result = typeset(cellInlines(cell, column, style, ctx, scope, unit.t === 'detail' && unit.static !== true), innerW);
-    const contentH = result.lines.reduce((sum, l) => sum + l.height, 0);
+    const visible = isVisible(cell.visible, ctx, scope);
+    const payload = layoutCellContent(cell, column, style, ctx, scope, innerW, autoBind, visible);
 
     layouts.push({
       x,
       w,
       pad,
-      lines: result.lines,
-      contentH,
-      fill: cell.backgroundColor ?? stripedFill,
+      lines: payload.lines,
+      blocks: payload.blocks,
+      contentH: payload.contentH,
+      fill: cell.backgroundColor ?? props.backgroundColor ?? scaled?.fill ?? stripedFill,
       borders: cellSides(cell.border ?? gridShorthand(grid), 0.5),
       vAlign: cell.verticalAlign ?? 'top',
     });
-    maxContent = Math.max(maxContent, contentH + pad.top + pad.bottom);
+    maxContent = Math.max(maxContent, payload.contentH + pad.top + pad.bottom);
     x += w;
     ci += span;
   }
@@ -261,14 +363,7 @@ function layoutRow(unit: Extract<Unit, { t: 'header' | 'footer' | 'detail' }>, u
 
   for (const cl of layouts) {
     if (cl.fill) commands.push({ op: 'fillRect', x: cl.x, y: 0, w: cl.w, h: rowHeight, color: toRGB(cl.fill) });
-    let vTop = cl.pad.top;
-    if (cl.vAlign === 'middle') vTop = (rowHeight - cl.contentH) / 2;
-    else if (cl.vAlign === 'bottom') vTop = rowHeight - cl.contentH - cl.pad.bottom;
-    let lineY = vTop;
-    for (const line of cl.lines) {
-      commands.push({ op: 'text', x: cl.x + cl.pad.left, baselineY: lineY + line.ascent, runs: line.runs, gapWidth: line.gapWidth, decorations: [] });
-      lineY += line.height;
-    }
+    paintCellContent(commands, cl, contentTop(cl, rowHeight));
     drawSides(commands, cl.borders, cl.x, 0, cl.w, rowHeight);
   }
 
@@ -294,6 +389,111 @@ function layoutRow(unit: Extract<Unit, { t: 'header' | 'footer' | 'detail' }>, u
     breakAfter: row.keepWithNext ? 'avoid' : undefined,
     keepWithNext: row.keepWithNext,
   };
+}
+
+/** Content-box top for a cell of known outer height, honouring `verticalAlign`. */
+function contentTop(cl: { contentH: number; pad: typeof CELL_PAD; vAlign: 'top' | 'middle' | 'bottom' }, outerH: number): number {
+  if (cl.vAlign === 'middle') return (outerH - cl.contentH) / 2;
+  if (cl.vAlign === 'bottom') return outerH - cl.contentH - cl.pad.bottom;
+  return cl.pad.top;
+}
+
+/** Paint one cell's inline lines and nested block fragments at `vTop`. */
+function paintCellContent(
+  commands: DrawCommand[],
+  cl: { x: number; pad: typeof CELL_PAD; lines: Line[]; blocks: PlacedBlock[] },
+  vTop: number,
+): void {
+  let lineY = vTop;
+  for (const line of cl.lines) {
+    commands.push({ op: 'text', x: cl.x + cl.pad.left, baselineY: lineY + line.ascent, runs: line.runs, gapWidth: line.gapWidth, decorations: [] });
+    lineY += line.height;
+  }
+  for (const placed of cl.blocks) {
+    commands.push(...translateCommands(placed.fragment.commands, cl.x + cl.pad.left, vTop + placed.y));
+  }
+}
+
+/**
+ * Lay out one cell's payload. Inline content goes through one `typeset` pass;
+ * rich cells stack flow blocks with the same before/height/after rhythm
+ * pagination uses, so nested margins behave the way authors expect.
+ */
+function layoutCellContent(
+  cell: CellContent,
+  column: ResolvedColumn | undefined,
+  style: ResolvedStyle,
+  ctx: LayoutContext,
+  scope: ExprContext,
+  innerW: number,
+  autoBind: boolean,
+  visible: boolean,
+): { lines: Line[]; blocks: PlacedBlock[]; contentH: number } {
+  if (!visible) return { lines: [], blocks: [], contentH: 0 };
+  const node = asCellNode(cell);
+  const blocks = node.blocks ?? [];
+  const hasInline = node.content !== undefined && node.content !== '';
+  if (!hasInline && blocks.length > 0) {
+    const placed: PlacedBlock[] = [];
+    let y = 0;
+    for (const block of blocks) {
+      const frags = layoutBlock(block, ctx, { contentWidth: innerW, scope, inherited: style });
+      for (const fragment of frags) {
+        // A page break inside a cell has no page to break; it collapses to nothing.
+        if (fragment.isPageBreak) continue;
+        y += fragment.before;
+        placed.push({ fragment, y });
+        y += fragment.height + fragment.after;
+      }
+    }
+    return { lines: [], blocks: placed, contentH: y };
+  }
+  const result = typeset(cellInlines(cell, column, style, ctx, scope, autoBind), innerW);
+  return {
+    lines: result.lines,
+    blocks: [],
+    contentH: result.lines.reduce((sum, l) => sum + l.height, 0),
+  };
+}
+
+/** Row-level conditional style: the callback/constant first, then `styleWhen`. */
+function rowStyleFor(block: TableBlock, unit: RowUnit, ctx: LayoutContext, scope: ExprContext): Partial<StyleProps> {
+  const base = resolveRowStyle(block, unit.t === 'detail' ? unit.data : {}, detailIndexOf(unit));
+  return unit.row.styleWhen?.length ? applyConditions(base, unit.row.styleWhen, ctx, scope) : base;
+}
+
+/**
+ * Cell style props in cascade order: colour scale (lowest), row conditions,
+ * column defaults, the cell's own props, then the cell's conditions.
+ */
+function cellProps(
+  cell: CellNode,
+  column: ResolvedColumn | undefined,
+  rowProps: Partial<StyleProps>,
+  ctx: LayoutContext,
+  scope: ExprContext,
+  scaleColor?: RGB,
+): Partial<StyleProps> {
+  const merged: Partial<StyleProps> = {
+    ...(scaleColor ? { color: scaleColor } : {}),
+    ...rowProps,
+    ...(column?.style ?? {}),
+    ...(cell.style ?? {}),
+  };
+  return cell.styleWhen?.length ? applyConditions(merged, cell.styleWhen, ctx, scope) : merged;
+}
+
+/** Heatmap fill/text colour for a cell, when a scale applies and the value is numeric. */
+function scaledFill(
+  cell: CellNode,
+  column: ResolvedColumn | undefined,
+  ctx: LayoutContext,
+  scope: ExprContext,
+  autoBind: boolean,
+): { fill: RGB; color?: RGB } | undefined {
+  const scale = cell.colorScale ?? column?.colorScale;
+  if (!scale) return undefined;
+  return scaleFillFor(scale, numericValue(cell, column, ctx, scope, autoBind), column?.range);
 }
 
 // --- vertical merge (rowSpan) ----------------------------------------------
@@ -332,6 +532,7 @@ interface AnchorCell {
   w: number;
   pad: typeof CELL_PAD;
   lines: Line[];
+  blocks: PlacedBlock[];
   contentH: number;
   fill: ColorInput | undefined;
   borders: Sides;
@@ -351,7 +552,8 @@ function layoutMergedRun(run: RowUnit[], uc: UnitCtx, isFirstVisual: boolean): F
     const row = unit.row;
     const scope = unitScope(unit, uc);
     const allowSpan = rowSpanAllowed(unit);
-    const rowStyle = resolveRowStyle(block, unit.t === 'detail' ? unit.data : {}, detailIndexOf(unit));
+    const rowProps = rowStyleFor(block, unit, ctx, scope);
+    const autoBind = unit.t === 'detail' && unit.static !== true;
     const stripedFill = unit.t === 'detail' && detailIndexOf(unit) % 2 === 1 ? grid.stripedColor : undefined;
 
     let colCursor = 0;
@@ -377,7 +579,9 @@ function layoutMergedRun(run: RowUnit[], uc: UnitCtx, isFirstVisual: boolean): F
       for (let s = 0; s < colSpan; s += 1) w += columns[startCol + s]?.width ?? 0;
       const column = columns[startCol];
 
-      const baseStyle = ctx.style({ ...rowStyle, ...(column?.style ?? {}), ...(cell.style ?? {}) }, tableStyle);
+      const scaled = scaledFill(cell, column, ctx, scope, autoBind);
+      const props = cellProps(cell, column, rowProps, ctx, scope, scaled?.color);
+      const baseStyle = ctx.style(props, tableStyle);
       const align = (cell.align ?? column?.align ?? baseStyle.align) as ResolvedStyle['align'];
       const style = ctx.style({ align }, baseStyle);
       const pad = {
@@ -387,8 +591,8 @@ function layoutMergedRun(run: RowUnit[], uc: UnitCtx, isFirstVisual: boolean): F
         left: cell.paddingLeft ?? CELL_PAD.left,
       };
       const innerW = Math.max(1, w - pad.left - pad.right);
-      const result = typeset(cellInlines(cell, column, style, ctx, scope, unit.t === 'detail' && unit.static !== true), innerW);
-      const contentH = result.lines.reduce((sum, l) => sum + l.height, 0);
+      const visible = isVisible(cell.visible, ctx, scope);
+      const payload = layoutCellContent(cell, column, style, ctx, scope, innerW, autoBind, visible);
       const x = uc.contentLeft + columns.slice(0, startCol).reduce((s, c) => s + c.width, 0);
 
       anchors.push({
@@ -399,9 +603,10 @@ function layoutMergedRun(run: RowUnit[], uc: UnitCtx, isFirstVisual: boolean): F
         x,
         w,
         pad,
-        lines: result.lines,
-        contentH,
-        fill: cell.backgroundColor ?? stripedFill,
+        lines: payload.lines,
+        blocks: payload.blocks,
+        contentH: payload.contentH,
+        fill: cell.backgroundColor ?? props.backgroundColor ?? scaled?.fill ?? stripedFill,
         borders: cellSides(cell.border ?? gridShorthand(grid), 0.5),
         vAlign: cell.verticalAlign ?? 'top',
       });
@@ -438,14 +643,7 @@ function layoutMergedRun(run: RowUnit[], uc: UnitCtx, isFirstVisual: boolean): F
     for (let k = 0; k < a.rowSpan; k += 1) rectH += rowH[a.row + k]!;
     const ry = yTop[a.row]!;
     if (a.fill) commands.push({ op: 'fillRect', x: a.x, y: ry, w: a.w, h: rectH, color: toRGB(a.fill) });
-    let vTop = ry + a.pad.top;
-    if (a.vAlign === 'middle') vTop = ry + (rectH - a.contentH) / 2;
-    else if (a.vAlign === 'bottom') vTop = ry + rectH - a.contentH - a.pad.bottom;
-    let lineY = vTop;
-    for (const line of a.lines) {
-      commands.push({ op: 'text', x: a.x + a.pad.left, baselineY: lineY + line.ascent, runs: line.runs, gapWidth: line.gapWidth, decorations: [] });
-      lineY += line.height;
-    }
+    paintCellContent(commands, a, ry + contentTop(a, rectH));
     drawSides(commands, a.borders, a.x, ry, a.w, rectH);
   }
 
@@ -587,26 +785,43 @@ function drawSides(commands: DrawCommand[], sides: Sides, x: number, y: number, 
 
 function buildUnits(block: TableBlock, ctx: LayoutContext, scope: ExprContext): Unit[] {
   const out: Unit[] = [];
-  for (const row of block.headerRows ?? []) out.push({ t: 'header', row });
+  for (const row of block.headerRows ?? []) {
+    if (isVisible(row.visible, ctx, scope)) out.push({ t: 'header', row });
+  }
 
   const data = resolveData(block, ctx, scope);
-  const detailRow: RowNode = { cells: detailCells(block) };
+  const detailRow = detailRowNode(block);
 
   // Authored static body rows keep their own per-cell styling; render them as
   // concrete detail rows (content lives in the cells, so no data binding).
   let staticIndex = 0;
-  for (const row of block.staticRows ?? []) out.push({ t: 'detail', row, data: {}, index: staticIndex++, static: true });
+  for (const row of block.staticRows ?? []) {
+    if (!isVisible(row.visible, ctx, scope)) continue;
+    out.push({ t: 'detail', row, data: {}, index: staticIndex++, static: true });
+  }
 
   if (block.groups && block.groups.length > 0) out.push(...buildGrouped(block, ctx, scope, data, detailRow));
-  else data.forEach((item, i) => out.push({ t: 'detail', row: detailRow, data: item, index: i + staticIndex }));
+  else
+    data.forEach((item, i) => {
+      // Row-level filtering: the detail template's `visible` runs once per row.
+      if (!isVisible(detailRow.visible, ctx, { ...scope, $row: item, $index: i + staticIndex })) return;
+      out.push({ t: 'detail', row: detailRow, data: item, index: i + staticIndex });
+    });
 
-  for (const row of block.footerRows ?? []) out.push({ t: 'footer', row });
+  for (const row of block.footerRows ?? []) {
+    if (isVisible(row.visible, ctx, scope)) out.push({ t: 'footer', row });
+  }
   return out;
 }
 
-function detailCells(block: TableBlock): CellNode[] {
-  const d = block.detail as { cells?: CellContent[] } | undefined;
-  return (d?.cells ?? []).map(asCellNode);
+/** The shared detail template, keeping any row-level conditions it declares. */
+function detailRowNode(block: TableBlock): RowNode {
+  const d = block.detail as (Partial<RowNode> & { style?: Partial<StyleProps> }) | undefined;
+  return {
+    cells: (d?.cells ?? []).map(asCellNode),
+    visible: d?.visible,
+    styleWhen: d?.styleWhen,
+  };
 }
 
 function asCellNode(c: CellContent): CellNode {
@@ -624,7 +839,24 @@ function asCellNode(c: CellContent): CellNode {
 }
 
 /** Keys that exist on `CellNode` but never on a `ContentSpan`. */
-const CELL_ONLY_KEYS = new Set(['content', 'colSpan', 'rowSpan', 'align', 'verticalAlign', 'border', 'backgroundColor', 'subtotal', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft']);
+const CELL_ONLY_KEYS = new Set([
+  'content',
+  'blocks',
+  'colSpan',
+  'rowSpan',
+  'align',
+  'verticalAlign',
+  'border',
+  'backgroundColor',
+  'visible',
+  'styleWhen',
+  'colorScale',
+  'subtotal',
+  'paddingTop',
+  'paddingRight',
+  'paddingBottom',
+  'paddingLeft',
+]);
 
 function buildGrouped(block: TableBlock, ctx: LayoutContext, scope: ExprContext, data: Array<Record<string, unknown>>, detailRow: RowNode): Unit[] {
   const group = block.groups![0]!;
@@ -641,6 +873,7 @@ function buildGrouped(block: TableBlock, ctx: LayoutContext, scope: ExprContext,
   };
 
   for (const item of data) {
+    if (!isVisible(detailRow.visible, ctx, { ...scope, $row: item })) continue;
     const key = ctx.eval(group.by, { ...scope, $row: item });
     if (!started || key !== current) {
       if (started) flush(false, false);

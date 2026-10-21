@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+  <body style="font-family: Arial; font-size: 10pt; color: #24303f">
+    <h1 style="color: #0f2f57; margin-bottom: 2pt">Conditional formatting</h1>
+    <p style="color: #64748b; margin-top: 0">
+      Three declarative layers: <code>data-when</code> (conditional style), <code>data-if</code>
+      (conditional visibility) and <code>data-color-scale</code> (numeric heatmaps). Every condition
+      runs through the same sandboxed expression scope as <code>data-bind</code>, so it can read
+      <code>$row</code>, <code>$group</code>, <code>$index</code> and <code>$data</code>.
+    </p>
+
+    <div
+      data-if="$data.accounts.length > 5"
+      data-when="$data.accounts.length < 10"
+      data-when-style="background-color: #fff7ed; border: 1pt solid #fb923c"
+      style="background-color: #f8fafc; border: 1pt solid #e2e8f0; padding: 8pt; margin-top: 8pt"
+    >
+      <strong>Block-level conditions too.</strong> This callout is only painted while
+      <code>$data.accounts.length</code> is between 6 and 9, and the amber border is applied by
+      <code>data-when</code>.
+    </div>
+
+    <h2 style="color: #0f2f57; font-size: 13pt; margin-bottom: 4pt">
+      Portfolio — <span data-bind="$data.quarter"></span>
+    </h2>
+    <table data-each="row in $data.accounts" style="border: 1px solid #dbe6f4; margin-top: 6pt">
+      <thead>
+        <tr>
+          <th style="background-color: #0f2f57; color: #ffffff; text-align: left; padding: 5pt">Account</th>
+          <th style="background-color: #0f2f57; color: #ffffff; text-align: left; padding: 5pt">Owner</th>
+          <th style="background-color: #0f2f57; color: #ffffff; text-align: right; padding: 5pt">Revenue</th>
+          <th style="background-color: #0f2f57; color: #ffffff; text-align: right; padding: 5pt">Margin</th>
+          <th style="background-color: #0f2f57; color: #ffffff; text-align: right; padding: 5pt">Growth</th>
+          <th style="background-color: #0f2f57; color: #ffffff; text-align: left; padding: 5pt">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr data-when="$row.growth < 0" data-when-style="background-color: #fff5f5">
+          <td data-bind="$row.account" style="padding: 5pt; font-weight: 700"></td>
+          <td data-bind="$row.owner" style="padding: 5pt; color: #64748b"></td>
+          <td
+            data-bind="$row.revenue"
+            data-format="#,##0"
+            data-color-scale="from=#eef4ff; to=#1e3a8a"
+            style="padding: 5pt; text-align: right"
+          ></td>
+          <td
+            data-bind="$row.margin"
+            data-format="0.0%"
+            data-color-scale="from=#fee2e2; to=#15803d; text=false"
+            style="padding: 5pt; text-align: right"
+          ></td>
+          <td
+            data-bind="$row.growth"
+            data-format="+0.0%;-0.0%"
+            data-when="$row.growth < 0"
+            data-when-style="color: #b91c1c; font-weight: 700"
+            style="padding: 5pt; text-align: right"
+          ></td>
+          <td
+            data-bind="$row.status"
+            data-when="$row.status === 'At risk'"
+            data-when-style="color: #b91c1c; font-weight: 700"
+            style="padding: 5pt"
+          ></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p style="font-size: 8pt; color: #94a3b8; margin-top: 6pt">
+      Revenue and margin use <code>data-color-scale</code>; each column derives its own min/max from
+      the rows it prints, so no bounds are hard-coded. Rows with negative growth get a red-tinted
+      background via a row-level <code>data-when</code>.
+    </p>
+
+    <h2 style="color: #0f2f57; font-size: 13pt; margin-top: 16pt; margin-bottom: 4pt">At-risk accounts only</h2>
+    <table data-each="row in $data.accounts" style="border: 1px solid #fecaca">
+      <thead>
+        <tr>
+          <th style="background-color: #b91c1c; color: #ffffff; text-align: left; padding: 5pt">Account</th>
+          <th style="background-color: #b91c1c; color: #ffffff; text-align: left; padding: 5pt">Owner</th>
+          <th style="background-color: #b91c1c; color: #ffffff; text-align: right; padding: 5pt">Revenue</th>
+          <th style="background-color: #b91c1c; color: #ffffff; text-align: right; padding: 5pt">Margin</th>
+          <th style="background-color: #b91c1c; color: #ffffff; text-align: right; padding: 5pt">Growth</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr data-if="$row.status === 'At risk'">
+          <td data-bind="$row.account" style="padding: 5pt; font-weight: 700"></td>
+          <td data-bind="$row.owner" style="padding: 5pt; color: #64748b"></td>
+          <td data-bind="$row.revenue" data-format="#,##0" style="padding: 5pt; text-align: right"></td>
+          <td data-bind="$row.margin" data-format="0.0%" style="padding: 5pt; text-align: right"></td>
+          <td data-bind="$row.growth" data-format="+0.0%;-0.0%" style="padding: 5pt; text-align: right"></td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="font-size: 8pt; color: #94a3b8; margin-top: 6pt">
+      <code>data-if</code> on the detail row filters the data set: only accounts whose status is
+      <em>At risk</em> are laid out (the header still repeats normally).
+    </p>
+
+    <p style="margin-top: 14pt; font-size: 8pt; color: #94a3b8; text-align: right">Page {PAGE} of {TOTAL}</p>
+  </body>
+</html>

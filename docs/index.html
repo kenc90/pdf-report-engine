@@ -101,7 +101,8 @@
         </div>
         <div class="card">
           <h4>Vector charts</h4>
-          <p>Bar, line, area, pie and donut — stacked series, legends, value axes and number
+          <p>Bar, line, area, pie, donut, <strong>combo</strong> and <strong>waterfall</strong> —
+          stacked series, 100% stacking, a secondary axis, legends, value axes and number
           formats, authored as IR blocks or declarative <code>data-chart</code> elements.</p>
         </div>
         <div class="card">
@@ -126,6 +127,17 @@
           combinations in one grid.</p>
         </div>
         <div class="card">
+          <h4>Rich table cells</h4>
+          <p>Any cell can hold a block stack — images, QR/barcodes, charts, nested tables — laid
+          out inside its padded box. Rows grow to fit and stay atomic across pages.</p>
+        </div>
+        <div class="card">
+          <h4>Conditional formatting</h4>
+          <p><code>visible</code>, <code>styleWhen</code> rules and <code>colorScale</code>
+          heatmaps on blocks, rows and cells — with per-column auto ranges and white text on dark
+          fills.</p>
+        </div>
+        <div class="card">
           <h4>Images — offline &amp; online</h4>
           <p>Local paths, <code>data:</code> URIs, raw bytes, and <code>http(s)</code> URLs —
           with aspect-ratio sizing, alignment and borders.</p>
@@ -145,7 +157,9 @@
         See them together: <a href="examples.html#ex-tour"><code>samples/dashboard.html</code></a>
         is a single report with stylesheet selectors, a translucent watermark, a clickable TOC,
         bar / stacked bar / line / area / pie / donut charts, QR / Code 128 / EAN-13 codes,
-        highlights and internal links.
+        highlights and internal links. The newer depth features have focused samples:
+        <code>rich-cells.html</code>, <code>conditional-format.html</code> and
+        <code>chart-depth.html</code> (combo / 100% / waterfall).
       </p>
     </section>
 

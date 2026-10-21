@@ -122,9 +122,9 @@ h1, h2 { margin-bottom: 4pt; }           /* list */</code></pre>
         <thead><tr><th>Markup</th><th>Becomes</th><th>Attributes</th></tr></thead>
         <tbody>
           <tr>
-            <td><code>&lt;div data-chart="bar|line|area|pie|donut"&gt;</code></td>
+            <td><code>&lt;div data-chart="bar|line|area|pie|donut|combo|waterfall"&gt;</code></td>
             <td><code>ChartBlock</code></td>
-            <td><code>data-title</code>, <code>data-categories</code>, <code>data-series</code>, <code>data-values</code> (+ <code>data-name</code>/<code>data-color</code>), <code>data-colors</code>, <code>data-stacked</code>, <code>data-show-values</code>, <code>data-category-labels</code>, <code>data-legend</code>, <code>data-inner-radius</code>, <code>data-plot-height</code>, <code>data-min</code>/<code>data-max</code>/<code>data-ticks</code>/<code>data-value-format</code>/<code>data-axis-labels</code>/<code>data-grid-lines</code>; height via <code>style</code>.</td>
+            <td><code>data-title</code>, <code>data-categories</code>, <code>data-series</code>, <code>data-values</code> (+ <code>data-name</code>/<code>data-color</code>), <code>data-colors</code>, <code>data-stacked</code> (<code>true</code> or <code>100%</code>), <code>data-show-values</code>, <code>data-category-labels</code>, <code>data-legend</code>, <code>data-inner-radius</code>, <code>data-plot-height</code>, <code>data-min</code>/<code>data-max</code>/<code>data-ticks</code>/<code>data-value-format</code>/<code>data-axis-labels</code>/<code>data-grid-lines</code>; depth: <code>data-series-types="bar,line"</code>, <code>data-series-axes="left,right"</code>, <code>data-right-min</code>/<code>data-right-max</code>/<code>data-right-ticks</code>/<code>data-right-format</code>/<code>data-right-axis-labels</code>, <code>data-totals="0,4"</code>, <code>data-waterfall-colors="increase=…; decrease=…; total=…"</code>; height via <code>style</code>.</td>
           </tr>
           <tr>
             <td><code>&lt;table data-chart="…"&gt;</code></td>
@@ -140,6 +140,26 @@ h1, h2 { margin-bottom: 4pt; }           /* list */</code></pre>
             <td><code>&lt;div data-barcode="qr|code128|ean13"&gt;</code></td>
             <td><code>BarcodeBlock</code></td>
             <td><code>data-value</code> (or element text), <code>data-bind</code>/<code>data-format</code>, <code>data-error-correction</code>, <code>data-module-size</code>, <code>data-quiet-zone</code>, <code>data-show-text</code>, <code>data-color</code>.</td>
+          </tr>
+          <tr>
+            <td><code>data-if="&lt;expr&gt;"</code></td>
+            <td><code>visible</code></td>
+            <td>On any block, <code>&lt;tr&gt;</code> or <code>&lt;td&gt;</code>: show only when the expression is truthy. A table detail row is filtered per data row (<code>$row</code>, <code>$index</code>); <code>true</code>/<code>false</code> literals are accepted.</td>
+          </tr>
+          <tr>
+            <td><code>data-when="&lt;expr&gt;"</code></td>
+            <td><code>styleWhen[]</code></td>
+            <td>Adds a conditional style rule; pair with <code>data-when-style="background-color: #fff5f5; color: #b91c1c"</code> for the props applied while it holds. Works on blocks, rows and cells.</td>
+          </tr>
+          <tr>
+            <td><code>data-color-scale="…"</code></td>
+            <td><code>ColorScale</code></td>
+            <td>Cell heatmap: <code>min=0;max=100;from=#eef4ff;to=#1e3a8a;text=false</code>. Omit <code>min</code>/<code>max</code> to derive the range from the column's data across the table; dark fills switch the text to white unless <code>text=false</code>.</td>
+          </tr>
+          <tr>
+            <td><code>&lt;td&gt;</code> with block children</td>
+            <td><code>CellNode.blocks</code></td>
+            <td><code>&lt;img&gt;</code>, a nested <code>&lt;table&gt;</code>, <code>&lt;p&gt;</code>, a declarative chart/barcode element — a block stack laid out inside the padded cell. Inline children are wrapped into a synthetic paragraph.</td>
           </tr>
           <tr>
             <td><code>&lt;a href="…"&gt;</code></td>
@@ -176,9 +196,9 @@ h1, h2 { margin-bottom: 4pt; }           /* list */</code></pre>
         <tbody>
           <tr><td><code>heading</code></td><td><code>content</code>, <code>level</code>, style/box props, <code>outline</code></td></tr>
           <tr><td><code>paragraph</code></td><td><code>content</code> (string | number | span | array), style/box props</td></tr>
-          <tr><td><code>table</code></td><td><code>columns</code>, <code>headerRows</code>, <code>footerRows</code>, <code>staticRows</code>, <code>dataSource</code>, <code>detail</code>, <code>groups</code>, <code>showGrid</code>, <code>striped</code>, <code>repeatHeader</code>, <code>rowStyle</code></td></tr>
+          <tr><td><code>table</code></td><td><code>columns</code>, <code>headerRows</code>, <code>footerRows</code>, <code>staticRows</code>, <code>dataSource</code>, <code>detail</code>, <code>groups</code>, <code>showGrid</code>, <code>striped</code>, <code>repeatHeader</code>, <code>rowStyle</code>; conditional: <code>visible</code>, <code>styleWhen</code>, <code>colorScale</code>, <code>blocks</code> on rows/cells</td></tr>
           <tr><td><code>image</code></td><td><code>src</code> (path / data: / bytes / URL), <code>width</code>, <code>height</code>, <code>intrinsic</code>, <code>alt</code></td></tr>
-          <tr><td><code>chart</code></td><td><code>kind</code>, <code>title</code>, <code>categories</code>, <code>series</code>, <code>stacked</code>, <code>legend</code>, <code>colors</code>, <code>showValues</code>, <code>valueAxis</code>, <code>categoryLabels</code>, <code>innerRadius</code>, <code>plotHeight</code></td></tr>
+          <tr><td><code>chart</code></td><td><code>kind</code>, <code>title</code>, <code>categories</code>, <code>series</code>, <code>stacked</code> (<code>true</code>/<code>'100%'</code>), <code>legend</code>, <code>colors</code>, <code>showValues</code>, <code>valueAxis</code>, <code>rightAxis</code>, <code>totals</code>, <code>waterfallColors</code>, <code>categoryLabels</code>, <code>innerRadius</code>, <code>plotHeight</code></td></tr>
           <tr><td><code>toc</code></td><td><code>title</code>, <code>maxLevel</code>, <code>leaders</code>, <code>indent</code>, <code>pageNumbers</code>, <code>gap</code></td></tr>
           <tr><td><code>barcode</code></td><td><code>symbology</code>, <code>value</code>, <code>moduleSize</code>, <code>errorCorrection</code>, <code>quietZone</code>, <code>showText</code>, <code>color</code></td></tr>
           <tr><td><code>spacer</code></td><td><code>size</code></td></tr>
@@ -199,6 +219,12 @@ h1, h2 { margin-bottom: 4pt; }           /* list */</code></pre>
           <tr><td><code>showGrid</code></td><td><code>true</code> is a 0.5pt solid <code>#999</code> cell grid; a <code>BorderShorthand</code> sets width/style/colour. Cell borders from <code>border</code> override it.</td></tr>
           <tr><td><code>striped</code></td><td>Shades every second <em>data</em> row (odd <code>$index</code>) in <code>#f2f2f2</code>, or in <code>{ color }</code>. Authored and static rows are never shaded, and a cell's own <code>backgroundColor</code> wins.</td></tr>
           <tr><td><code>rowStyle</code></td><td>Object or <code>(row, index) =&gt; props</code>, applied under the column style and the cell style. For non-data rows it is called with <code>({}, 0)</code>.</td></tr>
+          <tr><td><code>columns[].colorScale</code></td><td>Heatmap default for the column: <code>{ min?, max?, from?, to?, text? }</code>. Omitted bounds are computed from the numeric values printed in that column (numbers or numeric strings, across header/static/detail/footer rows), and <code>CellNode.colorScale</code> overrides it per cell.</td></tr>
+          <tr><td><code>RowNode.visible</code></td><td><code>boolean | Expr</code>. On a data-driven detail row it runs once per row (<code>$row</code>, <code>$index</code>); a falsy result drops the row before layout. Header, static and footer rows also honour it against the ambient scope.</td></tr>
+          <tr><td><code>RowNode.styleWhen</code> / <code>CellNode.styleWhen</code></td><td>Ordered <code>{ when, style }</code> rules. Row rules merge under column styles; cell rules merge last, after the cell's own props. Matching rules apply in array order (later wins); <code>undefined</code> values never erase a prop.</td></tr>
+          <tr><td><code>CellNode.blocks</code></td><td>Rich cell content: a stack of any flow <code>Block</code> (image, barcode, chart, nested table, paragraph…). Blocks are laid out at the cell's inner width, stacked with their margins, and painted with the cell's padding and vertical alignment. <code>content</code> wins when both are set.</td></tr>
+          <tr><td><code>CellNode.visible</code></td><td><code>boolean | Expr</code>. A hidden cell keeps its grid slot, borders and fill but paints no content.</td></tr>
+          <tr><td><code>CellNode.colorScale</code></td><td>Per-cell heatmap, merged on top of <code>columns[].colorScale</code>. Dark fills repaint the text white unless <code>text: false</code>.</td></tr>
           <tr><td>Accepted, ignored</td><td><code>widows</code>, <code>orphans</code>, <code>showRowSeparators</code>, <code>groupStyle</code>, <code>subtotalToken</code>, <code>CellNode.subtotal</code>, <code>GroupNode.label</code>, <code>GroupNode.headerRepeat</code>, <code>RowNode.breakInside</code> (a row is already atomic) and <code>pageBreak.always</code>. They are still in the types so existing reports compile; nothing reads them.</td></tr>
         </tbody>
       </table>
@@ -206,7 +232,7 @@ h1, h2 { margin-bottom: 4pt; }           /* list */</code></pre>
       <h3><code>ChartBlock</code></h3>
       <pre data-copy><code>{
   type: 'chart',
-  kind: 'bar' | 'line' | 'area' | 'pie' | 'donut',
+  kind: 'bar' | 'line' | 'area' | 'pie' | 'donut' | 'combo' | 'waterfall',
   title?: Content,
   categories?: string[] | string | Expr,        // array, CSV ('Q1,Q2'), or binding
   series: Array&lt;{
@@ -214,8 +240,10 @@ h1, h2 { margin-bottom: 4pt; }           /* list */</code></pre>
     values: number[] | string | Expr,           // array, CSV ('12,18'), or binding
     color?: ColorInput,
     format?: string,                            // value-label pattern
+    type?: 'bar' | 'line' | 'area',             // combo only, default 'bar'
+    axis?: 'left' | 'right',                    // combo only, default 'left'
   }&gt;,
-  stacked?: boolean,                            // bars / areas
+  stacked?: boolean | '100%',                   // bars / areas; '100%' normalises
   legend?: 'none' | 'top' | 'bottom' | 'right',
   colors?: ColorInput[],                        // palette when series omit color
   showValues?: boolean,
@@ -224,6 +252,12 @@ h1, h2 { margin-bottom: 4pt; }           /* list */</code></pre>
     min?: number, max?: number, ticks?: number, // ticks default 5
     format?: string, labels?: boolean, gridLines?: boolean,
   },
+  rightAxis?: {                                 // combo charts only
+    min?: number, max?: number, ticks?: number,
+    format?: string, labels?: boolean,
+  },
+  totals?: number[],                            // waterfall: running-total indices
+  waterfallColors?: { increase?: ColorInput, decrease?: ColorInput, total?: ColorInput },
   innerRadius?: number,                         // donut hole, default 0.55
   plotHeight?: number,                          // fallback height (default 160pt)
   height?: number | string, id?, ...box/style props
@@ -235,6 +269,16 @@ h1, h2 { margin-bottom: 4pt; }           /* list */</code></pre>
         <code>right</code> for pie/donut, <code>bottom</code> for multiple series and
         <code>none</code> for a single series. A chart is one atomic fragment, so it never splits
         across pages.
+      </p>
+      <p>
+        Depth: <code>combo</code> reads each series' <code>type</code>/<code>axis</code>, giving
+        right-axis series their own domain, ticks, labels and a reserved right gutter;
+        <code>stacked: '100%'</code> divides every value by its category total and switches the
+        axis and value labels to percentages; <code>waterfall</code> reads one delta series,
+        draws indices listed in <code>totals</code> from zero to the running balance (index 0
+        seeds that balance) and joins consecutive bars with dashed connectors. The default
+        increase/decrease/total colours can be overridden with
+        <code>waterfallColors</code>.
       </p>
 
       <h3><code>TocBlock</code></h3>
@@ -286,9 +330,20 @@ h1, h2 { margin-bottom: 4pt; }           /* list */</code></pre>
       </p>
 
       <h3>Cells &amp; columns</h3>
-      <pre data-copy><code>ColumnNode: { width?, grow?, minWidth?, align?, style?, key? }
-CellNode:   { content?, colSpan?, rowSpan?, align?, verticalAlign?, style?,
-              backgroundColor?, border?, padding*?, subtotal?, format? }</code></pre>
+      <pre data-copy><code>ColumnNode: { width?, grow?, minWidth?, align?, style?, key?, colorScale? }
+CellNode:   { content?, blocks?, colSpan?, rowSpan?, align?, verticalAlign?, style?,
+              backgroundColor?, border?, padding*?, visible?, styleWhen?, colorScale?,
+              subtotal?, format? }
+
+StyleCondition: { when: string | Expr, style?: Partial&lt;BoxProps&gt; }
+ColorScale:     { min?, max?, from?, to?, text? }</code></pre>
+      <p>
+        <code>blocks</code> turns a cell into a rich cell: any flow block (image, barcode,
+        chart, nested table, paragraph) is laid out at the cell's inner width and stacked with
+        its margins. <code>visible</code> hides content while keeping the grid slot,
+        <code>styleWhen</code> merges conditional props in order, and <code>colorScale</code>
+        turns the cell's numeric value into a heatmap fill.
+      </p>
 
       <h3>Content &amp; bindings</h3>
       <p>A <code>Content</code> is a string, number, span, or an array of them. Spans bind to data:</p>

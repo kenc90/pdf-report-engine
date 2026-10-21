@@ -96,10 +96,44 @@ export interface ResolvedBorder {
   color: ColorInput;
 }
 
+/**
+ * Declarative conditional formatting: when `when` evaluates truthy in the
+ * current scope (`$row`, `$group`, `$index`, `$page`, …), `style` is merged on
+ * top of the node's own props. Rules apply in array order, so the last match
+ * wins. Works on blocks, table rows and table cells.
+ */
+export interface StyleCondition {
+  when: string | Expr;
+  /** Box/style overrides applied while the condition holds. */
+  style?: Partial<BoxProps>;
+}
+
+/**
+ * Numeric heatmap: interpolate a cell's number between `from` and `to`.
+ * When `min`/`max` are omitted the range is computed from the table's data
+ * rows for the column the cell belongs to, so one declaration shades a whole
+ * column.
+ */
+export interface ColorScale {
+  min?: number;
+  max?: number;
+  /** Fill at the low end (default `#eef4ff`). */
+  from?: ColorInput;
+  /** Fill at the high end (default `#1e3a8a`). */
+  to?: ColorInput;
+  /**
+   * Switch the text to white on dark fills (default true). Set `false` to keep
+   * the cell's own text colour.
+   */
+  text?: boolean;
+}
+
 export interface BlockBase extends BoxProps {
   id?: string;
-  /** Conditional visibility. */
+  /** Conditional visibility. An `Expr` is evaluated against the current scope. */
   visible?: boolean | Expr;
+  /** Conditional formatting applied before the block is laid out. */
+  styleWhen?: StyleCondition[];
 }
 
 export interface ParagraphBlock extends BlockBase {
@@ -150,7 +184,7 @@ export interface ImageBlock extends BlockBase {
 
 // --- charts ---------------------------------------------------------------
 
-export type ChartKind = 'bar' | 'line' | 'area' | 'pie' | 'donut';
+export type ChartKind = 'bar' | 'line' | 'area' | 'pie' | 'donut' | 'combo' | 'waterfall';
 
 export interface ChartSeries {
   /** Legend label. */
@@ -164,6 +198,17 @@ export interface ChartSeries {
   color?: ColorInput;
   /** Number pattern for value labels on this series. */
   format?: string;
+  /**
+   * Combo charts only: how this series is drawn. Defaults to `'bar'`.
+   * Ignored by the single-kind charts.
+   */
+  type?: 'bar' | 'line' | 'area';
+  /**
+   * Combo charts only: which value axis this series reads. Defaults to
+   * `'left'`; right-axis series scale against `rightAxis` and are labelled on
+   * the right edge of the plot.
+   */
+  axis?: 'left' | 'right';
 }
 
 export interface ValueAxisOptions {
@@ -195,14 +240,28 @@ export interface ChartBlock extends BlockBase {
   /** Category labels: literal array, CSV string, binding expression, or `Expr`. */
   categories?: string[] | string | Expr;
   series: ChartSeries[];
-  /** Stack bars / areas instead of grouping them side by side. */
-  stacked?: boolean;
+  /**
+   * Stack bars / areas instead of grouping them side by side. `'100%'`
+   * normalises every category to a percentage of its own total (the value
+   * axis then reads 0–100%).
+   */
+  stacked?: boolean | '100%';
   legend?: 'none' | 'top' | 'bottom' | 'right';
   /** Palette used when a series has no explicit `color`. */
   colors?: ColorInput[];
   /** Write each value above its bar / point (default false). */
   showValues?: boolean;
   valueAxis?: ValueAxisOptions;
+  /** Combo charts: the right-hand axis used by `series[].axis === 'right'`. */
+  rightAxis?: ValueAxisOptions;
+  /**
+   * Waterfall charts: category indices drawn as a running-total bar instead
+   * of a delta. The bar spans 0 → running; at index 0 the value seeds the
+   * running total (a starting balance), elsewhere the value is ignored.
+   */
+  totals?: number[];
+  /** Waterfall colours (defaults: green increase, red decrease, navy total). */
+  waterfallColors?: { increase?: ColorInput; decrease?: ColorInput; total?: ColorInput };
   /** Draw category labels under the plot (default true). */
   categoryLabels?: boolean;
   /** Inner radius of a donut as a fraction of the outer radius (default 0.55). */
@@ -265,6 +324,13 @@ export interface BarcodeBlock extends BlockBase {
 export interface RowNode {
   cells: CellNode[];
   kind?: 'header' | 'detail' | 'groupHeader' | 'groupFooter' | 'subtotal' | 'grandTotal';
+  /**
+   * Conditional row filtering. For a data-driven detail row the expression is
+   * evaluated per row and a falsy result drops that row entirely.
+   */
+  visible?: boolean | Expr;
+  /** Conditional styling applied to every cell in the row. */
+  styleWhen?: StyleCondition[];
   /** Row level pagination hints. A row is already one atomic fragment, so
    * `breakInside` changes nothing; `keepWithNext` glues it to the following row. */
   breakInside?: 'auto' | 'avoid';
@@ -286,13 +352,22 @@ export interface ColumnNode {
   align?: 'left' | 'center' | 'right';
   /** Default style for body cells in this column. */
   style?: Partial<StyleProps>;
+  /** Heatmap default for every numeric cell in this column. */
+  colorScale?: ColorScale;
   key?: string;
 }
 
+/** Cell content: inline `Content`, or a stack of blocks (images, codes, charts…). */
 export type CellContent = Content | CellNode;
 
 export interface CellNode {
   content?: CellContent;
+  /**
+   * Rich cell content: any flow block — `image`, `barcode`, `chart`, a nested
+   * `table`, paragraphs — laid out inside the cell's padded box. Mutually
+   * exclusive with `content`; `content` wins when both are present.
+   */
+  blocks?: Block[];
   colSpan?: number;
   rowSpan?: number;
   align?: 'left' | 'center' | 'right' | 'justify';
@@ -305,6 +380,12 @@ export interface CellNode {
   paddingBottom?: number;
   paddingLeft?: number;
   backgroundColor?: ColorInput;
+  /** Conditional cell visibility; a hidden cell keeps its grid slot and fill. */
+  visible?: boolean | Expr;
+  /** Conditional styling for this cell, merged after the column/row styles. */
+  styleWhen?: StyleCondition[];
+  /** Numeric heatmap fill derived from the cell's value. */
+  colorScale?: ColorScale;
   /**
    * @deprecated Accepted and ignored. Group totals are pre-computed for the whole group;
    * read them in a footer with `$group.<key>_sum` (or `$group.rowCount`).

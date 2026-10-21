@@ -27,6 +27,7 @@ import { typeset, type Line } from '../text/typeset.js';
 import type { ResolvedStyle } from '../text/style.js';
 import { resolveBox, resolveBorders, borderRGB, borderDash, type EdgeInsets } from './box.js';
 import type { Fragment, DrawCommand, OutlineEntry } from './flow.js';
+import { applyConditions, isVisible } from './condition.js';
 // `block <-> table` is a genuine cycle (a table lays out cell paragraphs via this
 // module, and this module dispatches table blocks to the table layout). Both sides
 // only *call* the imported function at runtime, and ESM function declarations are
@@ -45,35 +46,40 @@ export interface BlockLayoutOptions {
 
 export function layoutBlock(block: Block, ctx: LayoutContext, opts: BlockLayoutOptions): Fragment[] {
   const inherited = opts.inherited ?? ctx.baseStyle;
-  if (block.visible === false) return [];
+  // Conditional formatting is resolved before dispatch, so every block kind sees
+  // the same visible/styleWhen semantics (a hidden block emits no fragment).
+  if (!isVisible(block.visible, ctx, opts.scope)) return [];
+  const effective: Block = block.styleWhen?.length
+    ? (applyConditions(block, block.styleWhen, ctx, opts.scope) as Block)
+    : block;
   let frags: Fragment[];
-  switch (block.type) {
+  switch (effective.type) {
     case 'paragraph':
-      frags = layoutTextBlock(block, ctx, opts, inherited);
+      frags = layoutTextBlock(effective, ctx, opts, inherited);
       break;
     case 'heading':
-      frags = layoutHeading(block, ctx, opts, inherited);
+      frags = layoutHeading(effective, ctx, opts, inherited);
       break;
     case 'spacer':
-      frags = layoutSpacer(block, ctx, opts, inherited);
+      frags = layoutSpacer(effective, ctx, opts, inherited);
       break;
     case 'image':
-      frags = layoutImage(block, ctx, opts, inherited);
+      frags = layoutImage(effective, ctx, opts, inherited);
       break;
     case 'pageBreak':
       frags = [{ height: 0, before: 0, after: 0, commands: [], isPageBreak: true, breakBefore: 'page' }];
       break;
     case 'table':
-      frags = layoutTable(block, ctx, opts, inherited);
+      frags = layoutTable(effective, ctx, opts, inherited);
       break;
     case 'chart':
-      frags = layoutChart(block, ctx, opts, inherited);
+      frags = layoutChart(effective, ctx, opts, inherited);
       break;
     case 'toc':
-      frags = layoutToc(block, ctx, opts, inherited);
+      frags = layoutToc(effective, ctx, opts, inherited);
       break;
     case 'barcode':
-      frags = layoutBarcode(block, ctx, opts, inherited);
+      frags = layoutBarcode(effective, ctx, opts, inherited);
       break;
     default:
       frags = [];
@@ -82,12 +88,12 @@ export function layoutBlock(block: Block, ctx: LayoutContext, opts: BlockLayoutO
   // page. A paragraph becomes one fragment per line, so the cheapest faithful
   // implementation is to chain its fragments: pagination moves a keep-with-next run
   // as a unit, which is exactly the machinery table rows already rely on.
-  if (block.breakInside === 'avoid') {
+  if (effective.breakInside === 'avoid') {
     for (let i = 0; i < frags.length - 1; i += 1) frags[i]!.keepWithNext = true;
   }
   // Any block with an `id` defines a named destination at its first fragment,
   // which is what `#id` links resolve against.
-  if (block.id && frags.length && !frags[0]!.anchor) frags[0]!.anchor = block.id;
+  if (effective.id && frags.length && !frags[0]!.anchor) frags[0]!.anchor = effective.id;
   return frags;
 }
 

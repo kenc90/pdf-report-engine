@@ -47,7 +47,14 @@ interface Slice {
   values: number[];
   color: RGB;
   format?: string;
+  /** Combo charts: how this series is drawn (default `'bar'`). */
+  type?: 'bar' | 'line' | 'area';
+  /** Combo charts: which value axis this series reads (default `'left'`). */
+  axis?: 'left' | 'right';
 }
+
+/** Percent labels use a quoted `%` so the formatter does not scale again. */
+const PERCENT_FORMAT = '0"%"';
 
 export function layoutChart(
   block: ChartBlock,
@@ -68,8 +75,15 @@ export function layoutChart(
   const labelHeight = ascent + descent;
 
   const categories = resolveStrings(block.categories, ctx, opts.scope);
-  const series = block.series.map((s, i) => resolveSeries(s, i, ctx, opts.scope, block.colors, style));
   const isPie = block.kind === 'pie' || block.kind === 'donut';
+  const isCombo = block.kind === 'combo';
+  const isWaterfall = block.kind === 'waterfall';
+  const percentStack = block.stacked === '100%';
+  const stacked = block.stacked === true;
+  const resolved = block.series.map((s, i) => resolveSeries(s, i, ctx, opts.scope, block.colors, style));
+  // Waterfalls read one delta series; percent stacking normalises every slice
+  // against its category total so the axis reads 0–100%.
+  const series = isWaterfall ? resolved.slice(0, 1) : percentStack ? percentSlices(resolved) : resolved;
 
   if (series.length === 0 || (isPie && series[0]!.values.length === 0)) {
     return [{ height: 0, before: margin.top, after: margin.bottom, commands: [], avoidSplit: true }];
@@ -127,23 +141,46 @@ export function layoutChart(
   const plotBottom = plotTop + plotHeight;
 
   // --- axes ----------------------------------------------------------------
-  const includeZero = !isPie && block.kind !== 'line';
-  const domain = isPie ? undefined : computeDomain(series, block.stacked === true, block.valueAxis, includeZero);
-  const tickLabels = domain
-    ? domain.ticks.map((v) => formatTick(v, block.valueAxis?.format))
-    : [];
+  const leftSeries = isCombo ? series.filter((s) => s.axis !== 'right') : series;
+  const rightSeries = isCombo ? series.filter((s) => s.axis === 'right') : [];
+  const includeZero = !isPie && !isWaterfall && block.kind !== 'line';
+  const domain = isPie
+    ? undefined
+    : isWaterfall
+      ? computeWaterfallDomain(series[0]!, block)
+      : computeDomain(leftSeries, stacked || percentStack, block.valueAxis, includeZero || percentStack);
+  const rightDomain = rightSeries.length > 0 ? computeDomain(rightSeries, false, block.rightAxis, true) : undefined;
+  const axisFormat = block.valueAxis?.format ?? (percentStack ? PERCENT_FORMAT : undefined);
+  const tickLabels = domain ? domain.ticks.map((v) => formatTick(v, axisFormat)) : [];
   const showAxisLabels = block.valueAxis?.labels !== false;
   const gutter = showAxisLabels && !isPie && tickLabels.length
     ? Math.max(...tickLabels.map((t) => measure(t, labelStyle))) + 6
     : 0;
+  const rightFormat = block.rightAxis?.format ?? (percentStack ? PERCENT_FORMAT : block.valueAxis?.format);
+  const rightTickLabels = rightDomain ? rightDomain.ticks.map((v) => formatTick(v, rightFormat)) : [];
+  const showRightLabels = (block.rightAxis?.labels ?? block.valueAxis?.labels) !== false;
+  const rightGutter = showRightLabels && rightTickLabels.length
+    ? Math.max(...rightTickLabels.map((t) => measure(t, labelStyle))) + 6
+    : 0;
   const plotX = left + gutter;
-  const plotW = Math.max(16, plotWidth - gutter);
+  const plotW = Math.max(16, plotWidth - gutter - rightGutter);
   const bandW = plotW / Math.max(1, catCount);
 
-  const yOf = (v: number): number => {
-    const d = domain!;
+  const mapY = (d: Domain, v: number): number => {
     const t = (v - d.min) / (d.max - d.min || 1);
     return plotBottom - t * plotHeight;
+  };
+  const yOf = (v: number): number => mapY(domain!, v);
+  const yOfRight = (v: number): number => (rightDomain ? mapY(rightDomain, v) : yOf(v));
+  /** Per-series scale: combo charts may read the right axis. */
+  const yFor = (slice: Slice): ((v: number) => number) =>
+    isCombo && slice.axis === 'right' ? yOfRight : yOf;
+
+  const valueFormat = (slice: Slice): string | undefined => {
+    if (slice.format) return slice.format;
+    if (percentStack) return PERCENT_FORMAT;
+    if (isCombo && slice.axis === 'right') return block.rightAxis?.format ?? block.valueAxis?.format;
+    return block.valueAxis?.format;
   };
 
   if (legendSide === 'top') drawLegend(commands, legend, 0, titleHeight, labelStyle, ascent);
@@ -165,16 +202,32 @@ export function layoutChart(
         }
       }
     }
+    // Right-axis tick labels (combo). Grid lines stay on the left axis only.
+    if (rightDomain && showRightLabels) {
+      for (const v of rightDomain.ticks) {
+        const y = yOfRight(v);
+        const text = formatTick(v, rightFormat);
+        pushText(commands, text, labelStyle, plotX + plotW + 6, y + ascent * 0.35, TEXT_MUTED);
+      }
+    }
     // Value-zero baseline.
     if (domain!.min <= 0 && domain!.max >= 0) {
       const y = yOf(0);
       commands.push({ op: 'line', x1: plotX, y1: y, x2: plotX + plotW, y2: y, color: AXIS, lineWidth: 0.8 });
     }
 
-    if (block.kind === 'bar') {
-      drawBars(commands, block, series, catCount, plotX, plotBottom, bandW, yOf, labelStyle);
+    if (isWaterfall) {
+      drawWaterfall(commands, block, series[0]!, plotX, bandW, yOf, labelStyle, valueFormat);
+    } else if (isCombo) {
+      // Bars first so lines/areas read on top of them.
+      const bars = series.filter((s) => (s.type ?? 'bar') === 'bar');
+      const lines = series.filter((s) => (s.type ?? 'bar') !== 'bar');
+      if (bars.length > 0) drawBars(commands, block, bars, catCount, plotX, bandW, yFor, labelStyle, false, valueFormat);
+      if (lines.length > 0) drawLines(commands, block, lines, catCount, plotX, bandW, yFor, labelStyle, ascent, false, valueFormat);
+    } else if (block.kind === 'bar') {
+      drawBars(commands, block, series, catCount, plotX, bandW, yFor, labelStyle, stacked, valueFormat);
     } else {
-      drawLines(commands, block, series, catCount, plotX, bandW, yOf, labelStyle, ascent);
+      drawLines(commands, block, series, catCount, plotX, bandW, yFor, labelStyle, ascent, stacked, valueFormat);
     }
 
     // Category labels.
@@ -237,12 +290,29 @@ function resolveSeries(
 ): Slice {
   const values = resolveNumbers(series.values, ctx, scope);
   const color = series.color !== undefined ? toRGB(series.color) : palette(colors, index);
-  return { name: series.name, values, color, format: series.format };
+  return { name: series.name, values, color, format: series.format, type: series.type, axis: series.axis };
 }
 
 function palette(colors: unknown, i: number): RGB {
   if (Array.isArray(colors) && colors.length > 0) return toRGB(colors[i % colors.length]);
   return DEFAULT_PALETTE[i % DEFAULT_PALETTE.length]!;
+}
+
+/** Normalise every category to 100% across the series, keeping each value's sign. */
+function percentSlices(series: Slice[]): Slice[] {
+  const count = Math.max(...series.map((s) => s.values.length), 0);
+  const totals = Array.from({ length: count }, (_, i) => {
+    let sum = 0;
+    for (const s of series) sum += Math.abs(s.values[i] ?? 0);
+    return sum;
+  });
+  return series.map((slice) => ({
+    ...slice,
+    values: slice.values.map((v, i) => {
+      const total = totals[i] ?? 0;
+      return total === 0 ? 0 : (v / total) * 100;
+    }),
+  }));
 }
 
 function resolveStrings(value: string[] | string | Expr | undefined, ctx: LayoutContext, scope: ExprContext): string[] {
@@ -355,14 +425,15 @@ function drawBars(
   series: Slice[],
   catCount: number,
   plotX: number,
-  plotBottom: number,
   bandW: number,
-  yOf: (v: number) => number,
+  yFor: (slice: Slice) => (v: number) => number,
   labelStyle: ResolvedStyle,
+  stacked: boolean,
+  formatFor: (slice: Slice) => string | undefined,
 ): void {
   const groupW = bandW * 0.74;
-  const barW = Math.max(1, groupW / (block.stacked ? 1 : series.length));
-  const zeroY = yOf(0);
+  const barW = Math.max(1, groupW / (stacked ? 1 : series.length));
+  const stackY = stacked ? yFor(series[0]!) : undefined;
 
   for (let i = 0; i < catCount; i += 1) {
     const groupX = plotX + i * bandW + (bandW - groupW) / 2;
@@ -371,32 +442,33 @@ function drawBars(
     for (let s = 0; s < series.length; s += 1) {
       const slice = series[s]!;
       const value = slice.values[i] ?? 0;
-      const valueY = yOf(value);
       let y: number;
       let h: number;
-      if (block.stacked) {
+      if (stacked) {
         const base = value >= 0 ? positive : negative;
         const top = base + value;
-        const baseY = yOf(base);
-        const topY = yOf(top);
+        const baseY = stackY!(base);
+        const topY = stackY!(top);
         y = Math.min(baseY, topY);
         h = Math.max(0.5, Math.abs(baseY - topY));
         if (value >= 0) positive = top;
         else negative = top;
       } else {
+        const zeroY = yFor(slice)(0);
+        const valueY = yFor(slice)(value);
         y = Math.min(zeroY, valueY);
         h = Math.max(0.5, Math.abs(zeroY - valueY));
       }
-      const x = block.stacked ? groupX : groupX + s * barW;
-      commands.push({ op: 'fillRect', x, y, w: block.stacked ? groupW : Math.max(0.5, barW - 1), h, color: slice.color });
+      const x = stacked ? groupX : groupX + s * barW;
+      commands.push({ op: 'fillRect', x, y, w: stacked ? groupW : Math.max(0.5, barW - 1), h, color: slice.color });
       if (block.showValues) {
-        const text = formatTick(value, slice.format ?? block.valueAxis?.format);
+        const text = formatTick(value, formatFor(slice));
         const w = measure(text, labelStyle);
-        pushText(commands, text, labelStyle, x + (barW - w) / 2, (value >= 0 ? y : y + h) - 3, TEXT_MUTED);
+        const barX = stacked ? groupX : x;
+        pushText(commands, text, labelStyle, barX + (barW - w) / 2, (value >= 0 ? y : y + h) - 3, TEXT_MUTED);
       }
     }
   }
-  void plotBottom;
 }
 
 function drawLines(
@@ -406,29 +478,35 @@ function drawLines(
   catCount: number,
   plotX: number,
   bandW: number,
-  yOf: (v: number) => number,
+  yFor: (slice: Slice) => (v: number) => number,
   labelStyle: ResolvedStyle,
   ascent: number,
+  stacked: boolean,
+  formatFor: (slice: Slice) => string | undefined,
 ): void {
   const pointX = (i: number): number => plotX + i * bandW + bandW / 2;
-  const zeroY = yOf(0);
+  const kindOf = (slice: Slice): 'line' | 'area' =>
+    (slice.type ?? (block.kind === 'area' ? 'area' : 'line')) === 'area' ? 'area' : 'line';
 
-  if (block.kind === 'area' && block.stacked) {
+  if (stacked && block.kind === 'area') {
     // Stacked areas: each series floats on the cumulative total below it.
+    const first = series[0];
+    if (!first) return;
+    const baseY = yFor(first);
     const below = new Array<number>(catCount).fill(0);
     for (const slice of series) {
       const top = Array.from({ length: catCount }, (_, i) => (below[i] ?? 0) + (slice.values[i] ?? 0));
       const band: PolyPoint[] = [
-        ...top.map((v, i) => [pointX(i), yOf(v)] as PolyPoint),
+        ...top.map((v, i) => [pointX(i), baseY(v)] as PolyPoint),
         ...below
           .slice()
           .reverse()
-          .map((v, ri) => [pointX(catCount - 1 - ri), yOf(v)] as PolyPoint),
+          .map((v, ri) => [pointX(catCount - 1 - ri), baseY(v)] as PolyPoint),
       ];
       commands.push({ op: 'poly', points: band, fill: slice.color, fillOpacity: 0.35, close: true });
       commands.push({
         op: 'poly',
-        points: top.map((v, i) => [pointX(i), yOf(v)] as PolyPoint),
+        points: top.map((v, i) => [pointX(i), baseY(v)] as PolyPoint),
         stroke: { color: slice.color, lineWidth: 1 },
       });
       for (let i = 0; i < catCount; i += 1) below[i] = top[i] ?? 0;
@@ -438,9 +516,11 @@ function drawLines(
 
   for (const slice of series) {
     if (slice.values.length === 0) continue;
+    const yOf = yFor(slice);
     const points: PolyPoint[] = slice.values.map((v, i) => [pointX(i), yOf(v)] as PolyPoint);
 
-    if (block.kind === 'area') {
+    if (kindOf(slice) === 'area') {
+      const zeroY = yOf(0);
       const area: PolyPoint[] = [...points, [pointX(slice.values.length - 1), zeroY], [pointX(0), zeroY]];
       commands.push({ op: 'poly', points: area, fill: slice.color, fillOpacity: 0.28, close: true });
     }
@@ -449,13 +529,101 @@ function drawLines(
 
     if (block.showValues) {
       for (let i = 0; i < slice.values.length; i += 1) {
-        const text = formatTick(slice.values[i]!, slice.format ?? block.valueAxis?.format);
+        const text = formatTick(slice.values[i]!, formatFor(slice));
         const w = measure(text, labelStyle);
         pushText(commands, text, labelStyle, pointX(i) - w / 2, yOf(slice.values[i]!) - 4, TEXT_MUTED);
       }
     }
   }
   void ascent;
+}
+
+// --- waterfall -------------------------------------------------------------
+
+interface WaterfallBar {
+  start: number;
+  end: number;
+  value: number;
+  kind: 'increase' | 'decrease' | 'total';
+}
+
+/** Turn one delta series into running-total spans; a `totals` index is a 0-based bar. */
+function waterfallBars(slice: Slice, totals: Set<number>): WaterfallBar[] {
+  let running = 0;
+  return slice.values.map((v, i) => {
+    if (totals.has(i)) {
+      // The first bar seeds the running total (a starting balance); later totals
+      // just summarise what has accumulated so far.
+      if (i === 0) running = v;
+      return { start: 0, end: running, value: running, kind: 'total' };
+    }
+    const bar: WaterfallBar = { start: running, end: running + v, value: v, kind: v >= 0 ? 'increase' : 'decrease' };
+    running += v;
+    return bar;
+  });
+}
+
+function computeWaterfallDomain(slice: Slice, block: ChartBlock): Domain {
+  const values = [0];
+  for (const bar of waterfallBars(slice, new Set(block.totals ?? []))) values.push(bar.start, bar.end);
+  const axis = block.valueAxis;
+  let min = axis?.min ?? Math.min(...values);
+  let max = axis?.max ?? Math.max(...values);
+  if (!Number.isFinite(min) || !Number.isFinite(max)) {
+    min = 0;
+    max = 1;
+  }
+  if (max === min) max = min + 1;
+  const nice = niceTicks(min, max, axis?.ticks ?? 5);
+  const lo = axis?.min ?? nice.min;
+  const hi = axis?.max ?? nice.max;
+  return { min: lo, max: hi, ticks: nice.ticks.filter((v) => v >= lo - 1e-9 && v <= hi + 1e-9) };
+}
+
+function drawWaterfall(
+  commands: DrawCommand[],
+  block: ChartBlock,
+  slice: Slice,
+  plotX: number,
+  bandW: number,
+  yOf: (v: number) => number,
+  labelStyle: ResolvedStyle,
+  formatFor: (slice: Slice) => string | undefined,
+): void {
+  const bars = waterfallBars(slice, new Set(block.totals ?? []));
+  const groupW = bandW * 0.74;
+  const colors = block.waterfallColors ?? {};
+  const colorOf = (kind: WaterfallBar['kind']): RGB =>
+    toRGB(
+      kind === 'total'
+        ? colors.total ?? '#0f3b6d'
+        : kind === 'increase'
+          ? colors.increase ?? '#1b7f4b'
+          : colors.decrease ?? '#b23b3b',
+    );
+  let prevX: number | undefined;
+  let prevY: number | undefined;
+
+  for (let i = 0; i < bars.length; i += 1) {
+    const bar = bars[i]!;
+    const x = plotX + i * bandW + (bandW - groupW) / 2;
+    const y0 = yOf(bar.start);
+    const y1 = yOf(bar.end);
+    const top = Math.min(y0, y1);
+    const height = Math.max(0.5, Math.abs(y0 - y1));
+    commands.push({ op: 'fillRect', x, y: top, w: groupW, h: height, color: colorOf(bar.kind) });
+    // Dashed connector from where the previous bar ended to where this one starts.
+    if (prevX !== undefined && prevY !== undefined) {
+      commands.push({ op: 'line', x1: prevX, y1: prevY, x2: x, y2: prevY, color: AXIS, lineWidth: 0.6, dash: [2, 2] });
+    }
+    prevX = x + groupW;
+    prevY = yOf(bar.end);
+    if (block.showValues) {
+      const text = formatTick(bar.value, formatFor(slice));
+      const w = measure(text, labelStyle);
+      pushText(commands, text, labelStyle, x + (groupW - w) / 2, top - 3, TEXT_MUTED);
+    }
+  }
 }
 
 // --- pie / donut -----------------------------------------------------------

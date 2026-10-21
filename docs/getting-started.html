@@ -209,6 +209,38 @@ const report = {
     ] },
   }],
 };</code></pre>
+      <p>
+        Cells are not limited to text. Add <code>blocks</code> to a cell to stack any flow block
+        inside it (an image, a barcode, a chart, a nested table, paragraphs). Rows grow to the
+        measured stack height and remain atomic for pagination. Rows and cells also accept
+        <code>visible</code>, <code>styleWhen</code> and <code>colorScale</code>:
+      </p>
+      <pre data-copy><code>columns: [
+  { key: 'name', grow: 1 },
+  // Auto-ranged heatmap for the whole column.
+  { key: 'score', width: 64, align: 'right',
+    colorScale: { from: '#eef4ff', to: '#1e3a8a' } },
+],
+detail: {
+  visible: { expr: '!$row.archived' },                       // row filter
+  styleWhen: [{ when: '$row.score < 40',
+                style: { backgroundColor: '#fff5f5' } }],   // row condition
+  cells: [
+    { blocks: [
+      { type: 'paragraph', content: { bind: 'name' } },
+      { type: 'barcode', symbology: 'qr', value: { bind: 'code' }, moduleSize: 1 },
+    ] },
+    {},                                                       // auto-binds the score
+  ],
+},</code></pre>
+      <p>
+        In HTML the same knobs are declarative: <code>data-if</code> filters a block,
+        <code>&lt;tr&gt;</code> or <code>&lt;td&gt;</code>; <code>data-when</code> +
+        <code>data-when-style</code> adds a conditional rule; <code>data-color-scale</code>
+        shades a cell; and a <code>&lt;td&gt;</code> containing block children becomes a rich
+        cell automatically. See <code>samples/rich-cells.html</code> and
+        <code>samples/conditional-format.html</code>.
+      </p>
     </section>
 
     <section id="breaks">
@@ -306,10 +338,11 @@ pages.forEach((p, i) =&gt; console.log(i + 1, p.height, p.body.map((f) =&gt; f.f
       <h2>Charts</h2>
       <p>
         A <code>chart</code> block draws <strong>bar</strong>, <strong>line</strong>,
-        <strong>area</strong>, <strong>pie</strong> and <strong>donut</strong> charts with the
-        same primitives as the rest of the engine: real vector marks and selectable labels,
-        no canvas and no charting library. A chart is laid out as one atomic fragment, so it
-        never splits across a page.
+        <strong>area</strong>, <strong>pie</strong>, <strong>donut</strong>,
+        <strong>combo</strong> and <strong>waterfall</strong> charts with the same primitives as
+        the rest of the engine: real vector marks and selectable labels, no canvas and no
+        charting library. A chart is laid out as one atomic fragment, so it never splits across a
+        page.
       </p>
       <pre data-copy><code>body: [
   {
@@ -346,13 +379,52 @@ pages.forEach((p, i) =&gt; console.log(i + 1, p.height, p.body.map((f) =&gt; f.f
   },
 ]</code></pre>
       <p>
+        Three kinds add depth. A <strong>combo</strong> chart draws each series as a bar, line or
+        area and can put a series on a secondary right axis; <code>stacked: '100%'</code>
+        normalises every category to its own total; a <strong>waterfall</strong> turns one delta
+        series into a running balance:
+      </p>
+      <pre data-copy><code>// Bars on the left axis, a line on its own right axis.
+{
+  type: 'chart', kind: 'combo', title: 'Revenue and margin', height: 180,
+  categories: ['Q1', 'Q2', 'Q3', 'Q4'],
+  series: [
+    { name: 'Revenue', values: [12, 18, 15, 22] },
+    { name: 'Margin', values: [18, 19, 21, 24], type: 'line', axis: 'right' },
+  ],
+  rightAxis: { min: 0, max: 30, ticks: 5, format: '0"%"' },
+  legend: 'bottom',
+}
+
+// 100% stacking: each category sums to 100, labels read as percentages.
+{
+  type: 'chart', kind: 'bar', stacked: '100%', title: 'Revenue mix', height: 160,
+  categories: ['Q1', 'Q2', 'Q3'],
+  series: [
+    { name: 'Product', values: [60, 55, 50] },
+    { name: 'Services', values: [40, 45, 50] },
+  ],
+  showValues: true,
+}
+
+// Waterfall: totals[0] seeds the opening balance, later totals close the bridge.
+{
+  type: 'chart', kind: 'waterfall', title: 'Cash bridge', height: 180,
+  categories: ['Opening', 'Revenue', 'Costs', 'Closing'],
+  series: [{ name: 'Cash', values: [80, 30, -20, 0] }],
+  totals: [0, 3], showValues: true,
+  waterfallColors: { increase: '#15803d', decrease: '#b91c1c', total: '#1e3a8a' },
+}</code></pre>
+      <p>
         <code>values</code> and <code>categories</code> accept literal arrays, CSV strings
         (<code>'12,18,9'</code>) or bindings (<code>'$data.revenue'</code>), so a chart can be
         data-driven without a second source. <code>bar</code>/<code>line</code>/<code>area</code>
         read one value per category per series; <code>pie</code>/<code>donut</code> read
         <code>series[0].values</code> and label slices from <code>categories</code> (their legend
         shows each slice's percentage). Set <code>stacked: true</code> to stack bars or areas
-        instead of grouping them.
+        instead of grouping them, or <code>stacked: '100%'</code> to normalise each category to
+        its own total. Combo series read <code>type</code> and <code>axis</code>; waterfall
+        <code>totals</code> mark running-total bars (index 0 seeds the opening balance).
       </p>
       <p>A chart is equally at home in HTML, either declared with attributes or read from a table:</p>
       <pre data-copy><code>&lt;div data-chart="bar" data-title="Revenue vs. cost ($M)"
@@ -375,6 +447,27 @@ pages.forEach((p, i) =&gt; console.log(i + 1, p.height, p.body.map((f) =&gt; f.f
      data-categories="Direct,Partner,Retail,Online" data-values="37,25,22,16"
      data-legend="right" style="height:150pt"&gt;&lt;/div&gt;
 
+&lt;!-- Combo: series 1 is a bar on the left axis, series 2 a line on the right. --&gt;
+&lt;div data-chart="combo" data-title="Revenue and margin"
+     data-categories="Q1,Q2,Q3,Q4"
+     data-series="Revenue:12,18,15,22; Margin:18,19,21,24"
+     data-series-types="bar,line" data-series-axes="left,right"
+     data-right-min="0" data-right-max="30" data-right-format='0"%"'
+     style="height:180pt"&gt;&lt;/div&gt;
+
+&lt;!-- 100% stacked bars; labels and axis switch to percentages. --&gt;
+&lt;div data-chart="bar" data-title="Revenue mix" data-stacked="100%"
+     data-categories="Q1,Q2,Q3"
+     data-series="Product:60,55,50; Services:40,45,50"
+     data-show-values="true" style="height:160pt"&gt;&lt;/div&gt;
+
+&lt;!-- Waterfall: 0 seeds the opening balance, 3 draws the closing total. --&gt;
+&lt;div data-chart="waterfall" data-title="Cash bridge"
+     data-categories="Opening,Revenue,Costs,Closing"
+     data-values="80,30,-20,0" data-totals="0,3" data-show-values="true"
+     data-waterfall-colors="increase=#15803d; decrease=#b91c1c; total=#1e3a8a"
+     style="height:180pt"&gt;&lt;/div&gt;
+
 &lt;!-- Or plot an authored table: the header row names series, the first column
      names categories; cell numbers may include $ , % and (123) negatives. --&gt;
 &lt;table data-chart="area" data-title="Pipeline" data-stacked="true"
@@ -389,14 +482,18 @@ pages.forEach((p, i) =&gt; console.log(i + 1, p.height, p.body.map((f) =&gt; f.f
       <table>
         <thead><tr><th>Attribute</th><th>Meaning</th></tr></thead>
         <tbody>
-          <tr><td><code>data-chart="bar|line|area|pie|donut"</code></td><td>Chart kind (aliases: <code>data-kind</code>; default <code>bar</code>).</td></tr>
+          <tr><td><code>data-chart="bar|line|area|pie|donut|combo|waterfall"</code></td><td>Chart kind (aliases: <code>data-kind</code>; default <code>bar</code>).</td></tr>
           <tr><td><code>data-title</code></td><td>Title drawn above the plot (also accepts a <code>title</code> attribute).</td></tr>
           <tr><td><code>data-categories</code></td><td>Comma-separated category labels.</td></tr>
           <tr><td><code>data-series="Name:1,2;Other:3,4"</code></td><td>One or more named series. Use <code>data-values</code> (with optional <code>data-name</code>/<code>data-color</code>) for a single series.</td></tr>
-          <tr><td><code>data-stacked</code>, <code>data-show-values</code>, <code>data-category-labels</code></td><td>Booleans; present means true, <code>false</code>/<code>0</code>/<code>no</code>/<code>off</code> means false.</td></tr>
+          <tr><td><code>data-stacked</code>, <code>data-show-values</code>, <code>data-category-labels</code></td><td>Booleans; present means true, <code>false</code>/<code>0</code>/<code>no</code>/<code>off</code> means false. <code>data-stacked</code> also accepts <code>100%</code> to normalise each category to its own total.</td></tr>
           <tr><td><code>data-legend="none|top|bottom|right"</code></td><td>Legend placement. Default: right for pie/donut, bottom for multiple series, none for one.</td></tr>
           <tr><td><code>data-colors</code>, <code>data-inner-radius</code>, <code>data-plot-height</code></td><td>Palette, donut hole ratio (default 0.55) and fallback height when no <code>height</code> is set.</td></tr>
           <tr><td><code>data-min</code>, <code>data-max</code>, <code>data-ticks</code>, <code>data-value-format</code>, <code>data-axis-labels</code>, <code>data-grid-lines</code></td><td>Value-axis controls: bounds, preferred tick count, number pattern, labels and grid lines.</td></tr>
+          <tr><td><code>data-series-types</code>, <code>data-series-axes</code></td><td>Per-series comma lists for <code>combo</code>: mark type (<code>bar|line|area</code>) and axis (<code>left|right</code>). Missing entries fall back to bar / left.</td></tr>
+          <tr><td><code>data-right-min</code>, <code>data-right-max</code>, <code>data-right-ticks</code>, <code>data-right-format</code>, <code>data-right-axis-labels</code></td><td>Secondary axis controls, same meaning as the left-axis <code>data-*</code> attributes.</td></tr>
+          <tr><td><code>data-totals="0,3"</code></td><td>Waterfall bars that draw as running totals from zero; index 0 seeds the opening balance.</td></tr>
+          <tr><td><code>data-waterfall-colors="increase=…; decrease=…; total=…"</code></td><td>Waterfall palette (semicolon-separated <code>key=value</code> pairs).</td></tr>
           <tr><td><code>style="height:…"</code></td><td>Overall chart height; title, labels and legend strips are reserved inside it.</td></tr>
         </tbody>
       </table>

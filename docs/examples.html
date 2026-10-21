@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Examples · pdf-report-engine</title>
-  <meta name="description" content="Runnable JavaScript examples for pdf-report-engine: basic IR, data-driven tables, HTML authoring, charts, bookmarks and TOC, barcodes, streaming, images and merged cells." />
+  <meta name="description" content="Runnable JavaScript examples for pdf-report-engine: basic IR, data-driven tables, rich cells, conditional formatting, HTML authoring, combo and waterfall charts, bookmarks and TOC, barcodes, streaming, images and merged cells." />
   <script>
     (function () {
       try {
@@ -70,7 +70,8 @@ node examples/05-images.mjs</code></pre>
         translucent <code>background</code> band, a clickable TOC with real page numbers,
         bar / stacked bar / line / area / pie / donut charts, QR / Code 128 / EAN-13 codes,
         <code>&lt;mark&gt;</code> highlights, external and <code>#anchor</code> links, and a
-        nested PDF outline.
+        nested PDF outline. The dedicated rich-cell, conditional-formatting and chart-depth
+        samples below push each newer feature to its limit.
       </p>
       <pre data-copy><code>npm run html:pdf -- samples/dashboard.html -o output/</code></pre>
       <p>
@@ -136,6 +137,111 @@ const pdf = await renderToBuffer(report, {
   &lt;tr&gt;&lt;td rowspan="2"&gt;2026&lt;/td&gt;&lt;td&gt;Jan&lt;/td&gt;&lt;td&gt;$400&lt;/td&gt;&lt;/tr&gt;
   &lt;tr&gt;&lt;td&gt;Feb&lt;/td&gt;&lt;td&gt;$600&lt;/td&gt;&lt;/tr&gt;
 &lt;/table&gt;</code></pre>
+    </section>
+
+    <section id="ex-rich-cells">
+      <h3>Rich table cells</h3>
+      <p>
+        A cell can hold any flow block, not just text. Give it <code>blocks</code> and the table
+        lays the stack out inside the padded cell box — images, QR/barcodes, charts, nested
+        tables and paragraphs all work. The row grows to the tallest cell and stays atomic for
+        pagination, so a row never splits.
+      </p>
+      <pre data-copy><code>{
+  type: 'table',
+  columns: [{ grow: 2 }, { width: 70 }, { width: 90 }],
+  staticRows: [{
+    cells: [
+      // a small text stack
+      { blocks: [
+        { type: 'paragraph', content: 'Northwind Retail', style: { fontWeight: 'bold' } },
+        { type: 'paragraph', content: 'Enterprise · EMEA', style: { fontSize: 8, color: '#94a3b8' } },
+      ] },
+      // an image, centred inside its cell
+      { align: 'center',
+        blocks: [{ type: 'image', src: 'assets/logo.png', width: 26, height: 26 }] },
+      // a QR code
+      { align: 'center',
+        blocks: [{ type: 'barcode', symbology: 'qr', value: 'NW-001', moduleSize: 1.2 }] },
+    ],
+  }],
+}</code></pre>
+      <p>
+        In the IR, a cell with no <code>content</code> lays out its <code>blocks</code> as a
+        stack; when both are set, <code>content</code> wins. In HTML the stack is simply the
+        <code>&lt;td&gt;</code>'s own block-level children:
+      </p>
+      <pre data-copy><code>&lt;td style="padding:6pt"&gt;
+  &lt;img src="assets/logo.png" style="width:26pt; height:26pt"&gt;
+  &lt;p&gt;&lt;strong&gt;Northwind Retail&lt;/strong&gt;&lt;br&gt;Enterprise · EMEA&lt;/p&gt;
+  &lt;div data-barcode="qr" data-value="NW-001"&gt;&lt;/div&gt;
+  &lt;div data-chart="bar" data-values="4,6,5,8" data-grid-lines="false"
+       style="height:40pt"&gt;&lt;/div&gt;
+&lt;/td&gt;</code></pre>
+      <p class="note" style="margin-top:12px">
+        Inline children are wrapped into a synthetic paragraph, so mixed content still flows.
+        A <code>data-bind</code> on the same cell wins over its block children. See
+        <code>samples/rich-cells.html</code> for a full table of images, QR/EAN codes and
+        sparklines.
+      </p>
+    </section>
+
+    <section id="ex-conditional">
+      <h3>Conditional formatting</h3>
+      <p>
+        Three primitives cover most conditional output: <code>visible</code> drops a block, row or
+        cell; <code>styleWhen</code> applies a style while an expression is true; and
+        <code>colorScale</code> shades a numeric cell on a gradient. All expressions run in the
+        normal sandboxed scope, so they can read <code>$row</code>, <code>$index</code>,
+        <code>$group</code> and <code>$data</code>.
+      </p>
+      <pre data-copy><code>{
+  type: 'table',
+  dataSource: { bind: '$data.rows' },
+  columns: [
+    { key: 'account', grow: 2 },
+    // Heatmap: min/max omitted -> the range comes from this column's data.
+    // Text flips to white automatically on dark fills.
+    { key: 'revenue', width: 110, align: 'right',
+      colorScale: { from: '#eef4ff', to: '#1e3a8a' } },
+    { key: 'margin', width: 80, align: 'right',
+      colorScale: { min: 0, max: 60, from: '#fee2e2', to: '#15803d' } },
+  ],
+  detail: {
+    visible: { expr: '!$row.void' },          // hide a row entirely
+    styleWhen: [
+      { when: '$row.margin < 10', style: { backgroundColor: '#fff5f5' } },
+    ],
+    cells: [
+      { bind: 'account' },
+      { bind: 'revenue', format: '#,##0' },
+      { bind: 'margin', format: '0.0"%"',
+        styleWhen: [
+          { when: '$row.margin < 10', style: { color: '#b91c1c', fontWeight: 'bold' } },
+        ] },
+    ],
+  },
+}</code></pre>
+      <p>Sibling atoms follow the same rules: a column can carry the scale, a row or a cell can carry its own <code>visible</code> and <code>styleWhen</code>, and the scale can be declared on a cell too. HTML spells the same three features as attributes:</p>
+      <pre data-copy><code>&lt;table data-each="row in $data.accounts"&gt;
+  &lt;tr data-when="$row.growth &lt; 0" data-when-style="background-color: #fff5f5"&gt;
+    &lt;td data-bind="$row.account"&gt;&lt;/td&gt;
+    &lt;td data-bind="$row.revenue" data-format="#,##0"
+        data-color-scale="from=#eef4ff; to=#1e3a8a"&gt;&lt;/td&gt;
+    &lt;td data-bind="$row.margin" data-when="$row.margin &lt; 10"
+        data-when-style="color: #b91c1c; font-weight: bold"&gt;&lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;!-- data-if hides any block, row or cell --&gt;
+&lt;p data-if="$data.accounts.length === 0"&gt;No positions this period.&lt;/p&gt;</code></pre>
+      <p class="note" style="margin-top:12px">
+        <code>data-color-scale</code> takes semicolon-separated <code>min=</code>, <code>max=</code>,
+        <code>from=</code>, <code>to=</code> and <code>text=</code> pairs. Omitted bounds are derived
+        per column across the whole table, not per page. See
+        <code>samples/conditional-format.html</code> (with <code>conditional-format.data.json</code>)
+        for row filtering, row highlights and two heatmaps.
+      </p>
     </section>
 
     <section id="ex-band">
@@ -295,12 +401,63 @@ const pdf = await renderToBuffer(report);</code></pre>
     &lt;tr&gt;&lt;td&gt;Sep&lt;/td&gt;&lt;td&gt;19&lt;/td&gt;&lt;td&gt;15&lt;/td&gt;&lt;/tr&gt;
   &lt;/tbody&gt;
 &lt;/table&gt;</code></pre>
+      <p>
+        Three kinds go deeper. A <strong>combo</strong> gives each series its own mark type and
+        axis, <code>stacked: '100%'</code> normalises every category to its own total, and a
+        <strong>waterfall</strong> turns one delta series into a running balance:
+      </p>
+      <pre data-copy><code>{
+  type: 'chart', kind: 'combo', title: 'Revenue and margin', height: 180,
+  categories: ['Q1', 'Q2', 'Q3', 'Q4'],
+  series: [
+    { name: 'Revenue', values: [12, 18, 15, 22] },
+    { name: 'Margin', values: [18, 19, 21, 24], type: 'line', axis: 'right' },
+  ],
+  rightAxis: { min: 0, max: 30, ticks: 5, format: '0"%"' },
+  legend: 'bottom',
+}
+
+{
+  type: 'chart', kind: 'bar', stacked: '100%', title: 'Revenue mix', height: 160,
+  categories: ['Q1', 'Q2', 'Q3'],
+  series: [
+    { name: 'Product', values: [60, 55, 50] },
+    { name: 'Services', values: [40, 45, 50] },
+  ],
+  showValues: true,          // labels and axis read as percentages
+}
+
+{
+  type: 'chart', kind: 'waterfall', title: 'Cash bridge', height: 180,
+  categories: ['Opening', 'Revenue', 'Costs', 'Closing'],
+  series: [{ name: 'Cash', values: [80, 30, -20, 0] }],
+  totals: [0, 3],            // 0 seeds the opening balance, 3 draws the close
+  waterfallColors: { increase: '#15803d', decrease: '#b91c1c', total: '#1e3a8a' },
+  showValues: true,
+}</code></pre>
+      <p>The declarative equivalents add a handful of attributes:</p>
+      <pre data-copy><code>&lt;div data-chart="combo" data-title="Revenue and margin"
+     data-categories="Q1,Q2,Q3,Q4"
+     data-series="Revenue:12,18,15,22; Margin:18,19,21,24"
+     data-series-types="bar,line" data-series-axes="left,right"
+     data-right-min="0" data-right-max="30" data-right-format='0"%"'
+     style="height:180pt"&gt;&lt;/div&gt;
+
+&lt;div data-chart="bar" data-title="Revenue mix" data-stacked="100%"
+     data-categories="Q1,Q2,Q3"
+     data-series="Product:60,55,50; Services:40,45,50"
+     data-show-values="true" style="height:160pt"&gt;&lt;/div&gt;
+
+&lt;div data-chart="waterfall" data-title="Cash bridge"
+     data-categories="Opening,Revenue,Costs,Closing" data-values="80,30,-20,0"
+     data-totals="0,3" data-show-values="true"
+     data-waterfall-colors="increase=#15803d; decrease=#b91c1c; total=#1e3a8a"
+     style="height:180pt"&gt;&lt;/div&gt;</code></pre>
       <p class="note" style="margin-top:12px">
         Series values and categories also accept CSV strings (<code>'12,18,9'</code>) or bindings
-        (<code>'$data.revenue'</code>), and <code>stacked</code>/<code>data-stacked</code> turns
-        grouped bars or areas into a stack. See
-        <a href="getting-started.html#charts">Getting started → Charts</a> for the full attribute
-        list.
+        (<code>'$data.revenue'</code>). See <a href="getting-started.html#charts">Getting started
+        → Charts</a> for the full attribute list, and <code>samples/chart-depth.html</code> for a
+        runnable combo / 100% / waterfall page.
       </p>
     </section>
 
