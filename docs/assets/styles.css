@@ -2,88 +2,106 @@
    plates, so only content surfaces/accents change between themes. */
 :root {
   color-scheme: light dark;
-  --bg: #0f1720;            /* footer plate (brand) */
-  --bg-soft: #16212e;       /* reserved */
+  --bg: #24060f;            /* footer plate (brand) */
+  --bg-soft: #350b16;       /* reserved */
   --card: #ffffff;
-  --ink: #1f2933;
-  --muted: #5b6b7b;
-  --line: #e2e8f0;
-  --brand: #1a3d6d;
-  --accent: #e08a1e;
-  --code-bg: #0f1a24;
+  --ink: #2b1b1d;
+  --muted: #74605f;
+  --line: #f1dee1;
+  --brand: #ad1439;
+  --accent: #ef4444;
+  --link: #b3213a;
+  --code-bg: #2a0a12;
   --maxw: 960px;
 
   /* Theme-aware content surfaces & accents (light values) */
-  --page-bg: #f6f8fa;
-  --heading: #1a3d6d;
-  --th-bg: #eef3f8;
-  --tr-hover: #fafcfe;
-  --toc-hover: #eef3f8;
-  --scroll-hover: #c4cedb;
-  --inline-code-bg: #eef2f6;
-  --inline-code-fg: #b3410a;
-  --note-bg: #fff7e6;
-  --note-line: #f0c674;
-  --note-ink: #6b4e16;
+  --page-bg: #fdf6f7;
+  --heading: #ad1439;
+  --th-bg: #fcecef;
+  --tr-hover: #fef9fa;
+  --toc-hover: #fcecef;
+  --scroll-hover: #e2c1c6;
+  --inline-code-bg: #fbe9ec;
+  --inline-code-fg: #a3133a;
+  --note-bg: #fff1f2;
+  --note-line: #fecdd3;
+  --note-ink: #88133f;
 
-  /* Constant brand chrome (same in both themes) */
-  --hero-end: #12304f;
+  /* Brand chrome (light values; the dark blocks below re-tune the code plates) */
+  --hero-end: #6d0d26;
   --on-brand: #ffffff;
-  --nav-text: #dbe6f2;
-  --hero-lead: #cdd9e8;
+  --nav-text: #fbd9e0;
+  --hero-lead: #f6c8d1;
   --badge-bg: rgba(255, 255, 255, 0.12);
   --badge-line: rgba(255, 255, 255, 0.18);
-  --badge-text: #e8f0f8;
+  --badge-text: #ffeff2;
   --on-code: #e6edf3;
-  --copy-bg: #22303c;
-  --copy-line: #33424f;
-  --copy-hover-bg: #2c3d4c;
-  --footer-text: #9fb0c0;
-  --footer-head: #7d90a4;
-  --footer-link: #cdd9e5;
+  --copy-bg: #4a1a26;
+  --copy-line: #662c38;
+  --copy-hover-bg: #59232f;
+  --footer-text: #c2a0a5;
+  --footer-head: #9c7a80;
+  --footer-link: #f0cdd4;
   --footer-line: rgba(255, 255, 255, 0.09);
-  --on-accent: #24160a;
+
+  /* Yellow action colour: buttons, the active nav pill, status pills.
+     (Text on the red accent itself uses --on-brand / --btn-ink.) */
+  --btn-bg: #fbbf24;
+  --btn-ink: #3b2506;
+  --btn-line: #d9910a;
 }
 
 /* Explicit user choice: dark. */
 [data-theme="dark"] {
-  --card: #16222f;
-  --ink: #d7e0ea;
-  --muted: #93a3b4;
-  --line: #2b3b4d;
-  --page-bg: #0e1720;
-  --heading: #7fb0e0;
-  --th-bg: #1c2b3a;
-  --tr-hover: #182634;
-  --toc-hover: #1c2b3a;
-  --scroll-hover: #46596d;
-  --inline-code-bg: #22303f;
-  --inline-code-fg: #f0b48a;
-  --note-bg: #241f11;
-  --note-line: #6b561f;
-  --note-ink: #e6cf9a;
-  --code-bg: #0b141d;
+  --card: #261116;
+  --ink: #f0dedf;
+  --muted: #bda0a4;
+  --line: #4a252c;
+  --page-bg: #17070a;
+  --heading: #fb7185;
+  --th-bg: #33161c;
+  --tr-hover: #2c1217;
+  --toc-hover: #33161c;
+  --scroll-hover: #7a525a;
+  --inline-code-bg: #3b1a21;
+  --inline-code-fg: #fecdd3;
+  --note-bg: #33151b;
+  --note-line: #6f3540;
+  --note-ink: #fecdd3;
+  /* Code plates sit *above* the page tone in dark mode so they read as panels. */
+  --code-bg: #3a1a21;
+  --copy-bg: #55262e;
+  --copy-line: #6f3a43;
+  --copy-hover-bg: #64303a;
+  --link: #fb7185;
+  --bg: #0e0306;            /* footer plate sits below the page tone in dark */
 }
 
 /* Follow the OS when the user hasn't chosen explicitly. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
-    --card: #16222f;
-    --ink: #d7e0ea;
-    --muted: #93a3b4;
-    --line: #2b3b4d;
-    --page-bg: #0e1720;
-    --heading: #7fb0e0;
-    --th-bg: #1c2b3a;
-    --tr-hover: #182634;
-    --toc-hover: #1c2b3a;
-    --scroll-hover: #46596d;
-    --inline-code-bg: #22303f;
-    --inline-code-fg: #f0b48a;
-    --note-bg: #241f11;
-    --note-line: #6b561f;
-    --note-ink: #e6cf9a;
-    --code-bg: #0b141d;
+    --card: #261116;
+    --ink: #f0dedf;
+    --muted: #bda0a4;
+    --line: #4a252c;
+    --page-bg: #17070a;
+    --heading: #fb7185;
+    --th-bg: #33161c;
+    --tr-hover: #2c1217;
+    --toc-hover: #33161c;
+    --scroll-hover: #7a525a;
+    --inline-code-bg: #3b1a21;
+    --inline-code-fg: #fecdd3;
+    --note-bg: #33151b;
+    --note-line: #6f3540;
+    --note-ink: #fecdd3;
+    /* Code plates sit *above* the page tone in dark mode so they read as panels. */
+    --code-bg: #3a1a21;
+    --copy-bg: #55262e;
+    --copy-line: #6f3a43;
+    --copy-hover-bg: #64303a;
+    --link: #fb7185;
+    --bg: #0e0306;          /* footer plate sits below the page tone in dark */
   }
 }
 
@@ -99,7 +117,7 @@ body {
   background: var(--page-bg);
 }
 
-a { color: var(--brand); text-decoration: none; }
+a { color: var(--link); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
 /* ---------- Header / nav ---------- */
@@ -136,7 +154,7 @@ a:hover { text-decoration: underline; }
   font-size: 0.92rem;
 }
 .nav a:hover { background: rgba(255,255,255,0.12); text-decoration: none; }
-.nav a.active { background: var(--accent); color: var(--on-accent); font-weight: 700; }
+.nav a.active { background: var(--btn-bg); color: var(--btn-ink); font-weight: 700; }
 
 /* ---------- Theme toggle ---------- */
 .theme-toggle {
@@ -217,11 +235,11 @@ a:hover { text-decoration: underline; }
   padding: 10px 18px;
   border-radius: 8px;
   font-weight: 700;
-  background: var(--accent);
-  color: var(--on-accent);
-  border: none;
+  background: var(--btn-bg);
+  color: var(--btn-ink);
+  border: 1.5px solid var(--btn-line);
 }
-.btn:hover { text-decoration: none; filter: brightness(1.05); }
+.btn:hover { text-decoration: none; filter: brightness(0.95); }
 .btn.ghost { background: transparent; color: var(--on-brand); border: 1.5px solid rgba(255,255,255,0.5); }
 
 /* ---------- Side table of contents ----------
@@ -456,7 +474,7 @@ tr:hover td { background: var(--tr-hover); }
   transition: opacity 0.2s, transform 0.2s, visibility 0.2s, background 0.2s;
 }
 .to-top.show { opacity: 1; visibility: visible; transform: none; }
-.to-top:hover { background: var(--accent); color: #24160a; }
+.to-top:hover { background: var(--btn-bg); color: var(--btn-ink); }
 @media (max-width: 760px) {
   .site-footer > .wrap { grid-template-columns: 1fr 1fr; }
   .site-footer .fabout { grid-column: 1 / -1; }
