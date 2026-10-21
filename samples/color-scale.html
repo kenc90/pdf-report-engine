@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+  <body style="font-family: Arial; font-size: 10pt; color: #24303f">
+    <h1 style="color: #0f2f57; margin-bottom: 2pt">Color scales</h1>
+    <p style="color: #64748b; margin-top: 0">
+      <code>colorScale</code> / <code>data-color-scale</code> paints a <strong>cell background</strong>
+      by mapping its number onto a two-colour ramp: <code>from</code> at the minimum, <code>to</code>
+      at the maximum, a blend in between. Every cell gets one flat fill — the ramp is per value, not
+      a painted gradient — and dark fills switch their text to white automatically.
+    </p>
+
+    <h2 style="color: #0f2f57; font-size: 13pt; margin-top: 14pt; margin-bottom: 4pt">
+      1. Auto and explicit ranges
+    </h2>
+    <p style="color: #64748b; margin-top: 0">
+      Revenue and margin derive their bounds per column from the rows actually printed. CSAT uses an
+      explicit 0–100 domain, so its colours stay comparable when the data changes.
+    </p>
+    <table data-each="row in $data.regions" style="border: 1px solid #dbe6f4; margin-top: 6pt">
+      <thead>
+        <tr>
+          <th style="background-color: #0f2f57; color: #ffffff; text-align: left; padding: 5pt">Region</th>
+          <th style="background-color: #0f2f57; color: #ffffff; text-align: right; padding: 5pt">Revenue</th>
+          <th style="background-color: #0f2f57; color: #ffffff; text-align: right; padding: 5pt">Margin</th>
+          <th style="background-color: #0f2f57; color: #ffffff; text-align: right; padding: 5pt">CSAT</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td data-bind="$row.region" style="padding: 5pt; font-weight: 700"></td>
+          <td
+            data-bind="$row.revenue"
+            data-format="#,##0"
+            data-color-scale="from=#eef4ff; to=#1e3a8a"
+            style="padding: 5pt; text-align: right"
+          ></td>
+          <td
+            data-bind="$row.margin"
+            data-format="0.0%"
+            data-color-scale="from=#fee2e2; to=#15803d"
+            style="padding: 5pt; text-align: right"
+          ></td>
+          <td
+            data-bind="$row.csat"
+            data-format="0.0"
+            data-color-scale="min=0; max=100; from=#fef3c7; to=#b45309"
+            style="padding: 5pt; text-align: right"
+          ></td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="font-size: 8pt; color: #94a3b8; margin-top: 5pt">
+      Bounds are computed across the detail rows of that column. Cells holding a non-numeric value
+      get no fill.
+    </p>
+
+    <h2 style="color: #0f2f57; font-size: 13pt; margin-top: 16pt; margin-bottom: 4pt">
+      2. The ramp, one cell at a time
+    </h2>
+    <p style="color: #64748b; margin-top: 0">
+      The same declaration with an explicit 0–100 domain on six cells. This is the whole mechanism:
+      each value becomes one interpolated colour.
+    </p>
+    <table style="border: 0; margin-top: 6pt">
+      <tr>
+        <td data-color-scale="min=0; max=100; from=#eef4ff; to=#1e3a8a"
+            style="padding: 9pt 4pt; text-align: center; font-size: 9pt">0</td>
+        <td data-color-scale="min=0; max=100; from=#eef4ff; to=#1e3a8a"
+            style="padding: 9pt 4pt; text-align: center; font-size: 9pt">20</td>
+        <td data-color-scale="min=0; max=100; from=#eef4ff; to=#1e3a8a"
+            style="padding: 9pt 4pt; text-align: center; font-size: 9pt">40</td>
+        <td data-color-scale="min=0; max=100; from=#eef4ff; to=#1e3a8a"
+            style="padding: 9pt 4pt; text-align: center; font-size: 9pt">60</td>
+        <td data-color-scale="min=0; max=100; from=#eef4ff; to=#1e3a8a"
+            style="padding: 9pt 4pt; text-align: center; font-size: 9pt">80</td>
+        <td data-color-scale="min=0; max=100; from=#eef4ff; to=#1e3a8a"
+            style="padding: 9pt 4pt; text-align: center; font-size: 9pt">100</td>
+      </tr>
+    </table>
+    <p style="font-size: 8pt; color: #94a3b8; margin-top: 5pt">
+      Adjacent cells look like a gradient because the RGB blend is continuous; each cell itself is a
+      single solid fill. Cells near the dark end have already flipped to white text.
+    </p>
+
+    <h2 style="color: #0f2f57; font-size: 13pt; margin-top: 16pt; margin-bottom: 4pt">
+      3. Text colour behaviour
+    </h2>
+    <p style="color: #64748b; margin-top: 0">
+      The scale controls the <em>background</em>. Text turns white only when the computed fill is
+      dark; <code>text=false</code> keeps the cell's own colour so you can choose it yourself.
+    </p>
+    <table style="border: 0; margin-top: 6pt">
+      <thead>
+        <tr>
+          <th style="background-color: #f1f5f9; color: #475569; font-size: 8pt; padding: 4pt">
+            default (auto white)
+          </th>
+          <th style="background-color: #f1f5f9; color: #475569; font-size: 8pt; padding: 4pt">
+            text=false (keeps dark)
+          </th>
+          <th style="background-color: #f1f5f9; color: #475569; font-size: 8pt; padding: 4pt">
+            text=false + white style
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td data-color-scale="min=0; max=100; from=#eef4ff; to=#1e3a8a"
+              style="padding: 9pt; text-align: center">95</td>
+          <td data-color-scale="min=0; max=100; from=#eef4ff; to=#1e3a8a; text=false"
+              style="padding: 9pt; text-align: center">95</td>
+          <td data-color-scale="min=0; max=100; from=#eef4ff; to=#1e3a8a; text=false"
+              style="padding: 9pt; text-align: center; color: #ffffff">95</td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="font-size: 8pt; color: #94a3b8; margin-top: 5pt">
+      An explicit cell background, or a matching <code>data-when-style</code> background, wins over
+      the scale's fill. The scale supplies a default background, not an override.
+    </p>
+
+    <p style="margin-top: 14pt; font-size: 8pt; color: #94a3b8; text-align: right">
+      Page {PAGE} of {TOTAL}
+    </p>
+  </body>
+</html>

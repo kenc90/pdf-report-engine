@@ -1,0 +1,11 @@
+{
+  "quarter": "Q3 2026",
+  "regions": [
+    { "region": "North America", "revenue": 1842000, "margin": 0.268, "csat": 88 },
+    { "region": "Europe", "revenue": 1264000, "margin": 0.214, "csat": 91 },
+    { "region": "Asia Pacific", "revenue": 968000, "margin": 0.176, "csat": 79 },
+    { "region": "Latin America", "revenue": 512000, "margin": 0.094, "csat": 64 },
+    { "region": "Middle East", "revenue": 742000, "margin": 0.131, "csat": 72 },
+    { "region": "Africa", "revenue": 286000, "margin": 0.058, "csat": 55 }
+  ]
+}

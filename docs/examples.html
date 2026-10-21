@@ -191,9 +191,10 @@ const pdf = await renderToBuffer(report, {
       <p>
         Three primitives cover most conditional output: <code>visible</code> drops a block, row or
         cell; <code>styleWhen</code> applies a style while an expression is true; and
-        <code>colorScale</code> shades a numeric cell on a gradient. All expressions run in the
-        normal sandboxed scope, so they can read <code>$row</code>, <code>$index</code>,
-        <code>$group</code> and <code>$data</code>.
+        <code>colorScale</code> paints a cell background by interpolating its number between two
+        colours (each cell gets one flat fill, and dark fills switch their text to white). All
+        expressions run in the normal sandboxed scope, so they can read <code>$row</code>,
+        <code>$index</code>, <code>$group</code> and <code>$data</code>.
       </p>
       <pre data-copy><code>{
   type: 'table',
@@ -240,7 +241,9 @@ const pdf = await renderToBuffer(report, {
         <code>from=</code>, <code>to=</code> and <code>text=</code> pairs. Omitted bounds are derived
         per column across the whole table, not per page. See
         <code>samples/conditional-format.html</code> (with <code>conditional-format.data.json</code>)
-        for row filtering, row highlights and two heatmaps.
+        for row filtering, row highlights and two heatmaps, and
+        <code>samples/color-scale.html</code> for the ramp itself, explicit vs automatic domains and
+        the <code>text=false</code> behaviour.
       </p>
     </section>
 

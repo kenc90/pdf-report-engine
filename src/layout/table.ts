@@ -226,6 +226,9 @@ function numericValue(
   if (content && typeof content === 'object' && !Array.isArray(content) && 'content' in content) {
     content = (content as CellNode).content;
   }
+  // A `data-bind` cell is authored as one inline span (`[{ bind, format }]`).
+  // Unwrap it so colorScale can read the bound number.
+  if (Array.isArray(content) && content.length === 1) content = content[0];
   if (autoBind && (content === undefined || content === '') && column?.key) {
     return toNumber(getPath((scope.$row as Record<string, unknown> | undefined) ?? {}, column.key));
   }

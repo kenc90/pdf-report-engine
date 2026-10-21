@@ -305,7 +305,9 @@ Cell style order is: heatmap text colour, row `rowStyle`/`styleWhen`, column `st
 own props, then the cell's `styleWhen` (later matches win). A hidden row is dropped before layout;
 a hidden cell keeps its grid slot and fill but paints no content. `colorScale` accepts explicit
 `min`/`max`, or derives them from the column's numeric data; `text: false` keeps the cell's own
-text colour instead of switching to white on dark fills.
+text colour instead of switching to white on dark fills. The scale supplies the cell's *default
+background* — an explicit `backgroundColor` (cell, row or matching `styleWhen`) wins over it — and
+each cell receives one flat fill, not a painted gradient.
 
 See `src/cli/demo.ts` for a complete, runnable example (grouping, subtotals, running
 tokens, embedded fonts with a base-14 fallback).
@@ -521,6 +523,9 @@ The `samples/` folder demonstrates the supported subset:
   block-level `data-if` / `data-when`, row filtering and row highlights on a data-bound portfolio
   table, revenue/margin `data-color-scale` heatmaps with automatic ranges, and a filtered
   "at risk" table. Data auto-pairs via `--data` or the adjacent `.data.json`.
+- `color-scale.html` + `color-scale.data.json` — **color scales in isolation**: auto-ranged vs
+  explicit domains, a six-cell ramp where each value becomes one flat fill, and
+  `text=false` contrasted with the automatic white text on dark fills.
 - `chart-depth.html` — **chart depth**: a combo chart with a secondary axis, 100% stacked bars,
   and a waterfall with opening/closing totals and custom colours.
 - `image.html` (+ `assets/logo.png`) — **images**: intrinsic-size placement, width-only

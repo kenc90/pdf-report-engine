@@ -274,6 +274,31 @@ describe('conditional formatting', () => {
     expect(run).toBeDefined();
     expect(toRGB(run!.style.color)).not.toEqual([1, 1, 1]);
   });
+
+  it('reads a heatmap value from an HTML data-bind cell', () => {
+    const doc = htmlToReportDoc(
+      '<table data-each="row in $data.rows">' +
+        '<thead><tr><th>Name</th><th>Score</th></tr></thead>' +
+        '<tbody><tr>' +
+        '<td data-bind="name"></td>' +
+        '<td data-bind="score" data-color-scale="from=#ffffff; to=#000000; text=false"></td>' +
+        '</tr></tbody></table>',
+    );
+    const table = doc.body![0] as TableBlock;
+    const frags = layoutBlock(
+      table,
+      makeCtx(),
+      opts(200, { $data: { rows: [{ name: 'a', score: 10 }, { name: 'b', score: 30 }] } }),
+    );
+    // The adapter stores a bound cell as `[{ bind, format }]`; the scale must
+    // still find the number and derive the column range from it.
+    const low = fillRects(frags[1]!);
+    const high = fillRects(frags[2]!);
+    expect(low).toHaveLength(1);
+    expect(high).toHaveLength(1);
+    expect(toRGB(low[0]!.color)).toEqual([1, 1, 1]);
+    expect(toRGB(high[0]!.color)).toEqual([0, 0, 0]);
+  });
 });
 
 // --- chart depth -----------------------------------------------------------

@@ -50,10 +50,11 @@ const DEMO_DATA = {
 
 // Default report — deliberately exercises most of the library's authoring features:
 // Google Fonts, a <style> sheet with tag/class/id selectors, page bands + running tokens,
-// a title/summary band, a generated TOC, KPI cards (borderless tables), vector charts,
-// rich inline formatting (highlights + links), an embedded image, a data-bound
-// striped/gridded table, merged cells, QR/Code 128/EAN-13 barcodes, a page break,
-// and base-14 fallback.
+// a title/summary band, a generated TOC, KPI cards (borderless tables), vector charts
+// (combo, 100% stacked and waterfall included), rich inline formatting (highlights +
+// links), an embedded image, a data-bound table with conditional formatting and
+// colour-scale heatmaps, rich block cells (image / QR / sparkline / nested table),
+// merged cells, QR/Code 128/EAN-13 barcodes, a page break, and base-14 fallback.
 const DEFAULT_HTML = `<!-- ══ Web fonts straight from the HTML: the engine collects the charset from
      the IR, passes it as text= to Google's CSS API, fetches only the needed glyphs (tiny subset),
      and embeds them. In Node a bot UA yields TTF directly; in a browser WOFF2 is decoded. ══ -->
@@ -110,7 +111,8 @@ const DEFAULT_HTML = `<!-- ══ Web fonts straight from the HTML: the engine c
   </tr>
 </table>
 
-<!-- ══ Vector charts from plain attributes — all five kinds, no canvas, no images. ══ -->
+<!-- ══ Vector charts from plain attributes — no canvas, no images. ══ -->
+<h2 id="charts" class="section-title">Charts</h2>
 <div data-chart="bar" data-title="Revenue by quarter ($M)" data-categories="Q1 25,Q2 25,Q3 25,Q4 25,Q1 26,Q2 26"
      data-series="Revenue:58.2,61.4,63.1,66.8,69.5,72.1" data-legend="none" data-show-values="true"
      data-value-format="#,##0.0" style="height:140pt; margin-top:12pt"></div>
@@ -138,6 +140,23 @@ const DEFAULT_HTML = `<!-- ══ Web fonts straight from the HTML: the engine c
 <div data-chart="donut" data-title="Revenue mix" data-categories="Platform,Analytics,Services,Retail"
      data-values="38,26,19,17" data-legend="right" data-inner-radius="0.6" style="height:140pt; margin-top:10pt"></div>
 
+<!-- ══ Chart depth: combo with a right-hand axis, 100% stacking, and a waterfall. ══ -->
+<div data-chart="combo" data-title="Revenue (bars) vs. margin (line)" data-categories="Q1 25,Q2 25,Q3 25,Q4 25,Q1 26,Q2 26"
+     data-series="Revenue:58.2,61.4,63.1,66.8,69.5,72.1; Margin:18.2,19.1,20.4,22.6,23.8,24.9"
+     data-series-types="bar,line" data-series-axes="left,right"
+     data-right-min="0" data-right-max="30" data-right-format='0"%"'
+     data-value-format="#,##0.0" data-legend="bottom" style="height:150pt; margin-top:10pt"></div>
+
+<div data-chart="bar" data-title="Revenue mix by year (100% stacked)" data-categories="2023,2024,2025,2026"
+     data-series="Platform:38,42,47,53; Analytics:24,26,28,29; Services:22,20,17,14; Retail:16,12,8,4"
+     data-stacked="100%" data-show-values="true" data-value-format='0"%"'
+     data-colors="#0f2f57,#1b7f4b,#e08a1e,#7c2d12" data-legend="bottom" style="height:150pt; margin-top:10pt"></div>
+
+<div data-chart="waterfall" data-title="Cash bridge: FY26 ($M)" data-categories="Opening,Revenue,Costs,Tax,Closing"
+     data-values="42,72,-38,-6,0" data-totals="0,4" data-show-values="true"
+     data-waterfall-colors="increase=#15803d; decrease=#b91c1c; total=#0f2f57"
+     data-value-format="#,##0.0" style="height:150pt; margin-top:10pt"></div>
+
 <!-- ══ Rich inline formatting + base-14 Latin-1 coverage. ══ -->
 <h2 id="highlights" class="section-title">Highlights</h2>
 <p style="line-height:1.5; color:#334155">
@@ -156,10 +175,17 @@ const DEFAULT_HTML = `<!-- ══ Web fonts straight from the HTML: the engine c
   本报告完全在浏览器端以纯 JavaScript 渲染成真实的矢量 PDF，文字可选取、可搜索，并支持中日韩字形与逐字符字体回退。
 </p>
 
-<!-- ══ Data-bound table: rows generated from a JSON dataset (data-each), each cell filled by
-     data-bind, numbers via data-format. Striped + gridded. Provided to the demo harness. ══ -->
+<!-- ══ Data-bound table with conditional formatting: rows under $5M revenue turn red
+     (data-when on the <tr>), while revenue/profit cells paint data-color-scale heatmaps. ══ -->
 <h2 id="ledger" class="section-title">Ledger by segment</h2>
-<p style="font-size:8.5pt; color:#94a3b8">Bound from an in-memory dataset (values in $M). Edit <code>DEMO_DATA</code> in <code>browser-demo.js</code> to change the rows.</p>
+<p class="callout" style="font-size:8.5pt; margin:6pt 0"
+   data-if="$data.ledger.length &gt; 0"
+   data-when="$data.ledger.length &gt;= 10"
+   data-when-style="border-left:3pt solid #e08a1e; padding-left:8pt">
+  <strong>Conditional formatting.</strong> Rows below $5M revenue turn red; the money columns are
+  <code>data-color-scale</code> heatmaps that switch their text to white on dark fills. Rows come from
+  <code>DEMO_DATA</code> in <code>browser-demo.js</code> (values in $M).
+</p>
 <table data-each="line in $data.ledger" data-grid="0.5pt solid #e5eaf1" data-striped>
   <thead>
     <tr style="background:#0f2f57; color:#ffffff; text-transform:uppercase; font-size:8pt; letter-spacing:1pt">
@@ -171,12 +197,14 @@ const DEFAULT_HTML = `<!-- ══ Web fonts straight from the HTML: the engine c
     </tr>
   </thead>
   <tbody>
-    <tr>
+    <tr data-when="$row.revenue &lt; 5" data-when-style="color:#b91c1c">
       <td style="padding:4pt" data-bind="segment"></td>
       <td style="padding:4pt" data-bind="region"></td>
       <td style="padding:4pt; text-align:center" data-bind="q"></td>
-      <td style="padding:4pt; text-align:right" data-bind="revenue" data-format="#,##0.0"></td>
-      <td style="padding:4pt; text-align:right; color:#1b7f4b; font-weight:700" data-bind="profit" data-format="#,##0.0"></td>
+      <td style="padding:4pt; text-align:right" data-bind="revenue" data-format="#,##0.0"
+          data-color-scale="from=#eef4ff; to=#1e3a8a"></td>
+      <td style="padding:4pt; text-align:right; font-weight:700" data-bind="profit" data-format="#,##0.0"
+          data-color-scale="min=0; max=12; from=#fee2e2; to=#15803d"></td>
     </tr>
   </tbody>
 </table>
@@ -190,6 +218,41 @@ const DEFAULT_HTML = `<!-- ══ Web fonts straight from the HTML: the engine c
     <td style="padding:6pt">January</td><td style="padding:6pt; text-align:right">$400</td>
   </tr>
   <tr><td style="padding:6pt">February</td><td style="padding:6pt; text-align:right">$600</td></tr>
+</table>
+
+<!-- ══ Rich cells: a <td> holds flow blocks — embedded image, vector QR, a 40pt sparkline
+     chart or a nested table. The row grows to whichever cell is tallest. ══ -->
+<h2 id="rich" class="section-title">Rich table cells</h2>
+<p style="font-size:8.5pt; color:#94a3b8">Any cell can stack blocks; rows stay atomic. Brand = embedded image, Scan = vector QR/EAN, H1 trend = a chart, Packages = a nested table.</p>
+<table style="border:1px solid #dbe6f4">
+  <thead>
+    <tr style="background:#0f2f57; color:#ffffff; font-size:8pt; text-transform:uppercase; letter-spacing:1pt">
+      <th style="padding:5pt; text-align:left">Account</th>
+      <th style="padding:5pt; text-align:center">Brand</th>
+      <th style="padding:5pt; text-align:center">Scan</th>
+      <th style="padding:5pt; text-align:center">H1 trend</th>
+      <th style="padding:5pt; text-align:left">Packages</th>
+      <th style="padding:5pt; text-align:right">Revenue</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="padding:6pt"><strong>Northwind Retail</strong><br><span style="font-size:8pt; color:#94a3b8">Enterprise &middot; EMEA</span></td>
+      <td style="padding:4pt; text-align:center"><img src="${LOGO}" style="width:52pt"></td>
+      <td style="padding:4pt; text-align:center"><div data-barcode="qr" data-value="NW-RETAIL-001" data-module-size="1.2" data-quiet-zone="1"></div></td>
+      <td style="padding:4pt"><div data-chart="bar" data-values="4,6,5,8,9,12" data-categories="Jan,Feb,Mar,Apr,May,Jun" data-category-labels="false" data-axis-labels="false" data-grid-lines="false" data-legend="none" data-colors="#0f2f57,#7fb2e5" style="height:40pt"></div></td>
+      <td style="padding:6pt"><table style="border:0; font-size:8pt"><tr><td style="padding:0; color:#64748b">Core</td><td style="padding:0; text-align:right; font-weight:700">14</td></tr><tr><td style="padding:0; color:#64748b">Add-ons</td><td style="padding:0; text-align:right; font-weight:700">6</td></tr></table></td>
+      <td style="padding:6pt; text-align:right; font-weight:700">$1,284,000</td>
+    </tr>
+    <tr>
+      <td style="padding:6pt"><strong>Contoso Health</strong><br><span style="font-size:8pt; color:#94a3b8">Mid-market &middot; APAC</span></td>
+      <td style="padding:4pt; text-align:center"><img src="${LOGO}" style="width:52pt"></td>
+      <td style="padding:4pt; text-align:center"><div data-barcode="ean13" data-value="400638133393" data-module-size="0.9" data-show-text="false"></div></td>
+      <td style="padding:4pt"><div data-chart="line" data-values="5,6,7,7,9,11" data-categories="Jan,Feb,Mar,Apr,May,Jun" data-category-labels="false" data-axis-labels="false" data-grid-lines="false" data-legend="none" data-colors="#1b7f4b" style="height:40pt"></div></td>
+      <td style="padding:6pt"><table style="border:0; font-size:8pt"><tr><td style="padding:0; color:#64748b">Core</td><td style="padding:0; text-align:right; font-weight:700">9</td></tr><tr><td style="padding:0; color:#64748b">Add-ons</td><td style="padding:0; text-align:right; font-weight:700">2</td></tr></table></td>
+      <td style="padding:6pt; text-align:right; font-weight:700">$964,000</td>
+    </tr>
+  </tbody>
 </table>
 
 <!-- ══ Vector QR / barcodes: every module is a real rectangle — no image, no canvas. ══ -->
