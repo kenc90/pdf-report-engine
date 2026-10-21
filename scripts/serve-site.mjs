@@ -43,7 +43,12 @@ const server = http.createServer((req, res) => {
     res.end('404 Not Found');
     return;
   }
-  res.writeHead(200, { 'Content-Type': MIME[path.extname(filePath).toLowerCase()] || 'application/octet-stream' });
+  res.writeHead(200, {
+    'Content-Type': MIME[path.extname(filePath).toLowerCase()] || 'application/octet-stream',
+    // Dev server only: never cache, so a rebuilt engine bundle / edited demo HTML
+    // shows up on a plain reload instead of a stale copy.
+    'Cache-Control': 'no-store, must-revalidate',
+  });
   fs.createReadStream(filePath).pipe(res);
 });
 

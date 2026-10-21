@@ -1006,6 +1006,13 @@ function toCellNode(td: HElement, opts: HtmlOptions): CellNode {
   if (s.paddingLeft !== undefined) cell.paddingLeft = s.paddingLeft as number;
   if (s.verticalAlign !== undefined) cell.verticalAlign = s.verticalAlign as CellNode['verticalAlign'];
   if (cell.align === undefined && s.align !== undefined) cell.align = s.align as CellNode['align'];
+  // Match the browser: a `<th>` is centred unless the author aligned it. This is
+  // a cell-level default only, so it never leaks into the column's data cells.
+  if (cell.align === undefined && td.tag === 'th') cell.align = 'center';
+  // Likewise the browser vertically centres table-cell content. Default `<th>` to
+  // middle so a header row made tall by one busy cell (e.g. a diagonal corner
+  // header) keeps its other labels centred rather than pinned to the top edge.
+  if (cell.verticalAlign === undefined && td.tag === 'th') cell.verticalAlign = 'middle';
   // Conditional formatting surface: visibility, conditional styles, heatmaps.
   const visible = visibleAttr(td);
   if (visible !== undefined) cell.visible = visible;
