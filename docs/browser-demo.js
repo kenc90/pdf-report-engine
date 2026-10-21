@@ -25,6 +25,8 @@ function showTab(which) {
   tabPreview.setAttribute('aria-selected', String(!isEditor));
   panelEditor.classList.toggle('active', isEditor);
   panelPreview.classList.toggle('active', !isEditor);
+  // The overlay/gutter cannot scroll while hidden, so re-sync on reveal.
+  if (isEditor) syncScroll();
 }
 tabEditor.addEventListener('click', () => showTab('editor'));
 tabPreview.addEventListener('click', () => showTab('preview'));
@@ -284,6 +286,155 @@ const DEFAULT_HTML = `<!-- ══ Web fonts straight from the HTML: the engine c
 
 editor.value = DEFAULT_HTML;
 
+// ---- editor chrome: line numbers + HTML/CSS colours -----------------------
+// The textarea keeps the real text (native editing, undo, selection, a11y). A
+// colourised <pre> sits underneath it and the textarea's own text is transparent,
+// so the page reads like an editor without a third-party component. Gutter,
+// overlay and textarea scroll in lockstep.
+const highlightEl = document.getElementById('highlight');
+const highlightCode = highlightEl.querySelector('code');
+const gutterEl = document.getElementById('gutter');
+
+const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const wrap = (cls, text) => `<span class="tok-${cls}">${esc(text)}</span>`;
+
+/** Colour `&amp;` / `&nbsp;` style entities inside a plain-text run. */
+function textTokens(raw) {
+  let out = '';
+  let last = 0;
+  const re = /&[#A-Za-z0-9]{1,10};/g;
+  let m;
+  while ((m = re.exec(raw)) !== null) {
+    out += esc(raw.slice(last, m.index)) + wrap('entity', m[0]);
+    last = m.index + m[0].length;
+  }
+  return out + esc(raw.slice(last));
+}
+
+/** First matching rule wins; characters no rule accepts take `fallback`. */
+function lex(raw, rules, fallback) {
+  let out = '';
+  let i = 0;
+  while (i < raw.length) {
+    const rest = raw.slice(i);
+    let hit = null;
+    for (const [re, cls] of rules) {
+      const m = re.exec(rest);
+      if (m && m[0].length) { hit = { text: m[0], cls }; break; }
+    }
+    if (!hit) hit = { text: rest[0], cls: fallback };
+    out += hit.cls ? wrap(hit.cls, hit.text) : esc(hit.text);
+    i += hit.text.length;
+  }
+  return out;
+}
+
+const ATTR_RULES = [
+  [/^\s+/, null],                          // whitespace between attributes
+  [/^"[^"]*"?|^'[^']*'?/, 'string'],       // attribute value (even while typing)
+  [/^[A-Za-z_:@][-.:\w@]*/, 'attr'],       // attribute name
+  [/^[=/>]/, 'punct'],                     // `=`, the `/` of `/>`, `>`
+];
+
+function tagTokens(raw) {
+  const closing = raw.startsWith('</');
+  let out = wrap('punct', closing ? '</' : '<');
+  let rest = raw.slice(closing ? 2 : 1);
+  const name = /^[A-Za-z][-.:\w]*/.exec(rest);
+  if (name) { out += wrap('tag', name[0]); rest = rest.slice(name[0].length); }
+  const tail = /\/?>$/.exec(rest);
+  if (tail) return out + lex(rest.slice(0, tail.index), ATTR_RULES, 'punct') + wrap('punct', tail[0]);
+  return out + lex(rest, ATTR_RULES, 'punct');
+}
+
+/** Small CSS lexer for `<style>` bodies: comments, at-rules, props, values, selectors. */
+function cssTokens(src) {
+  let out = '';
+  let i = 0;
+  let inBlock = false;
+  let inValue = false;
+  const emit = (cls, text) => { out += cls ? wrap(cls, text) : esc(text); i += text.length; };
+  while (i < src.length) {
+    const rest = src.slice(i);
+    let m;
+    if ((m = /^\/\*[\s\S]*?(?:\*\/|$)/.exec(rest))) emit('comment', m[0]);
+    else if ((m = /^"[^"]*"?|^'[^']*'?/.exec(rest))) emit('string', m[0]);
+    else if ((m = /^\s+/.exec(rest))) emit(null, m[0]);
+    else if ((m = /^@[-\w]+/.exec(rest))) emit('attr', m[0]);
+    else if ((m = /^[{}]/.exec(rest))) { inBlock = m[0] === '{'; inValue = false; emit('punct', m[0]); }
+    else if ((m = /^;/.exec(rest))) { inValue = false; emit('punct', m[0]); }
+    else if ((m = /^:/.exec(rest))) { if (inBlock) inValue = true; emit('punct', m[0]); }
+    else if (inBlock && inValue && (m = /^#[0-9a-fA-F]{3,8}\b|^[-+]?\d[\d.]*[a-z%]*|^[-\w]+/i.exec(rest))) emit('value', m[0]);
+    else if ((m = /^[-\w]+/.exec(rest))) emit(inBlock ? 'prop' : 'selector', m[0]);
+    else emit('punct', rest[0]);
+  }
+  return out;
+}
+
+function htmlTokens(src) {
+  let out = '';
+  let i = 0;
+  while (i < src.length) {
+    const lt = src.indexOf('<', i);
+    if (lt === -1) return out + textTokens(src.slice(i));
+    out += textTokens(src.slice(i, lt));
+    if (src.startsWith('<!--', lt)) {
+      const end = src.indexOf('-->', lt);
+      const stop = end === -1 ? src.length : end + 3;
+      out += wrap('comment', src.slice(lt, stop));
+      i = stop;
+      continue;
+    }
+    if (src.startsWith('<!', lt) || src.startsWith('<?', lt)) {
+      const end = src.indexOf('>', lt);
+      const stop = end === -1 ? src.length : end + 1;
+      out += wrap('meta', src.slice(lt, stop));
+      i = stop;
+      continue;
+    }
+    // Tag: walk to the closing `>`, ignoring `>` inside quoted attribute values.
+    let j = lt + 1;
+    let quote = '';
+    while (j < src.length) {
+      const c = src[j];
+      if (quote) { if (c === quote) quote = ''; }
+      else if (c === '"' || c === "'") quote = c;
+      else if (c === '>') break;
+      j += 1;
+    }
+    const stop = j >= src.length ? src.length : j + 1;
+    const raw = src.slice(lt, stop);
+    out += tagTokens(raw);
+    i = stop;
+    // `<style>` bodies get their own pass; everything else stays HTML.
+    const name = /^<\/?\s*([A-Za-z][-.:\w]*)/.exec(raw)?.[1]?.toLowerCase();
+    if (name === 'style' && !raw.startsWith('</')) {
+      const offset = src.slice(i).toLowerCase().indexOf('</style');
+      const bodyEnd = offset === -1 ? src.length : i + offset;
+      out += cssTokens(src.slice(i, bodyEnd));
+      i = bodyEnd;
+    }
+  }
+  return out;
+}
+
+function syncScroll() {
+  highlightEl.scrollTop = editor.scrollTop;
+  highlightEl.scrollLeft = editor.scrollLeft;
+  gutterEl.scrollTop = editor.scrollTop;
+}
+
+function syncEditor() {
+  highlightCode.innerHTML = htmlTokens(editor.value);
+  const lines = editor.value.split('\n').length;
+  gutterEl.textContent = Array.from({ length: lines }, (_, n) => n + 1).join('\n');
+  syncScroll();
+}
+
+editor.addEventListener('input', syncEditor);
+editor.addEventListener('scroll', syncScroll);
+syncEditor();
+
 // ---- font selection ------------------------------------------------------
 const WEIGHTS = {
   thin: 100, hairline: 100, light: 300, regular: 400, normal: 400, book: 400,
@@ -393,6 +544,7 @@ async function generate() {
 document.getElementById('generate').addEventListener('click', generate);
 document.getElementById('reset').addEventListener('click', () => {
   editor.value = DEFAULT_HTML;
+  syncEditor();
   showTab('editor');
   status('HTML reset to the sample report.');
 });
