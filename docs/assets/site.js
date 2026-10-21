@@ -151,6 +151,30 @@
   toggle();
 })();
 
+// Mobile: tuck the header away when the reader scrolls down, bring it back on
+// scroll up. Only active on narrow screens (the 2-row header eats vertical space).
+(function () {
+  var header = document.querySelector('.site-header');
+  if (!header) return;
+  var mq = window.matchMedia('(max-width: 720px)');
+  var last = window.scrollY;
+  function onScroll() {
+    var y = window.scrollY;
+    if (!mq.matches) {
+      if (header.classList.contains('header-hidden')) header.classList.remove('header-hidden');
+      last = y;
+      return;
+    }
+    var down = y > last + 4;
+    var up = y < last - 4;
+    if (y <= 8) header.classList.remove('header-hidden');       // always show near the top
+    else if (down && y > 140) header.classList.add('header-hidden');
+    else if (up) header.classList.remove('header-hidden');
+    last = y;
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+})();
+
 // Light / dark theme: a header toggle overrides the OS preference and remembers the
 // choice. The inline script in each page's <head> has already applied the resolved
 // theme before first paint; this wires up the button and keeps following the OS
@@ -181,4 +205,17 @@
     if (mq.addEventListener) mq.addEventListener('change', onChange);
     else if (mq.addListener) mq.addListener(onChange);
   }
+})();
+
+// Wrap content tables in a scroll container so a wide table scrolls inside its own
+// box on narrow screens instead of forcing the whole page into horizontal scroll.
+(function () {
+  document.querySelectorAll('main table').forEach(function (t) {
+    var p = t.parentElement;
+    if (p && p.classList && p.classList.contains('table-scroll')) return;
+    var wrap = document.createElement('div');
+    wrap.className = 'table-scroll';
+    t.parentNode.insertBefore(wrap, t);
+    wrap.appendChild(t);
+  });
 })();
