@@ -154,7 +154,7 @@ a:hover { text-decoration: underline; }
   padding: 12px 20px;
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 14px;
   flex-wrap: wrap;
 }
 .brand {
@@ -213,6 +213,122 @@ a:hover { text-decoration: underline; }
   :root:not([data-theme]) .theme-toggle .i-moon { display: none; }
 }
 
+/* ---------- Site search trigger + modal ----------
+   The header gets a compact button; clicking it (or ⌘K) opens a full-screen
+   modal overlay with a large search input and a scrollable results list. */
+.search-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--nav-text);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.search-trigger:hover { background: rgba(255, 255, 255, 0.16); border-color: rgba(255, 255, 255, 0.45); }
+.search-trigger svg { width: 14px; height: 14px; flex-shrink: 0; }
+.search-trigger kbd {
+  font-family: inherit;
+  font-size: 0.72rem;
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--nav-text);
+  opacity: 0.8;
+}
+
+/* Modal overlay */
+.search-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: none;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 12vh 20px 20px;
+}
+.search-modal.open { display: flex; }
+.sm-backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.55); backdrop-filter: blur(3px); }
+.sm-panel {
+  position: relative;
+  width: 100%;
+  max-width: 560px;
+  background: var(--card);
+  border-radius: 12px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: 70vh;
+}
+.sm-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.sm-icon { width: 18px; height: 18px; color: var(--muted); flex-shrink: 0; }
+.sm-input-wrap input[type=search] {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 1.05rem;
+}
+.sm-input-wrap input[type=search]::placeholder { color: var(--muted); }
+.sm-input-wrap input[type=search]::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
+.sm-close {
+  border: 1px solid var(--line);
+  background: var(--line);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.sm-close:hover { color: var(--ink); }
+.sm-results { overflow-y: auto; flex: 1; padding: 6px; }
+.sm-results ul { list-style: none; margin: 0; padding: 0; }
+.sm-item a {
+  display: grid;
+  gap: 2px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  color: inherit;
+  text-decoration: none;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+.sm-item a:hover,
+.sm-item.is-cursor a { background: var(--line); text-decoration: none; }
+.sm-page { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.sm-title { font-weight: 600; color: var(--ink); }
+.sm-snip { color: var(--muted); font-size: 0.82rem; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.sm-empty { padding: 24px 16px; text-align: center; color: var(--muted); font-size: 0.9rem; }
+.sm-footer {
+  display: flex;
+  gap: 16px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--line);
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+@media (max-width: 720px) {
+  .search-trigger span, .search-trigger kbd { display: none; }
+  .search-trigger { padding: 5px 7px; }
+  .search-modal { padding: 6vh 12px 12px; }
+}
 /* ---------- Header on small screens ----------
    Prevent the tall, multi-line header: brand + theme toggle share one compact row,
    and the nav links become a single horizontally-scrollable strip instead of wrapping. */

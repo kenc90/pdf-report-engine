@@ -399,3 +399,157 @@ var VERSION = '0.1.0';
   var blocks = document.querySelectorAll('pre[data-copy] > code');
   for (var b = 0; b < blocks.length; b += 1) { try { highlight(blocks[b]); } catch (e) { /* leave the block uncoloured */ } }
 })();
+
+// ---- site search (modal) ---------------------------------------------------
+// A full-screen modal overlay for searching `docs/search-index.json` (built by
+// `npm run build:search`). Triggered by the header button or ⌘K/Ctrl+K. The modal
+// is created once and reused. Results link to page#anchor?q=term so the
+// destination can highlight matches.
+(function () {
+  var trigger = document.querySelector('.search-trigger');
+  if (!trigger) return;
+
+  var index = null;
+  var loading = null;
+  var results = [];
+  var cursor = -1;
+  var modal, input, list;
+
+  function ensureModal() {
+    if (modal) return;
+    modal = document.createElement('div');
+    modal.className = 'search-modal';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-label', 'Search documentation');
+    modal.innerHTML =
+      '<div class="sm-backdrop"></div>' +
+      '<div class="sm-panel">' +
+        '<div class="sm-input-wrap">' +
+          '<svg class="sm-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>' +
+          '<input type="search" placeholder="Search docs\u2026" aria-label="Search query" autocomplete="off" />' +
+          '<button class="sm-close" type="button" aria-label="Close search">Esc</button>' +
+        '</div>' +
+        '<div class="sm-results" role="listbox"></div>' +
+        '<div class="sm-footer"><span>↑↓ navigate</span><span>↵ open</span><span>esc close</span></div>' +
+      '</div>';
+    document.body.appendChild(modal);
+    input = modal.querySelector('input[type=search]');
+    list = modal.querySelector('.sm-results');
+    modal.querySelector('.sm-backdrop').addEventListener('click', close);
+    modal.querySelector('.sm-close').addEventListener('click', close);
+    input.addEventListener('input', update);
+    input.addEventListener('keydown', onKey);
+  }
+
+  function open() {
+    ensureModal();
+    modal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    input.value = '';
+    results = []; cursor = -1; render();
+    setTimeout(function () { input.focus(); }, 50);
+    loadIndex();
+  }
+
+  function close() {
+    if (!modal) return;
+    modal.classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  function isOpen() { return modal && modal.classList.contains('open'); }
+
+  trigger.addEventListener('click', open);
+  document.addEventListener('keydown', function (ev) {
+    if ((ev.metaKey || ev.ctrlKey) && (ev.key === 'k' || ev.key === 'K')) {
+      ev.preventDefault();
+      if (isOpen()) close(); else open();
+    }
+    if (ev.key === 'Escape' && isOpen()) { ev.preventDefault(); close(); }
+  });
+
+  function onKey(ev) {
+    if (ev.key === 'ArrowDown') { ev.preventDefault(); if (results.length) { cursor = (cursor + 1) % results.length; render(); } }
+    else if (ev.key === 'ArrowUp') { ev.preventDefault(); if (results.length) { cursor = (cursor - 1 + results.length) % results.length; render(); } }
+    else if (ev.key === 'Enter' && cursor >= 0 && results[cursor]) { navigate(results[cursor]); }
+  }
+
+  function navigate(e) {
+    location.href = e.page + '#' + e.anchor;
+    close();
+  }
+
+  function loadIndex() {
+    if (index) return Promise.resolve(index);
+    if (loading) return loading;
+    var url = 'search-index.json';
+    try {
+      var scripts = document.getElementsByTagName('script');
+      var self = document.currentScript;
+      if (!self) for (var i = scripts.length - 1; i >= 0; i -= 1) if (/site\.js(\?|$)/.test(scripts[i].src)) { self = scripts[i]; break; }
+      if (self && self.src) url = new URL('search-index.json', self.src.replace(/assets\/site\.js.*$/, '')).href;
+    } catch (e) { /* keep relative default */ }
+    loading = fetch(url).then(function (r) {
+      if (!r.ok) throw new Error('search index ' + r.status);
+      return r.json();
+    }).then(function (data) { index = data.entries || []; return index; });
+    return loading;
+  }
+
+  function tokens(q) { var m = String(q || '').toLowerCase().match(/[\p{L}\p{N}]{2,}/gu); return m || []; }
+
+  function score(entry, toks) {
+    var title = entry.title.toLowerCase();
+    var text = (entry.text || '').toLowerCase();
+    var page = (entry.pageLabel || '').toLowerCase();
+    var s = 0;
+    for (var i = 0; i < toks.length; i += 1) {
+      var t = toks[i];
+      if (title.indexOf(t) !== -1) s += 10;
+      if (page.indexOf(t) !== -1) s += 2;
+      var idx = text.indexOf(t);
+      if (idx !== -1) s += 1;
+      while (idx !== -1) { idx = text.indexOf(t, idx + 1); if (idx !== -1) s += 0.3; }
+    }
+    return s;
+  }
+
+  function search(q) {
+    if (!index) return [];
+    var toks = tokens(q);
+    if (!toks.length) return [];
+    var scored = [];
+    for (var i = 0; i < index.length; i += 1) { var s = score(index[i], toks); if (s > 0) scored.push({ e: index[i], s: s }); }
+    scored.sort(function (a, b) { return b.s - a.s; });
+    return scored.slice(0, 10).map(function (x) { return x.e; });
+  }
+
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+
+  function render() {
+    if (!results.length) { list.innerHTML = input.value.trim().length >= 2 ? '<p class="sm-empty">No results for \u201C' + esc(input.value.trim()) + '\u201D</p>' : ''; return; }
+    var html = '<ul>';
+    for (var i = 0; i < results.length; i += 1) {
+      var e = results[i];
+      var cls = 'sm-item' + (i === cursor ? ' is-cursor' : '');
+      html += '<li class="' + cls + '" role="option" data-i="' + i + '">';
+      html += '<a href="' + esc(e.page) + '#' + esc(e.anchor) + '">';
+      html += '<span class="sm-page">' + esc(e.pageLabel) + '</span>';
+      html += '<span class="sm-title">' + esc(e.title) + '</span>';
+      html += '<span class="sm-snip">' + esc(e.text.slice(0, 160)) + (e.text.length > 160 ? '\u2026' : '') + '</span>';
+      html += '</a></li>';
+    }
+    html += '</ul>';
+    list.innerHTML = html;
+    var links = list.querySelectorAll('.sm-item a');
+    for (var k = 0; k < links.length; k += 1) (function (el, entry) { el.addEventListener('click', function (ev) { ev.preventDefault(); navigate(entry); }); })(links[k], results[k]);
+  }
+
+  function update() {
+    var q = input.value.trim();
+    if (q.length < 2) { results = []; cursor = -1; render(); return; }
+    loadIndex().then(function () { results = search(q); cursor = results.length ? 0 : -1; render(); }).catch(function () { results = []; render(); });
+  }
+
+})();
