@@ -143,6 +143,33 @@ const url = URL.createObjectURL(new Blob([pdf], { type: 'application/pdf' }));</
         <code>http(s)</code> URL (a filesystem path has no intrinsic size here); and run large
         reports in a <strong>Web Worker</strong> so the UI thread is not blocked.
       </div>
+
+      <h3>No-build: load from jsDelivr</h3>
+      <p>
+        If you don't want a bundler, the prebuilt ESM bundle is served from jsDelivr via GitHub.
+        Pin a <strong>tag</strong> or <strong>commit SHA</strong> (not a branch) so the CDN cache
+        stays immutable:
+      </p>
+      <pre data-copy><code>&lt;script type="module"&gt;
+  import { htmlToReportDoc, renderToBuffer } from
+    'https://cdn.jsdelivr.net/gh/kenc90/pdf-report-engine@main/docs/browser/pdf-report-engine.js';
+
+  const report = htmlToReportDoc('&lt;h1&gt;Hello&lt;/h1&gt;');
+  const pdf = await renderToBuffer(report);
+  const url = URL.createObjectURL(new Blob([pdf], { type: 'application/pdf' }));
+  window.open(url);
+&lt;/script&gt;</code></pre>
+      <p>
+        jsDelivr also mirrors npm, so once the package is published you can switch to the shorter
+        <code>https://cdn.jsdelivr.net/npm/pdf-report-engine@latest/docs/browser/pdf-report-engine.js</code>
+        form. The <code>wawoff2-decoder.js</code> file sits alongside the bundle automatically —
+        the engine loads it lazily only when it needs to decode WOFF2 (e.g. Google Fonts).
+      </p>
+      <div class="note">
+        The bundle must be loaded as an <strong>ES module</strong> (<code>type="module"</code> or
+        <code>import()</code>). A plain <code>&lt;script&gt;</code> tag has no
+        <code>import.meta.url</code>, so the sibling decoder lookup will fail.
+      </div>
     </section>
 
     <section id="web-fonts">
