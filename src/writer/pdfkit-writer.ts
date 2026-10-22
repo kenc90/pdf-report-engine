@@ -170,17 +170,48 @@ function drawCommand(doc: PDFDocument, cmd: DrawCommand, x: number, y: number, b
           .strokeColor(css(cmd.stroke.color));
         if (cmd.stroke.dash) applyDash(doc, cmd.stroke.dash);
         if (cmd.fillOpacity !== undefined) doc.fillOpacity(cmd.fillOpacity);
-        doc.fillAndStroke();
+        doc.fillAndStroke(undefined, undefined, cmd.fillRule ?? 'nonzero');
         if (cmd.fillOpacity !== undefined) doc.fillOpacity(1);
       } else {
         if (cmd.fill) {
           if (cmd.fillOpacity !== undefined) doc.fillOpacity(cmd.fillOpacity);
-          doc.fillColor(css(cmd.fill)).fill();
+          doc.fillColor(css(cmd.fill)).fill(cmd.fillRule ?? 'nonzero');
           if (cmd.fillOpacity !== undefined) doc.fillOpacity(1);
         }
         if (cmd.stroke) {
           doc.lineWidth(cmd.stroke.lineWidth).strokeColor(css(cmd.stroke.color));
           if (cmd.stroke.dash) applyDash(doc, cmd.stroke.dash);
+          doc.stroke();
+        }
+      }
+      doc.restore();
+      return;
+    }
+    case 'path': {
+      const rings = cmd.subpaths.filter((sp) => sp.points.length >= 2);
+      if (rings.length === 0) return;
+      doc.save();
+      // Fill first: every ring is closed (SVG fills implicitly close) and they
+      // share one path so `evenodd`/reverse-wound holes cancel correctly.
+      if (cmd.fill) {
+        for (const sp of rings) {
+          doc.moveTo(x + sp.points[0]![0], y + sp.points[0]![1]);
+          for (let i = 1; i < sp.points.length; i += 1) doc.lineTo(x + sp.points[i]![0], y + sp.points[i]![1]);
+          doc.closePath();
+        }
+        if (cmd.fillOpacity !== undefined) doc.fillOpacity(cmd.fillOpacity);
+        doc.fillColor(css(cmd.fill)).fill(cmd.fillRule ?? 'nonzero');
+        if (cmd.fillOpacity !== undefined) doc.fillOpacity(1);
+      }
+      // Stroke second: honour each ring's own `closed` flag so an open
+      // `<polyline>` outline does not gain a closing segment.
+      if (cmd.stroke) {
+        doc.lineWidth(cmd.stroke.lineWidth).strokeColor(css(cmd.stroke.color));
+        if (cmd.stroke.dash) applyDash(doc, cmd.stroke.dash);
+        for (const sp of rings) {
+          doc.moveTo(x + sp.points[0]![0], y + sp.points[0]![1]);
+          for (let i = 1; i < sp.points.length; i += 1) doc.lineTo(x + sp.points[i]![0], y + sp.points[i]![1]);
+          if (sp.closed) doc.closePath();
           doc.stroke();
         }
       }

@@ -41,6 +41,10 @@ import type {
   BarcodeBlock,
   BarcodeSymbology,
   DiagonalHeader,
+  SvgBlock,
+  FlexBlock,
+  FlexItem,
+  ReferenceLine,
 } from '../ir/schema.js';
 
 // --- tiny, forgiving HTML tokenizer/parser ---------------------------------
@@ -325,6 +329,82 @@ function applyDecl(prop: string, value: string, set: (k: string, v: unknown) => 
     case 'page-break-inside':
       set('breakInside', value === 'avoid' ? 'avoid' : 'auto');
       return;
+    // --- flexbox (subset) -------------------------------------------------
+    case 'display':
+      if (value === 'flex' || value === 'inline-flex') set('display', 'flex');
+      return;
+    case 'flex-direction':
+      if (value === 'column' || value === 'column-reverse') set('direction', 'column');
+      else if (value === 'row' || value === 'row-reverse') set('direction', 'row');
+      return;
+    case 'flex-wrap':
+      set('wrap', value === 'wrap' || value === 'wrap-reverse');
+      return;
+    case 'justify-content':
+      if (/^(flex-start|start|left)$/.test(value)) set('justify', 'flex-start');
+      else if (/^(flex-end|end|right)$/.test(value)) set('justify', 'flex-end');
+      else if (value === 'center') set('justify', 'center');
+      else if (value === 'space-between') set('justify', 'space-between');
+      else if (value === 'space-around') set('justify', 'space-around');
+      else if (value === 'space-evenly') set('justify', 'space-evenly');
+      return;
+    case 'align-items':
+      if (value === 'flex-start' || value === 'start') set('alignItems', 'flex-start');
+      else if (value === 'flex-end' || value === 'end') set('alignItems', 'flex-end');
+      else if (value === 'center') set('alignItems', 'center');
+      else if (value === 'stretch') set('alignItems', 'stretch');
+      return;
+    case 'gap':
+    case 'grid-gap': {
+      // `gap` accepts one or two values: `gap: <row> <column>`. A single value
+      // sets both axes; two values split into rowGap / columnGap.
+      const parts = value.trim().split(/\s+/);
+      if (parts.length > 1) {
+        set('rowGap', parts[0]!);
+        set('columnGap', parts[1]!);
+      } else {
+        set('gap', parts[0]!);
+      }
+      return;
+    }
+    case 'row-gap':
+      set('rowGap', value.trim());
+      return;
+    case 'column-gap':
+      set('columnGap', value.trim());
+      return;
+    case 'flex-grow': {
+      const n = Number(value);
+      if (Number.isFinite(n)) set('grow', n);
+      return;
+    }
+    case 'flex-shrink': {
+      const n = Number(value);
+      if (Number.isFinite(n)) set('shrink', n);
+      return;
+    }
+    case 'flex-basis':
+      if (value !== 'auto') set('basis', value.trim());
+      return;
+    case 'flex': {
+      // `flex: <grow> <shrink> <basis>` shorthand.
+      const parts = value.trim().split(/\s+/);
+      const g = Number(parts[0]);
+      if (Number.isFinite(g)) set('grow', g);
+      if (parts.length > 1) {
+        const sh = Number(parts[1]);
+        if (Number.isFinite(sh)) set('shrink', sh);
+      }
+      if (parts.length > 2 && parts[2] !== 'auto') set('basis', parts[2]!);
+      return;
+    }
+    case 'align-self':
+      if (value === 'auto') set('alignSelf', 'auto');
+      else if (value === 'flex-start' || value === 'start') set('alignSelf', 'flex-start');
+      else if (value === 'flex-end' || value === 'end') set('alignSelf', 'flex-end');
+      else if (value === 'center') set('alignSelf', 'center');
+      else if (value === 'stretch') set('alignSelf', 'stretch');
+      return;
     default:
       return;
   }
@@ -559,7 +639,7 @@ function isBlock(node: HNode): node is HElement {
   return node.type === 'element' && BLOCK_TAGS.has(node.tag);
 }
 
-const BLOCK_TAGS = new Set(['p', 'div', 'section', 'article', 'header', 'footer', 'main', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'table', 'ul', 'ol', 'li', 'hr', 'img', 'blockquote']);
+const BLOCK_TAGS = new Set(['p', 'div', 'section', 'article', 'header', 'footer', 'main', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'table', 'ul', 'ol', 'li', 'hr', 'img', 'svg', 'blockquote']);
 
 /** Inline content of an element (its text + nested inline spans). */
 function inlineContent(el: HElement, opts: HtmlOptions, inherited: IrBox): Content {
@@ -645,9 +725,8 @@ function numAttr(el: HElement, name: string): number | undefined {
 
 function chartKind(value: string | undefined, fallback: ChartKind = 'bar'): ChartKind {
   const v = (value ?? '').trim().toLowerCase();
-  return v === 'bar' || v === 'line' || v === 'area' || v === 'pie' || v === 'donut' || v === 'combo' || v === 'waterfall'
-    ? v
-    : fallback;
+  const known: ChartKind[] = ['bar', 'line', 'area', 'pie', 'donut', 'combo', 'waterfall', 'scatter', 'bubble', 'radar', 'gauge', 'heatmap'];
+  return (known as string[]).includes(v) ? (v as ChartKind) : fallback;
 }
 
 function applyChartOptions(el: HElement, block: ChartBlock): void {
@@ -711,6 +790,66 @@ function applyChartOptions(el: HElement, block: ChartBlock): void {
     }
     if (Object.keys(wf).length > 0) block.waterfallColors = wf;
   }
+
+  // Scatter / bubble: a numeric x-axis format and per-series x/r columns live on
+  // the series (see applySeriesShape), so only the axis pattern is read here.
+  if (el.attrs['data-x-format']) (block.valueAxis ??= {}).xFormat = el.attrs['data-x-format'];
+
+  // Range bars: draw each bar from low→high instead of zero→value.
+  if (el.attrs['data-range'] !== undefined) block.range = boolAttr(el, 'data-range', true);
+
+  // Gauge: needle value + full-scale maximum.
+  const gaugeMax = numAttr(el, 'data-gauge-max');
+  if (gaugeMax !== undefined) block.gaugeMax = gaugeMax;
+  if (el.attrs['data-gauge-value'] !== undefined) block.gaugeValue = el.attrs['data-gauge-value'].trim();
+
+  // Heatmap: value labels + colour ramp.
+  if (el.attrs['data-heatmap-labels'] !== undefined) block.heatmapLabels = boolAttr(el, 'data-heatmap-labels', true);
+  const heat = el.attrs['data-heatmap-colors'];
+  if (heat) {
+    const hc: NonNullable<ChartBlock['heatmapColors']> = {};
+    for (const part of heat.split(/[;,]/)) {
+      const [key, value] = part.split('=');
+      const k = (key ?? '').trim().toLowerCase();
+      const v = (value ?? '').trim();
+      if (!v) continue;
+      if (k === 'from' || k === 'to') hc[k] = v;
+    }
+    if (Object.keys(hc).length > 0) block.heatmapColors = hc;
+  }
+
+  // Reference / threshold lines: `data-reference-lines="50:max;80,color=#c00"`
+  // semicolon-separated; each line is `value[:label][ key=val ...]`.
+  const refs = el.attrs['data-reference-lines'];
+  if (refs) {
+    const lines: ReferenceLine[] = [];
+    for (const segment of refs.split(';')) {
+      const parts = segment.trim().split(/[,\s]+/).filter(Boolean);
+      if (parts.length === 0) continue;
+      // The first token is `value` or `value:label`.
+      const head = parts[0]!;
+      const colon = head.indexOf(':');
+      const value = Number(colon < 0 ? head : head.slice(0, colon));
+      if (!Number.isFinite(value)) continue;
+      const line: ReferenceLine = { value };
+      if (colon >= 0 && head.slice(colon + 1)) line.label = head.slice(colon + 1);
+      for (const kv of parts.slice(1)) {
+        const eq = kv.indexOf('=');
+        if (eq < 0) continue;
+        const k = kv.slice(0, eq).trim().toLowerCase();
+        const v = kv.slice(eq + 1).trim();
+        if (k === 'label') line.label = v;
+        else if (k === 'color' || k === 'colour') line.color = v;
+        else if (k === 'axis' && (v === 'left' || v === 'right')) line.axis = v;
+        else if (k === 'dash') {
+          const nums = v.split(/:/).map((n) => Number(n)).filter((n) => Number.isFinite(n));
+          if (nums.length) line.dash = nums;
+        }
+      }
+      lines.push(line);
+    }
+    if (lines.length) block.referenceLines = lines;
+  }
 }
 
 /** `data-series-types="bar,line"` / `data-series-axes="left,right"`, aligned by index. */
@@ -722,6 +861,24 @@ function applySeriesShape(el: HElement, block: ChartBlock): void {
     const axis = axes[i];
     if (type === 'bar' || type === 'line' || type === 'area') block.series[i]!.type = type;
     if (axis === 'left' || axis === 'right') block.series[i]!.axis = axis;
+  }
+  // Scatter / bubble / range: parallel per-series columns, semicolon-separated.
+  assignSeriesColumn(el, block, 'data-series-x', 'xValues');
+  assignSeriesColumn(el, block, 'data-series-r', 'rValues');
+  assignSeriesColumn(el, block, 'data-series-low', 'low');
+  assignSeriesColumn(el, block, 'data-series-high', 'high');
+}
+
+/** Split `data-series-x="1,2;3,4"` into per-series arrays aligned by index. */
+function assignSeriesColumn(el: HElement, block: ChartBlock, attr: string, key: 'xValues' | 'rValues' | 'low' | 'high'): void {
+  const raw = el.attrs[attr];
+  if (raw === undefined) return;
+  const groups = raw.split(';').map((s) => s.trim());
+  for (let i = 0; i < block.series.length; i += 1) {
+    const group = groups[i];
+    if (group === undefined || group === '') continue;
+    const target = block.series[i];
+    if (target) (target as unknown as Record<string, unknown>)[key] = group;
   }
 }
 
@@ -837,6 +994,94 @@ function barcodeFromElement(el: HElement, style: IrBox): BarcodeBlock {
   return block;
 }
 
+// --- inline svg + flexbox containers ---------------------------------------
+
+/** Does this `<img src>` (or inline source) point at a vector SVG? */
+function isSvgSource(src: string): boolean {
+  if (!src) return false;
+  const t = src.trimStart();
+  if (/<svg[\s>]/i.test(t.slice(0, 256))) return true;
+  if (/^data:image\/svg\+xml/i.test(t)) return true;
+  return /\.svg(\?|#|$)/i.test(t);
+}
+
+function escAttr(v: string): string {
+  return v.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function escText(v: string): string {
+  return v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/** Re-serialise a parsed subtree back to markup (used to hand an inline `<svg>`
+ *  to `core/svg.ts`, which parses SVG itself). */
+function serializeHNode(node: HNode): string {
+  if (node.type === 'text') return escText(node.text);
+  const attrs = Object.entries(node.attrs)
+    .map(([k, v]) => ` ${k}="${escAttr(v)}"`)
+    .join('');
+  if (node.children.length === 0) return `<${node.tag}${attrs}/>`;
+  return `<${node.tag}${attrs}>${node.children.map(serializeHNode).join('')}</${node.tag}>`;
+}
+
+function svgFromElement(el: HElement, style: IrBox): SvgBlock {
+  const s = { ...(style as Record<string, unknown>) };
+  delete s.display; // flex carry-over, not a valid SVG-block prop
+  const block: SvgBlock = { type: 'svg', src: serializeHNode(el), ...(s as Partial<SvgBlock>) };
+  if (block.width === undefined && el.attrs['width'] !== undefined) block.width = `${el.attrs['width']}px`;
+  if (block.height === undefined && el.attrs['height'] !== undefined) block.height = `${el.attrs['height']}px`;
+  if (el.attrs['alt'] !== undefined) block.alt = el.attrs['alt'];
+  return block;
+}
+
+function flexItemFromStyle(itemStyle: IrBox, b: Block): FlexItem {
+  const s = itemStyle as Record<string, unknown>;
+  const item: FlexItem = { block: b };
+  if (typeof s.grow === 'number') item.grow = s.grow;
+  if (typeof s.shrink === 'number') item.shrink = s.shrink;
+  if (s.basis !== undefined) item.basis = s.basis as number | string;
+  if (s.alignSelf !== undefined) item.alignSelf = s.alignSelf as FlexItem['alignSelf'];
+  if (s.width !== undefined) item.width = s.width as number | string;
+  if (s.height !== undefined) item.height = s.height as number | string;
+  if (s.backgroundColor !== undefined) item.backgroundColor = s.backgroundColor as FlexItem['backgroundColor'];
+  return item;
+}
+
+function flexFromElement(el: HElement, opts: HtmlOptions, style: IrBox): FlexBlock {
+  const s = { ...(style as Record<string, unknown>) };
+  delete s.display;
+  const block: FlexBlock = { type: 'flex', children: [], ...(s as Partial<FlexBlock>) };
+
+  const children: FlexItem[] = [];
+  let textRun: HNode[] = [];
+  const flushText = (): void => {
+    if (textRun.length === 0) return;
+    const pseudo: HElement = { type: 'element', tag: 'span', attrs: {}, children: textRun };
+    const content = inlineContent(pseudo, opts, {} as IrBox);
+    const nonEmpty = typeof content === 'string' ? content.trim().length > 0 : Array.isArray(content) ? content.length > 0 : true;
+    if (nonEmpty) children.push({ block: { type: 'paragraph', content } as Block });
+    textRun = [];
+  };
+
+  for (const node of el.children) {
+    if (node.type === 'text') {
+      if (/\S/.test(node.text)) textRun.push(node);
+      continue;
+    }
+    flushText();
+    const built = elToBlock(node, opts);
+    if (built.length === 0) continue;
+    // A child that yields several blocks becomes a vertical (column) flex, so it
+    // still occupies exactly one flex item, as CSS would wrap it.
+    const b = built.length === 1 ? built[0]! : ({ type: 'flex', direction: 'column', children: built.map((bb) => ({ block: bb })) } as Block);
+    children.push(flexItemFromStyle(elementStyle(node, opts), b));
+  }
+  flushText();
+
+  block.children = children;
+  return block;
+}
+
 function elToBlock(el: HElement, opts: HtmlOptions): Block[] {
   const blocks = elToBlockCore(el, opts);
   // Conditional formatting works on any block carrier (`data-if` / `data-when`).
@@ -876,7 +1121,17 @@ function elToBlockCore(el: HElement, opts: HtmlOptions): Block[] {
     return [withId(tableBlock(el, opts, style))];
   }
   if (el.tag === 'img') {
-    const block: Record<string, unknown> = { type: 'image', src: resolveImageSrc(el.attrs['src'] ?? '', opts), ...style };
+    const src = resolveImageSrc(el.attrs['src'] ?? '', opts);
+    // A `.svg` / `data:image/svg+xml` / inline-SVG source renders as a vector
+    // block instead of a raster image.
+    if (isSvgSource(src)) {
+      const svgBlock: Record<string, unknown> = { type: 'svg', src, ...style };
+      if (svgBlock.width === undefined && el.attrs['width'] !== undefined) svgBlock.width = `${el.attrs['width']}px`;
+      if (svgBlock.height === undefined && el.attrs['height'] !== undefined) svgBlock.height = `${el.attrs['height']}px`;
+      if (el.attrs['alt'] !== undefined) svgBlock.alt = el.attrs['alt'];
+      return [withId(svgBlock as unknown as Block)];
+    }
+    const block: Record<string, unknown> = { type: 'image', src, ...style };
     // `width`/`height` HTML attributes are CSS pixels; honour them when inline
     // style did not already set a size. Omitting one lets layout infer it from
     // the image's intrinsic aspect ratio.
@@ -884,6 +1139,16 @@ function elToBlockCore(el: HElement, opts: HtmlOptions): Block[] {
     if (block.height === undefined && el.attrs['height'] !== undefined) block.height = `${el.attrs['height']}px`;
     if (el.attrs['alt'] !== undefined) block.alt = el.attrs['alt'];
     return [withId(block as unknown as Block)];
+  }
+
+  if (el.tag === 'svg') {
+    return [withId(svgFromElement(el, style))];
+  }
+
+  // A `display: flex` container becomes a single atomic flex block whose children
+  // are ordinary blocks wrapped as flex items.
+  if ((style as { display?: string }).display === 'flex') {
+    return [withId(flexFromElement(el, opts, style))];
   }
 
   const blockChildren = el.children.filter(isBlock);

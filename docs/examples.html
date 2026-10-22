@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Examples · pdf-report-engine</title>
-  <meta name="description" content="Runnable JavaScript examples for pdf-report-engine: basic IR, data-driven tables, rich cells, conditional formatting, HTML authoring, combo and waterfall charts, bookmarks and TOC, barcodes, streaming, images and merged cells." />
+  <meta name="description" content="Runnable JavaScript examples for pdf-report-engine: basic IR, data-driven tables, rich cells, conditional formatting, HTML authoring, combo / waterfall / scatter / radar / gauge / heatmap charts, SVG vector images, flexbox layout, bookmarks and TOC, barcodes, streaming, images and merged cells." />
   <script>
     (function () {
       try {
@@ -71,7 +71,10 @@ node examples/05-images.mjs</code></pre>
         bar / stacked bar / line / area / pie / donut charts, QR / Code 128 / EAN-13 codes,
         <code>&lt;mark&gt;</code> highlights, external and <code>#anchor</code> links, and a
         nested PDF outline. The dedicated rich-cell, conditional-formatting and chart-depth
-        samples below push each newer feature to its limit.
+        samples below push each newer feature to its limit, and
+        <code>samples/svg-flex.html</code> shows inline <code>&lt;svg&gt;</code> art,
+        a <code>.svg</code> <code>&lt;img&gt;</code>, a wrapping <code>display: flex</code> row
+        and the new scatter / radar / gauge / heatmap chart kinds.
       </p>
       <pre data-copy><code>npm run html:pdf -- samples/dashboard.html -o output/</code></pre>
       <p>
@@ -521,6 +524,199 @@ const pdf = await renderToBuffer(report);</code></pre>
       </p>
     </section>
 
+    <section id="ex-chart-kinds">
+      <h3>New chart kinds: scatter, bubble, range, radar, gauge, heatmap &amp; reference lines</h3>
+      <p>
+        Every chart kind shares the same <code>ChartBlock</code> — swap the <code>kind</code>
+        and set the new fields. Scatter and bubble plot numeric <code>x</code>/(radius) pairs,
+        range bars draw <code>low</code>→<code>high</code> per category, radar draws one polygon
+        per series around the categories, gauge is a half-annulus meter, and heatmap
+        colour-interpolates each cell. Any cartesian chart accepts a <code>referenceLines</code>
+        array of horizontal threshold lines.
+      </p>
+      <pre data-copy><code>/* Scatter with an explicit x array and a pattern for the numeric x-axis. */
+{
+  type: 'chart', kind: 'scatter', title: 'Latency vs. load', height: 170,
+  series: [{ name: 'P95', values: [120, 180, 240, 300], xValues: [10, 20, 30, 40] }],
+  valueAxis: { format: '#,##0', xFormat: '#,##0"ms"' },
+  referenceLines: [{ value: 250, label: 'SLO', color: '#c00', dash: [3, 2] }],
+}
+
+/* Bubble: `rValues` sizes each marker. */
+{
+  type: 'chart', kind: 'bubble', title: 'City population vs. income', height: 190,
+  series: [{ name: 'Cities', values: [42, 65, 38, 91], xValues: [10, 20, 30, 40], rValues: [3, 8, 5, 12] }],
+}
+
+/* High–low range bars with a threshold line at 78. */
+{
+  type: 'chart', kind: 'bar', range: true, title: 'Daily temperature (°C)', height: 170,
+  categories: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+  series: [{ name: 'Temp', low: [12, 14, 10, 15, 17], high: [24, 26, 20, 23, 27] }],
+  referenceLines: [{ value: 22, label: 'heat warning', color: '#c00' }],
+}
+
+/* Radar: one polygon per series over the categories arranged around a circle. */
+{
+  type: 'chart', kind: 'radar', title: 'Vehicle comparison', height: 220,
+  categories: ['Speed', 'Power', 'Range', 'Grip', 'Comfort'],
+  series: [
+    { name: 'Car A', values: [80, 60, 70, 90, 75] },
+    { name: 'Car B', values: [70, 85, 55, 65, 88] },
+  ],
+  legend: 'right',
+}
+
+/* Gauge: a half-annulus meter; the needle reads `gaugeValue` against `gaugeMax`. */
+{
+  type: 'chart', kind: 'gauge', title: 'SLA compliance', height: 150,
+  gaugeValue: 72, gaugeMax: 100,
+  series: [{ name: 'score', values: [72] }],
+}
+
+/* Heatmap: rows are series, columns are their values; colour ramp is interpolated. */
+{
+  type: 'chart', kind: 'heatmap', title: 'Weekly activity', height: 170,
+  categories: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+  series: [
+    { name: 'Morning',   values: [3, 5, 8, 4, 2] },
+    { name: 'Afternoon', values: [6, 7, 4, 9, 5] },
+    { name: 'Evening',   values: [2, 3, 5, 7, 8] },
+  ],
+  heatmapColors: { from: '#eef4ff', to: '#1e3a8a' },
+}</code></pre>
+      <p>The declarative form adds a handful of attributes:</p>
+      <pre data-copy><code>&lt;div data-chart="scatter" data-title="Latency vs. load"
+     data-series="P95:120,180,240,300" data-series-x="10,20,30,40"
+     data-x-format="#,##0"
+     data-reference-lines="250:SLO,color=#c00,dash=3:2"
+     style="height:170pt"&gt;&lt;/div&gt;
+
+&lt;div data-chart="bar" data-range="true" data-title="Daily temperature (°C)"
+     data-categories="Mon,Tue,Wed,Thu,Fri"
+     data-series-low="12,14,10,15,17" data-series-high="24,26,20,23,27"
+     data-reference-lines="22:heat warning,color=#c00"
+     style="height:170pt"&gt;&lt;/div&gt;
+
+&lt;div data-chart="radar" data-title="Vehicle comparison"
+     data-categories="Speed,Power,Range,Grip,Comfort"
+     data-series="Car A:80,60,70,90,75; Car B:70,85,55,65,88"
+     data-legend="right" style="height:220pt"&gt;&lt;/div&gt;
+
+&lt;div data-chart="gauge" data-title="SLA compliance"
+     data-gauge-value="72" data-gauge-max="100"
+     data-series="score:72" style="height:150pt"&gt;&lt;/div&gt;
+
+&lt;div data-chart="heatmap" data-title="Weekly activity"
+     data-categories="Mon,Tue,Wed,Thu,Fri"
+     data-series="Morning:3,5,8,4,2; Afternoon:6,7,4,9,5; Evening:2,3,5,7,8"
+     data-heatmap-colors="from=#eef4ff;to=#1e3a8a"
+     style="height:170pt"&gt;&lt;/div&gt;</code></pre>
+      <p class="note" style="margin-top:12px">
+        <code>data-reference-lines</code> takes semicolon-separated entries; each is
+        <code>value[:label][,key=value…]</code> with optional <code>color</code>,
+        <code>axis=left|right</code> (for combo charts) and <code>dash=n:m</code>.
+        <code>range: true</code> on a bar chart draws each bar between its
+        <code>low</code>/<code>high</code> endpoints; if only one is given, <code>values</code>
+        supplies the other end.
+      </p>
+    </section>
+
+    <section id="ex-svg">
+      <h3>SVG vector images</h3>
+      <p>
+        An <code>svg</code> block parses an SVG document and emits real PDF paths — nothing
+        is rasterised. Inline markup, <code>.svg</code> files, <code>data:image/svg+xml</code>
+        URIs, raw bytes and remote URLs all take the same route, and the image pre-pass fetches
+        http(s) sources before layout.
+      </p>
+      <pre data-copy><code>/* IR: inline markup with an explicit point width; height follows the aspect ratio. */
+{
+  type: 'svg', width: 96,
+  src: '&lt;svg viewBox="0 0 24 24"&gt;&lt;path d="M12 2 L22 22 L2 22 z" fill="#1e3a8a" stroke="#0f172a" stroke-width="1"/&gt;&lt;/svg&gt;',
+}
+
+/* A file on disk (resolved against `baseDir`) or a remote icon (fetched). */
+{ type: 'svg', src: 'assets/logo.svg', width: 140, align: 'center' }
+{ type: 'svg', src: 'https://cdn.example.com/icons/check.svg', width: 20 }
+
+/* Even-odd fill-rule produces holes with a nested subpath. */
+{
+  type: 'svg', width: 60,
+  src: '&lt;svg viewBox="0 0 10 10"&gt;&lt;path fill-rule="evenodd" d="M0 0h10v10H0z M3 3h4v4H3z"/&gt;&lt;/svg&gt;',
+}</code></pre>
+      <p>In HTML, drop the markup inline or reference the file via <code>&lt;img&gt;</code>:</p>
+      <pre data-copy><code>&lt;svg viewBox="0 0 24 24" width="24" height="24"&gt;
+  &lt;circle cx="12" cy="12" r="10" fill="#1e3a8a"/&gt;
+  &lt;path d="M8 12h8M12 8v8" stroke="white" stroke-width="2"/&gt;
+&lt;/svg&gt;
+
+&lt;img src="assets/logo.svg" width="140" alt="logo"&gt;</code></pre>
+      <p class="note" style="margin-top:12px">
+        Supported: <code>path</code> (all commands, arcs flattened to polylines),
+        <code>rect</code>/<code>circle</code>/<code>ellipse</code>/<code>line</code>/
+        <code>polyline</code>/<code>polygon</code>, nested <code>&lt;g&gt;</code> with
+        <code>transform</code>, and <code>fill</code>/<code>stroke</code>/
+        <code>opacity</code>/<code>stroke-dasharray</code>/<code>fill-rule="evenodd"</code>.
+        Filters, gradients and <code>&lt;text&gt;</code> are ignored — convert them to paths
+        before embedding.
+      </p>
+    </section>
+
+    <section id="ex-flex">
+      <h3>Flexbox layout</h3>
+      <p>
+        A <code>display: flex</code> container lays any flow blocks along a row or a column —
+        one atomic fragment that never splits across pages. Nest two <code>flex</code> blocks
+        for a two-dimensional layout. Items are measured at max-content width, then main-axis
+        free space is distributed by <code>flex-grow</code>/<code>flex-shrink</code>.
+      </p>
+      <pre data-copy><code>/* IR: a KPI strip that distributes three cards evenly. */
+{
+  type: 'flex',
+  direction: 'row',
+  justify: 'space-between',
+  alignItems: 'stretch',
+  gap: 12,
+  children: [
+    { block: { type: 'paragraph', content: 'Revenue ↑ 8%' }, grow: 1, backgroundColor: '#eef4ff' },
+    { block: { type: 'paragraph', content: 'Cost ↓ 3%' },   grow: 1, backgroundColor: '#fef3c7' },
+    { block: { type: 'paragraph', content: 'Margin ↑ 4pt' }, grow: 1, backgroundColor: '#dcfce7' },
+  ],
+}
+
+/* Two-column hero: an inline SVG next to a text column, baseline-aligned. */
+{
+  type: 'flex', direction: 'row', gap: 16, alignItems: 'center',
+  children: [
+    { block: { type: 'svg', width: 48, src: '&lt;svg viewBox="0 0 24 24"&gt;&lt;circle cx="12" cy="12" r="10" fill="#1e3a8a"/&gt;&lt;/svg&gt;' } },
+    { block: { type: 'paragraph', content: 'Quarterly snapshot — one PDF per region.' }, grow: 1 },
+  ],
+}</code></pre>
+      <p>The same authored in HTML:</p>
+      <pre data-copy><code>&lt;div style="display:flex; justify-content:space-between; align-items:center; gap:12pt"&gt;
+  &lt;div style="flex:1 1 auto; background:#eef4ff; padding:6pt"&gt;Revenue ↑ 8%&lt;/div&gt;
+  &lt;div style="flex:1 1 auto; background:#fef3c7; padding:6pt"&gt;Cost ↓ 3%&lt;/div&gt;
+  &lt;div style="flex:1 1 auto; background:#dcfce7; padding:6pt"&gt;Margin ↑ 4pt&lt;/div&gt;
+&lt;/div&gt;
+
+&lt;!-- Wrapping row of chips with a per-item align-self override. --&gt;
+&lt;div style="display:flex; flex-wrap:wrap; gap:6pt 10pt"&gt;
+  &lt;span class="chip"&gt;alpha&lt;/span&gt;
+  &lt;span class="chip" style="align-self:flex-end"&gt;tall&lt;/span&gt;
+  &lt;span class="chip"&gt;gamma&lt;/span&gt;
+&lt;/div&gt;</code></pre>
+      <p class="note" style="margin-top:12px">
+        Supported CSS: <code>display: flex</code>, <code>flex-direction</code>,
+        <code>flex-wrap</code>, <code>justify-content</code> (six values),
+        <code>align-items</code>/<code>align-self</code> (four values plus
+        <code>auto</code>), <code>gap</code>/<code>row-gap</code>/<code>column-gap</code>,
+        and per-item <code>flex-grow</code>/<code>flex-shrink</code>/<code>flex-basis</code>
+        or the <code>flex: g s b</code> shorthand. <code>position: absolute</code> /
+        <code>float</code> are not part of the flow and are ignored.
+      </p>
+    </section>
+
     <section id="ex-nav">
       <h3>Bookmarks, TOC and links</h3>
       <p>
@@ -651,6 +847,8 @@ const pdf = await renderToBuffer(report);</code></pre>
         <a href="getting-started.html#navigation">TOC, bookmarks &amp; links</a>
         <a href="getting-started.html#breaks">Breaks &amp; keep-together</a>
         <a href="getting-started.html#barcodes">Barcodes</a>
+        <a href="getting-started.html#svg">SVG vector images</a>
+        <a href="getting-started.html#flex">Flexbox layout</a>
         <a href="getting-started.html#web-fonts">Web fonts &amp; CJK</a>
         <a href="getting-started.html#cli">Command line</a>
       </nav>

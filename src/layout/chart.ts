@@ -51,6 +51,13 @@ interface Slice {
   type?: 'bar' | 'line' | 'area';
   /** Combo charts: which value axis this series reads (default `'left'`). */
   axis?: 'left' | 'right';
+  /** Scatter / bubble: the x-coordinate per point (defaults to the index). */
+  xValues: number[];
+  /** Bubble: marker radius per point (normalised at draw time). */
+  rValues: number[];
+  /** Range bars: lower / upper end of each bar. */
+  low: number[];
+  high: number[];
 }
 
 /** Percent labels use a quoted `%` so the formatter does not scale again. */
@@ -78,6 +85,13 @@ export function layoutChart(
   const isPie = block.kind === 'pie' || block.kind === 'donut';
   const isCombo = block.kind === 'combo';
   const isWaterfall = block.kind === 'waterfall';
+  const isScatter = block.kind === 'scatter' || block.kind === 'bubble';
+  const isRadar = block.kind === 'radar';
+  const isGauge = block.kind === 'gauge';
+  const isHeatmap = block.kind === 'heatmap';
+  // Cartesian kinds share the value axis, grid lines and (band- or point-based) x
+  // scale; pie/radar/gauge/heatmap are plotted into the box without those axes.
+  const isCartesian = !isPie && !isRadar && !isGauge && !isHeatmap;
   const percentStack = block.stacked === '100%';
   const stacked = block.stacked === true;
   const resolved = block.series.map((s, i) => resolveSeries(s, i, ctx, opts.scope, block.colors, style));
@@ -91,7 +105,7 @@ export function layoutChart(
 
   const catCount = isPie
     ? series[0]!.values.length
-    : Math.max(categories.length, ...series.map((s) => s.values.length), 1);
+    : Math.max(categories.length, ...series.map((s) => Math.max(s.values.length, s.xValues.length)), 1);
   const catNames = Array.from({ length: catCount }, (_, i) => categories[i] ?? String(i + 1));
 
   const commands: DrawCommand[] = [];
@@ -136,15 +150,15 @@ export function layoutChart(
   const plotTop = cursorY;
   const plotHeight = Math.max(
     24,
-    totalHeight - plotTop - (block.categoryLabels !== false && !isPie ? labelHeight + LABEL_GAP : 0),
+    totalHeight - plotTop - (block.categoryLabels !== false && isCartesian ? labelHeight + LABEL_GAP : 0),
   );
   const plotBottom = plotTop + plotHeight;
 
   // --- axes ----------------------------------------------------------------
   const leftSeries = isCombo ? series.filter((s) => s.axis !== 'right') : series;
   const rightSeries = isCombo ? series.filter((s) => s.axis === 'right') : [];
-  const includeZero = !isPie && !isWaterfall && block.kind !== 'line';
-  const domain = isPie
+  const includeZero = isCartesian && !isWaterfall && block.kind !== 'line' && !isScatter;
+  const domain = !isCartesian
     ? undefined
     : isWaterfall
       ? computeWaterfallDomain(series[0]!, block)
@@ -183,12 +197,23 @@ export function layoutChart(
     return block.valueAxis?.format;
   };
 
+  // Scatter / bubble read a numeric x-axis; everything else uses category bands.
+  const xDomain = isScatter ? computeScatterDomain(series) : undefined;
+  const mapX = (v: number): number =>
+    xDomain ? plotX + ((v - xDomain.min) / (xDomain.max - xDomain.min || 1)) * plotW : plotX + (v + 0.5) * bandW;
+
   if (legendSide === 'top') drawLegend(commands, legend, 0, titleHeight, labelStyle, ascent);
   if (legendSide === 'right') drawLegend(commands, legend, left + plotWidth + ITEM_GAP, plotTop, labelStyle, ascent);
 
   // --- plot ----------------------------------------------------------------
   if (isPie) {
     drawPie(commands, block, series[0]!, catNames, plotX, plotTop, plotW, plotHeight, labelStyle, ascent, descent);
+  } else if (isGauge) {
+    drawGauge(commands, block, series[0]!, plotX, plotTop, plotW, plotHeight, labelStyle, ascent, descent);
+  } else if (isRadar) {
+    drawRadar(commands, block, series, catNames, plotX, plotTop, plotW, plotHeight, labelStyle, ascent, descent);
+  } else if (isHeatmap) {
+    drawHeatmap(commands, block, series, catNames, plotX, plotTop, plotW, plotHeight, labelStyle, ascent, descent);
   } else {
     // Grid lines + value labels.
     if (block.valueAxis?.gridLines !== false) {
@@ -199,6 +224,20 @@ export function layoutChart(
           const text = formatTick(v, block.valueAxis?.format);
           const w = measure(text, labelStyle);
           pushText(commands, text, labelStyle, plotX - 6 - w, y + ascent * 0.35, TEXT_MUTED);
+        }
+      }
+    }
+    // Scatter / bubble: vertical grid lines + numeric x tick labels.
+    if (isScatter && xDomain) {
+      for (const v of xDomain.ticks) {
+        const x = mapX(v);
+        if (block.valueAxis?.gridLines !== false) {
+          commands.push({ op: 'line', x1: x, y1: plotTop, x2: x, y2: plotBottom, color: GRID, lineWidth: 0.5 });
+        }
+        if (block.categoryLabels !== false) {
+          const text = formatTick(v, block.valueAxis?.xFormat);
+          const w = measure(text, labelStyle);
+          pushText(commands, text, labelStyle, x - w / 2, plotBottom + LABEL_GAP + ascent, TEXT_MUTED);
         }
       }
     }
@@ -218,20 +257,29 @@ export function layoutChart(
 
     if (isWaterfall) {
       drawWaterfall(commands, block, series[0]!, plotX, bandW, yOf, labelStyle, valueFormat);
+    } else if (isScatter) {
+      drawScatter(commands, block, series, mapX, yOf, labelStyle, block.kind === 'bubble');
     } else if (isCombo) {
       // Bars first so lines/areas read on top of them.
       const bars = series.filter((s) => (s.type ?? 'bar') === 'bar');
       const lines = series.filter((s) => (s.type ?? 'bar') !== 'bar');
       if (bars.length > 0) drawBars(commands, block, bars, catCount, plotX, bandW, yFor, labelStyle, false, valueFormat);
       if (lines.length > 0) drawLines(commands, block, lines, catCount, plotX, bandW, yFor, labelStyle, ascent, false, valueFormat);
+    } else if (block.range) {
+      drawRange(commands, block, series, catCount, plotX, bandW, yOf, labelStyle, valueFormat);
     } else if (block.kind === 'bar') {
       drawBars(commands, block, series, catCount, plotX, bandW, yFor, labelStyle, stacked, valueFormat);
     } else {
       drawLines(commands, block, series, catCount, plotX, bandW, yFor, labelStyle, ascent, stacked, valueFormat);
     }
 
-    // Category labels.
-    if (block.categoryLabels !== false) {
+    // Threshold / reference lines across the value axis.
+    if (block.referenceLines?.length) {
+      drawReferenceLines(commands, block.referenceLines, plotX, plotW, yOf, yOfRight, labelStyle);
+    }
+
+    // Category labels (band charts only; scatter already drew numeric x ticks).
+    if (block.categoryLabels !== false && !isScatter) {
       const y = plotBottom + LABEL_GAP + ascent;
       for (let i = 0; i < catCount; i += 1) {
         const text = clipText(catNames[i]!, labelStyle, bandW - 4);
@@ -242,7 +290,7 @@ export function layoutChart(
   }
 
   // Reserved strips below the plot: category labels first, then the legend.
-  const labelStrip = block.categoryLabels !== false && !isPie ? labelHeight + LABEL_GAP : 0;
+  const labelStrip = block.categoryLabels !== false && isCartesian ? labelHeight + LABEL_GAP : 0;
   const legendStrip = legendSide === 'bottom' ? legend.height + LABEL_GAP : 0;
 
   if (legendSide === 'bottom') {
@@ -290,7 +338,12 @@ function resolveSeries(
 ): Slice {
   const values = resolveNumbers(series.values, ctx, scope);
   const color = series.color !== undefined ? toRGB(series.color) : palette(colors, index);
-  return { name: series.name, values, color, format: series.format, type: series.type, axis: series.axis };
+  // A missing x-column defaults to 0,1,2,… so a lone `values` array still plots.
+  const xValues = series.xValues !== undefined ? resolveNumbers(series.xValues, ctx, scope) : values.map((_, i) => i);
+  const rValues = series.rValues !== undefined ? resolveNumbers(series.rValues, ctx, scope) : [];
+  const low = series.low !== undefined ? resolveNumbers(series.low, ctx, scope) : [];
+  const high = series.high !== undefined ? resolveNumbers(series.high, ctx, scope) : [];
+  return { name: series.name, values, color, format: series.format, type: series.type, axis: series.axis, xValues, rValues, low, high };
 }
 
 function palette(colors: unknown, i: number): RGB {
@@ -622,6 +675,320 @@ function drawWaterfall(
       const text = formatTick(bar.value, formatFor(slice));
       const w = measure(text, labelStyle);
       pushText(commands, text, labelStyle, x + (groupW - w) / 2, top - 3, TEXT_MUTED);
+    }
+  }
+}
+
+// --- scatter / bubble / range / reference --------------------------------
+
+/** Numeric x-axis extent for scatter / bubble charts. */
+function computeScatterDomain(series: Slice[]): Domain {
+  const xs: number[] = [];
+  for (const s of series) xs.push(...s.xValues);
+  let min = xs.length ? Math.min(...xs) : 0;
+  let max = xs.length ? Math.max(...xs) : 1;
+  if (!Number.isFinite(min) || !Number.isFinite(max)) {
+    min = 0;
+    max = 1;
+  }
+  if (max === min) max = min + 1;
+  const nice = niceTicks(min, max, 5);
+  return { min: nice.min, max: nice.max, ticks: nice.ticks };
+}
+
+function drawScatter(
+  commands: DrawCommand[],
+  block: ChartBlock,
+  series: Slice[],
+  mapX: (v: number) => number,
+  yOf: (v: number) => number,
+  labelStyle: ResolvedStyle,
+  bubble: boolean,
+): void {
+  let rMin = Infinity;
+  let rMax = 0;
+  if (bubble) {
+    for (const s of series) for (const r of s.rValues) {
+      if (Number.isFinite(r)) {
+        rMin = Math.min(rMin, r);
+        rMax = Math.max(rMax, r);
+      }
+    }
+  }
+  for (const slice of series) {
+    const n = Math.max(slice.values.length, slice.xValues.length);
+    for (let i = 0; i < n; i += 1) {
+      const x = mapX(slice.xValues[i] ?? i);
+      const y = yOf(slice.values[i] ?? 0);
+      let r = 2.5;
+      if (bubble) {
+        const rv = slice.rValues[i] ?? rMin;
+        const t = rMax > rMin ? (rv - rMin) / (rMax - rMin) : 0.5;
+        r = 2 + t * 12;
+      }
+      commands.push({ op: 'poly', points: circle(x, y, r, 0, Math.PI * 2), fill: slice.color, fillOpacity: 0.82, close: true });
+    }
+    if (block.showValues) {
+      for (let i = 0; i < slice.values.length; i += 1) {
+        const text = formatTick(slice.values[i]!, slice.format);
+        const w = measure(text, labelStyle);
+        pushText(commands, text, labelStyle, mapX(slice.xValues[i] ?? i) - w / 2, yOf(slice.values[i]!) - 6, TEXT_MUTED);
+      }
+    }
+  }
+}
+
+/** High–low bars: each bar spans `low` → `high` instead of zero → value. */
+function drawRange(
+  commands: DrawCommand[],
+  block: ChartBlock,
+  series: Slice[],
+  catCount: number,
+  plotX: number,
+  bandW: number,
+  yOf: (v: number) => number,
+  labelStyle: ResolvedStyle,
+  formatFor: (slice: Slice) => string | undefined,
+): void {
+  const groupW = bandW * 0.74;
+  const barW = Math.max(1, groupW / series.length);
+  for (let s = 0; s < series.length; s += 1) {
+    const slice = series[s]!;
+    const hasLow = slice.low.length > 0;
+    const hasHigh = slice.high.length > 0;
+    for (let i = 0; i < catCount; i += 1) {
+      let lo: number;
+      let hi: number;
+      if (hasLow && hasHigh) {
+        lo = slice.low[i] ?? 0;
+        hi = slice.high[i] ?? 0;
+      } else if (hasLow) {
+        lo = slice.low[i] ?? 0;
+        hi = slice.values[i] ?? 0;
+      } else if (hasHigh) {
+        hi = slice.high[i] ?? 0;
+        lo = slice.values[i] ?? 0;
+      } else {
+        lo = 0;
+        hi = slice.values[i] ?? 0;
+      }
+      const y0 = yOf(lo);
+      const y1 = yOf(hi);
+      const x = plotX + i * bandW + (bandW - groupW) / 2 + s * barW;
+      commands.push({ op: 'fillRect', x, y: Math.min(y0, y1), w: Math.max(0.5, barW - 1), h: Math.max(0.5, Math.abs(y0 - y1)), color: slice.color });
+      if (block.showValues) {
+        const text = formatTick(hi, formatFor(slice));
+        const w = measure(text, labelStyle);
+        pushText(commands, text, labelStyle, x + (barW - w) / 2, Math.min(y0, y1) - 3, TEXT_MUTED);
+      }
+    }
+  }
+}
+
+function drawReferenceLines(
+  commands: DrawCommand[],
+  lines: NonNullable<ChartBlock['referenceLines']>,
+  plotX: number,
+  plotW: number,
+  yOf: (v: number) => number,
+  yOfRight: (v: number) => number,
+  labelStyle: ResolvedStyle,
+): void {
+  for (const rl of lines) {
+    if (!Number.isFinite(rl.value)) continue;
+    const y = rl.axis === 'right' ? yOfRight(rl.value) : yOf(rl.value);
+    const color = rl.color !== undefined ? toRGB(rl.color) : ([0.7, 0.25, 0.25] as RGB);
+    commands.push({ op: 'line', x1: plotX, y1: y, x2: plotX + plotW, y2: y, color, lineWidth: 1, dash: rl.dash ?? [5, 3] });
+    if (rl.label) {
+      const w = measure(rl.label, labelStyle);
+      pushText(commands, rl.label, labelStyle, plotX + plotW - w, y - 3, color);
+    }
+  }
+}
+
+// --- radar -----------------------------------------------------------------
+
+function drawRadar(
+  commands: DrawCommand[],
+  block: ChartBlock,
+  series: Slice[],
+  catNames: string[],
+  plotX: number,
+  plotTop: number,
+  plotW: number,
+  plotHeight: number,
+  labelStyle: ResolvedStyle,
+  ascent: number,
+  descent: number,
+): void {
+  const n = catNames.length;
+  if (n < 3) return;
+  void descent;
+  const cx = plotX + plotW / 2;
+  const cy = plotTop + plotHeight / 2;
+  const R = Math.max(10, Math.min(plotW / 2, plotHeight / 2) - (ascent + descent + 16));
+  let max = block.valueAxis?.max ?? 0;
+  if (!max || max <= 0) {
+    for (const s of series) for (const v of s.values) max = Math.max(max, Math.abs(v));
+    if (max <= 0) max = 1;
+  }
+  const angleAt = (i: number): number => -Math.PI / 2 + (i * 2 * Math.PI) / n;
+  const pointAt = (i: number, frac: number): PolyPoint => {
+    const a = angleAt(i);
+    return [cx + Math.cos(a) * R * frac, cy + Math.sin(a) * R * frac];
+  };
+
+  const rings = block.valueAxis?.ticks ?? 4;
+  for (let ring = 1; ring <= rings; ring += 1) {
+    const pts: PolyPoint[] = [];
+    for (let i = 0; i < n; i += 1) pts.push(pointAt(i, ring / rings));
+    pts.push(pts[0]!);
+    commands.push({ op: 'poly', points: pts, stroke: { color: GRID, lineWidth: 0.5 }, close: true });
+  }
+  for (let i = 0; i < n; i += 1) {
+    const edge = pointAt(i, 1);
+    commands.push({ op: 'line', x1: cx, y1: cy, x2: edge[0], y2: edge[1], color: GRID, lineWidth: 0.5 });
+    const a = angleAt(i);
+    const text = clipText(catNames[i]!, labelStyle, plotW / 3);
+    const w = measure(text, labelStyle);
+    const lx = cx + Math.cos(a) * (R + 8) - w / 2;
+    const ly = cy + Math.sin(a) * (R + 8) + (Math.sin(a) < -0.2 ? -descent : Math.sin(a) > 0.2 ? ascent : ascent * 0.35);
+    pushText(commands, text, labelStyle, lx, ly, TEXT_MUTED);
+  }
+  for (const slice of series) {
+    const pts: PolyPoint[] = [];
+    for (let i = 0; i < n; i += 1) {
+      const v = slice.values[i] ?? 0;
+      pts.push(pointAt(i, Math.max(0, Math.min(1, v / max))));
+    }
+    pts.push(pts[0]!);
+    commands.push({ op: 'poly', points: pts, fill: slice.color, fillOpacity: 0.2, stroke: { color: slice.color, lineWidth: 1.5 }, close: true });
+  }
+}
+
+// --- gauge -----------------------------------------------------------------
+
+function drawGauge(
+  commands: DrawCommand[],
+  block: ChartBlock,
+  slice: Slice,
+  plotX: number,
+  plotTop: number,
+  plotW: number,
+  plotHeight: number,
+  labelStyle: ResolvedStyle,
+  ascent: number,
+  descent: number,
+): void {
+  void descent;
+  const max = block.gaugeMax && block.gaugeMax > 0 ? block.gaugeMax : 100;
+  const raw = block.gaugeValue !== undefined ? Number(block.gaugeValue) : slice.values[0];
+  const value = Number.isFinite(raw as number) ? (raw as number) : 0;
+  const cx = plotX + plotW / 2;
+  const ring = Math.max(6, Math.min(plotW / 2, plotHeight) * 0.26);
+  const R = Math.max(ring + 4, Math.min(plotW / 2 - 2, plotHeight - 2));
+  const cy = plotTop + R + 2;
+  const frac = Math.max(0, Math.min(1, value / max));
+
+  // Track: a half annulus from 180° to 360° (opening upward in y-down space).
+  const trackOuter = circle(cx, cy, R, Math.PI, Math.PI * 2);
+  const trackInner = circle(cx, cy, R - ring, Math.PI * 2, Math.PI);
+  commands.push({ op: 'poly', points: [...trackOuter, ...trackInner], fill: GRID, close: true });
+  if (frac > 0.001) {
+    const end = Math.PI + frac * Math.PI;
+    const vo = circle(cx, cy, R, Math.PI, end);
+    const vi = circle(cx, cy, R - ring, end, Math.PI);
+    commands.push({ op: 'poly', points: [...vo, ...vi], fill: slice.color, close: true });
+  }
+
+  // Needle + hub.
+  const na = Math.PI + frac * Math.PI;
+  const tipX = cx + Math.cos(na) * (R - ring - 2);
+  const tipY = cy + Math.sin(na) * (R - ring - 2);
+  commands.push({ op: 'line', x1: cx, y1: cy, x2: tipX, y2: tipY, color: TEXT_MUTED, lineWidth: 1.6 });
+  commands.push({ op: 'poly', points: circle(cx, cy, 3, 0, Math.PI * 2), fill: TEXT_MUTED, close: true });
+
+  const fmt = block.valueAxis?.format;
+  const zero = formatTick(0, fmt);
+  const maxText = formatTick(max, fmt);
+  pushText(commands, zero, labelStyle, cx - R - 2 - measure(zero, labelStyle), cy + ascent, TEXT_MUTED);
+  pushText(commands, maxText, labelStyle, cx + R + 2, cy + ascent, TEXT_MUTED);
+  const vText = formatTick(value, fmt);
+  pushText(commands, vText, labelStyle, cx - measure(vText, labelStyle) / 2, cy - R * 0.4, slice.color);
+}
+
+// --- heatmap ---------------------------------------------------------------
+
+function drawHeatmap(
+  commands: DrawCommand[],
+  block: ChartBlock,
+  series: Slice[],
+  catNames: string[],
+  plotX: number,
+  plotTop: number,
+  plotW: number,
+  plotHeight: number,
+  labelStyle: ResolvedStyle,
+  ascent: number,
+  descent: number,
+): void {
+  const rows = series.length;
+  const cols = Math.max(catNames.length, ...series.map((s) => s.values.length), 1);
+  const from = toRGB(block.heatmapColors?.from ?? '#eef4ff');
+  const to = toRGB(block.heatmapColors?.to ?? '#1e3a8a');
+  const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
+  const colOf = (t: number): RGB => [lerp(from[0], to[0], t), lerp(from[1], to[1], t), lerp(from[2], to[2], t)];
+
+  const labelW = series.reduce((m, s) => Math.max(m, measure(s.name ?? '', labelStyle)), 0) + 8;
+  const gx = plotX + labelW;
+  const gw = Math.max(1, plotW - labelW);
+  const labelBand = ascent + descent + LABEL_GAP;
+  const gridH = Math.max(1, plotHeight - labelBand);
+  const cellW = gw / cols;
+  const cellH = gridH / rows;
+
+  let vmin = Infinity;
+  let vmax = -Infinity;
+  for (const s of series) {
+    for (const v of s.values) {
+      vmin = Math.min(vmin, v);
+      vmax = Math.max(vmax, v);
+    }
+  }
+  if (!Number.isFinite(vmin) || !Number.isFinite(vmax)) {
+    vmin = 0;
+    vmax = 1;
+  }
+  const showLabels = block.heatmapLabels !== false;
+
+  for (let r = 0; r < rows; r += 1) {
+    const slice = series[r]!;
+    if (slice.name) {
+      const text = clipText(slice.name, labelStyle, labelW - 6);
+      pushText(commands, text, labelStyle, plotX, plotTop + r * cellH + cellH / 2 + ascent * 0.35, TEXT_MUTED);
+    }
+    for (let c = 0; c < cols; c += 1) {
+      const v = slice.values[c];
+      if (v === undefined) continue;
+      const t = vmax > vmin ? (v - vmin) / (vmax - vmin) : 0.5;
+      const fill = colOf(t);
+      const x = gx + c * cellW;
+      const y = plotTop + r * cellH;
+      commands.push({ op: 'fillRect', x, y, w: cellW - 1, h: cellH - 1, color: fill });
+      if (showLabels) {
+        const lum = fill[0] * 0.299 + fill[1] * 0.587 + fill[2] * 0.114;
+        const text = formatTick(v, slice.format ?? block.valueAxis?.format);
+        const tw = measure(text, labelStyle);
+        pushText(commands, text, labelStyle, x + (cellW - 1 - tw) / 2, y + cellH / 2 + ascent * 0.35, lum < 0.5 ? [1, 1, 1] : TEXT_MUTED);
+      }
+    }
+  }
+  if (block.categoryLabels !== false) {
+    const y = plotTop + gridH + LABEL_GAP + ascent;
+    for (let c = 0; c < cols; c += 1) {
+      const text = clipText(catNames[c] ?? String(c + 1), labelStyle, cellW - 2);
+      const w = measure(text, labelStyle);
+      pushText(commands, text, labelStyle, gx + c * cellW + (cellW - w) / 2, y, TEXT_MUTED);
     }
   }
 }

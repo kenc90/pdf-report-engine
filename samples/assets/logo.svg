@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 40">
+  <!-- Vector logo used by samples/svg-flex.html via <img src="assets/logo.svg">.
+       Pure shapes only: the engine draws SVG as real PDF paths and ignores <text>. -->
+  <rect x="1" y="1" width="118" height="38" rx="6" fill="#0f2f57"/>
+  <circle cx="24" cy="20" r="11" fill="#e08a1e"/>
+  <path d="M19 20l3.5 3.5L30 15" stroke="#ffffff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="44" y="16" width="10" height="12" fill="#ffffff"/>
+  <rect x="58" y="12" width="10" height="16" fill="#9fc0e6"/>
+  <rect x="72" y="8"  width="10" height="20" fill="#e08a1e"/>
+  <path d="M88 26 L98 12 L108 20" stroke="#1b7f4b" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

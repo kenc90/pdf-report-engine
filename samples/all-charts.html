@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>All chart kinds</title>
+  <style>
+    @page { size: a4; margin: 16mm 14mm; }
+
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #243447; }
+    h1 { color: #0f2f57; margin-bottom: 2pt; }
+    h2 { color: #0f2f57; margin-top: 14pt; border-bottom: 0.6pt solid #c9d6e6; padding-bottom: 3pt; }
+    .muted { color: #6b7c93; font-size: 8.5pt; }
+    .pair { display: flex; gap: 10pt; align-items: stretch; margin-top: 8pt; }
+    .pair > div { flex: 1 1 48%; }
+  </style>
+</head>
+<body>
+  <header data-band="pageHeader" style="font-size:8pt; color:#94a3b8; letter-spacing:2pt; text-transform:uppercase; border-bottom:0.8pt solid #e2e8f0; padding-bottom:3pt">
+    pdf-report-engine &middot; every chart kind
+  </header>
+  <footer data-band="pageFooter" style="font-size:8pt; color:#94a3b8; text-align:right">
+    Page {PAGE} of {TOTAL}
+  </footer>
+
+  <h1>All chart kinds</h1>
+  <p class="muted">
+    Every vector chart the engine draws, from one page of declarative <code>data-chart</code>
+    markup: bar, line, area, pie, donut, combo, waterfall, scatter, bubble, radar, gauge and
+    heatmap — plus high&ndash;low range bars and horizontal reference lines.
+  </p>
+
+  <h2>Cartesian basics</h2>
+  <div class="pair">
+    <div data-chart="bar" data-title="Bar — Revenue by quarter ($M)" data-categories="Q1,Q2,Q3,Q4"
+         data-series="Revenue:58,61,63,67" data-show-values="true" data-legend="none"
+         data-value-format="#,##0" style="height:150pt"></div>
+    <div data-chart="line" data-title="Line — Revenue vs. cost ($M)" data-categories="Q1,Q2,Q3,Q4"
+         data-series="Revenue:58,61,63,67; Cost:41,43,45,46" data-legend="bottom"
+         data-min="35" data-max="80" data-value-format="#,##0" style="height:150pt"></div>
+  </div>
+
+  <div class="pair">
+    <div data-chart="area" data-title="Area — Headcount (stacked)" data-stacked="true"
+         data-categories="Q1,Q2,Q3,Q4" data-series="Platform:420,445,470,505; Services:280,295,300,357"
+         data-colors="#0f2f57,#e08a1e" data-legend="bottom" style="height:150pt"></div>
+    <div data-chart="bar" data-title="Bar — 100% stacked mix" data-stacked="100%" data-categories="Q1,Q2,Q3,Q4"
+         data-series="Product:60,55,50,48; Services:40,45,50,52" data-show-values="true"
+         data-value-format='0"%"' data-colors="#1b7f4b,#7c2d12" data-legend="bottom" style="height:150pt"></div>
+  </div>
+
+  <h2>Pie &amp; donut</h2>
+  <div class="pair">
+    <div data-chart="pie" data-title="Pie — Channel mix" data-categories="Direct,Partner,Retail,Online"
+         data-values="37,25,22,16" data-legend="right" style="height:150pt"></div>
+    <div data-chart="donut" data-title="Donut — Revenue mix" data-categories="Platform,Analytics,Services,Retail"
+         data-values="38,26,19,17" data-legend="right" data-inner-radius="0.6" style="height:150pt"></div>
+  </div>
+
+  <h2>Combo &amp; waterfall</h2>
+  <div data-chart="combo" data-title="Combo — Revenue (bars, left) vs. margin (line, right)" data-categories="Q1,Q2,Q3,Q4"
+       data-series="Revenue:58,61,63,67; Margin:18,19,21,25" data-series-types="bar,line" data-series-axes="left,right"
+       data-right-min="0" data-right-max="30" data-right-format='0"%"' data-value-format="#,##0"
+       data-legend="bottom" style="height:170pt; margin-top:8pt"></div>
+
+  <div data-chart="waterfall" data-title="Waterfall — Cash bridge ($M)" data-categories="Opening,Revenue,Costs,Tax,Closing"
+       data-values="42,72,-38,-6,0" data-totals="0,4" data-show-values="true"
+       data-waterfall-colors="increase=#15803d; decrease=#b91c1c; total=#0f2f57"
+       data-value-format="#,##0" style="height:170pt; margin-top:8pt"></div>
+
+  <h2>Scatter, bubble &amp; reference lines</h2>
+  <div class="pair">
+    <div data-chart="scatter" data-title="Scatter — Latency vs. load" data-x-format="#,##0"
+         data-series="P95:120,180,240,210,300,260" data-series-x="10,20,30,40,50,60"
+         data-reference-lines="250:SLO,color=#c00,dash=3:2" style="height:160pt"></div>
+    <div data-chart="bubble" data-title="Bubble — sized by area"
+         data-series-x="10,20,30,40" data-series-r="3,8,5,12" data-series="Metro:42,65,38,91"
+         style="height:160pt"></div>
+  </div>
+
+  <h2>Range bars</h2>
+  <div data-chart="bar" data-title="Daily temperature range (&deg;C)" data-range="true"
+       data-categories="Mon,Tue,Wed,Thu,Fri" data-series-low="12,14,10,15,17" data-series-high="24,26,20,23,27"
+       data-reference-lines="22:heat warning,color=#c00" data-legend="none" style="height:160pt; margin-top:8pt"></div>
+
+  <h2>Radar, gauge &amp; heatmap</h2>
+  <div class="pair">
+    <div data-chart="radar" data-title="Radar — Vehicle comparison" data-categories="Speed,Power,Range,Grip,Comfort,Value"
+         data-series="Car A:80,60,70,90,75,65; Car B:70,85,55,65,88,72" data-legend="right" style="height:190pt"></div>
+    <div data-chart="gauge" data-title="Gauge — SLA compliance" data-gauge-value="72" data-gauge-max="100"
+         data-series="score:72" style="height:190pt"></div>
+  </div>
+
+  <div data-chart="heatmap" data-title="Heatmap — Weekly activity by shift" data-categories="Mon,Tue,Wed,Thu,Fri,Sat"
+       data-series="Morning:3,5,8,4,2,6; Afternoon:6,7,4,9,5,3; Evening:2,3,5,7,8,4"
+       data-heatmap-colors="from=#eef4ff;to=#1e3a8a" style="height:160pt; margin-top:8pt"></div>
+
+</body>
+</html>

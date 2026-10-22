@@ -340,10 +340,11 @@ pages.forEach((p, i) =&gt; console.log(i + 1, p.height, p.body.map((f) =&gt; f.f
       <p>
         A <code>chart</code> block draws <strong>bar</strong>, <strong>line</strong>,
         <strong>area</strong>, <strong>pie</strong>, <strong>donut</strong>,
-        <strong>combo</strong> and <strong>waterfall</strong> charts with the same primitives as
-        the rest of the engine: real vector marks and selectable labels, no canvas and no
-        charting library. A chart is laid out as one atomic fragment, so it never splits across a
-        page.
+        <strong>combo</strong>, <strong>waterfall</strong>, <strong>scatter</strong>,
+        <strong>bubble</strong>, <strong>radar</strong>, <strong>gauge</strong> and
+        <strong>heatmap</strong> charts with the same primitives as the rest of the engine:
+        real vector marks and selectable labels, no canvas and no charting library. A chart is
+        laid out as one atomic fragment, so it never splits across a page.
       </p>
       <pre data-copy><code>body: [
   {
@@ -469,6 +470,36 @@ pages.forEach((p, i) =&gt; console.log(i + 1, p.height, p.body.map((f) =&gt; f.f
      data-waterfall-colors="increase=#15803d; decrease=#b91c1c; total=#1e3a8a"
      style="height:180pt"&gt;&lt;/div&gt;
 
+&lt;!-- Scatter / bubble: xValues drive the horizontal position; rValues size markers. --&gt;
+&lt;div data-chart="scatter" data-title="Latency vs. load"
+     data-series="P95:120,180,240,300" data-series-x="10,20,30,40"
+     data-x-format="#,##0" style="height:170pt"&gt;&lt;/div&gt;
+
+&lt;!-- High–low range bars with a red threshold at 78. --&gt;
+&lt;div data-chart="bar" data-title="Daily temperature (°C)" data-range="true"
+     data-categories="Mon,Tue,Wed,Thu,Fri"
+     data-series-low="12,14,10,15,17" data-series-high="24,26,20,23,27"
+     data-reference-lines="22:heat warning,color=#c00"
+     style="height:170pt"&gt;&lt;/div&gt;
+
+&lt;!-- Radar: one polygon per series over the categories arranged around a circle. --&gt;
+&lt;div data-chart="radar" data-title="Vehicle comparison"
+     data-categories="Speed,Power,Range,Grip,Comfort"
+     data-series="Car A:80,60,70,90,75; Car B:70,85,55,65,88"
+     data-legend="right" style="height:220pt"&gt;&lt;/div&gt;
+
+&lt;!-- Gauge: half-annulus meter; needle reads gauge-value against gauge-max. --&gt;
+&lt;div data-chart="gauge" data-title="SLA compliance"
+     data-gauge-value="72" data-gauge-max="100"
+     data-series="score:72" style="height:150pt"&gt;&lt;/div&gt;
+
+&lt;!-- Heatmap: rows are series, columns are their values, colour-interpolated. --&gt;
+&lt;div data-chart="heatmap" data-title="Weekly activity"
+     data-categories="Mon,Tue,Wed,Thu,Fri"
+     data-series="Morning:3,5,8,4,2; Afternoon:6,7,4,9,5; Evening:2,3,5,7,8"
+     data-heatmap-colors="from=#eef4ff;to=#1e3a8a"
+     style="height:170pt"&gt;&lt;/div&gt;
+
 &lt;!-- Or plot an authored table: the header row names series, the first column
      names categories; cell numbers may include $ , % and (123) negatives. --&gt;
 &lt;table data-chart="area" data-title="Pipeline" data-stacked="true"
@@ -483,7 +514,7 @@ pages.forEach((p, i) =&gt; console.log(i + 1, p.height, p.body.map((f) =&gt; f.f
       <table>
         <thead><tr><th>Attribute</th><th>Meaning</th></tr></thead>
         <tbody>
-          <tr><td><code>data-chart="bar|line|area|pie|donut|combo|waterfall"</code></td><td>Chart kind (aliases: <code>data-kind</code>; default <code>bar</code>).</td></tr>
+          <tr><td><code>data-chart="bar|<wbr>line|<wbr>area|<wbr>pie|<wbr>donut|<wbr>combo|<wbr>waterfall|<wbr>scatter|<wbr>bubble|<wbr>radar|<wbr>gauge|<wbr>heatmap"</code></td><td>Chart kind (aliases: <code>data-kind</code>; default <code>bar</code>).</td></tr>
           <tr><td><code>data-title</code></td><td>Title drawn above the plot (also accepts a <code>title</code> attribute).</td></tr>
           <tr><td><code>data-categories</code></td><td>Comma-separated category labels.</td></tr>
           <tr><td><code>data-series="Name:1,2;Other:3,4"</code></td><td>One or more named series. Use <code>data-values</code> (with optional <code>data-name</code>/<code>data-color</code>) for a single series.</td></tr>
@@ -495,6 +526,11 @@ pages.forEach((p, i) =&gt; console.log(i + 1, p.height, p.body.map((f) =&gt; f.f
           <tr><td><code>data-right-min</code>, <code>data-right-max</code>, <code>data-right-ticks</code>, <code>data-right-format</code>, <code>data-right-axis-labels</code></td><td>Secondary axis controls, same meaning as the left-axis <code>data-*</code> attributes.</td></tr>
           <tr><td><code>data-totals="0,3"</code></td><td>Waterfall bars that draw as running totals from zero; index 0 seeds the opening balance.</td></tr>
           <tr><td><code>data-waterfall-colors="increase=…; decrease=…; total=…"</code></td><td>Waterfall palette (semicolon-separated <code>key=value</code> pairs).</td></tr>
+          <tr><td><code>data-series-x="1,2;3,4"</code>, <code>data-series-r="…"</code>, <code>data-x-format</code></td><td>Scatter / bubble: per-series <code>x</code> coordinates and (for bubble) radii; semicolons split series. <code>data-x-format</code> is the x-axis tick number pattern.</td></tr>
+          <tr><td><code>data-range="true"</code>, <code>data-series-low</code>, <code>data-series-high</code></td><td>High–low bars on a <code>bar</code> chart: each bar spans <code>low</code> → <code>high</code>; if either is missing, <code>values</code> supplies that end.</td></tr>
+          <tr><td><code>data-reference-lines="50:max; 80,color=#c00,axis=right"</code></td><td>Horizontal threshold lines on any cartesian chart. Semicolons split entries; each is <code>value[:label][,key=value…]</code> with optional <code>color</code>, <code>label</code>, <code>axis=left|right</code> and <code>dash=n:m</code>.</td></tr>
+          <tr><td><code>data-gauge-value</code>, <code>data-gauge-max</code></td><td>Gauge needle reading and full-scale maximum (default <code>100</code>).</td></tr>
+          <tr><td><code>data-heatmap-labels="false"</code>, <code>data-heatmap-colors="from=#eef4ff;to=#1e3a8a"</code></td><td>Heatmap cell-value toggle and colour ramp.</td></tr>
           <tr><td><code>style="height:…"</code></td><td>Overall chart height; title, labels and legend strips are reserved inside it.</td></tr>
         </tbody>
       </table>
@@ -685,6 +721,119 @@ const pdf = await renderToBuffer(report, {
 });</code></pre>
     </section>
 
+    <section id="svg">
+      <h2>SVG vector images</h2>
+      <p>
+        An <code>svg</code> block draws an SVG document as <strong>real PDF paths</strong> — no
+        rasterisation, no canvas, no resolution ceiling. Inline <code>&lt;svg&gt;</code> markup,
+        <code>data:image/svg+xml</code> URIs, <code>.svg</code> file paths, raw bytes and remote
+        <code>http(s)</code> URLs all take the same code path; the image pre-pass fetches
+        remote sources before layout.
+      </p>
+      <pre data-copy><code>import { renderToBuffer } from 'pdf-report-engine';
+
+const report = {
+  body: [
+    // Inline markup.
+    { type: 'svg', width: 48, src:
+      '&lt;svg viewBox="0 0 24 24"&gt;&lt;path d="M4 4h16v16H4z" fill="#1e3a8a"/&gt;&lt;/svg&gt;' },
+    // A file on disk (resolved relative to `baseDir` at render time).
+    { type: 'svg', src: 'assets/logo.svg', width: 120, align: 'center' },
+    // A remote icon — fetched by the same pre-pass that resolves raster images.
+    { type: 'svg', src: 'https://cdn.example.com/icons/check.svg', width: 20 },
+  ],
+};
+const pdf = await renderToBuffer(report);</code></pre>
+      <p>In HTML the same block appears either inline or via an <code>&lt;img&gt;</code>:</p>
+      <pre data-copy><code>&lt;svg viewBox="0 0 24 24" width="24" height="24"&gt;
+  &lt;circle cx="12" cy="12" r="10" fill="#1e3a8a"/&gt;
+  &lt;path d="M8 12h8M12 8v8" stroke="white" stroke-width="2"/&gt;
+&lt;/svg&gt;
+
+&lt;img src="assets/logo.svg" width="140" alt="logo"&gt;    &lt;!-- same .svg route --&gt;</code></pre>
+      <p>Supported subset:</p>
+      <ul>
+        <li><strong>Shapes</strong> — <code>path</code> (all commands, including <code>A</code>
+          arcs, flattened to polylines), <code>rect</code> with <code>rx</code>/<code>ry</code>,
+          <code>circle</code>, <code>ellipse</code>, <code>line</code>, <code>polyline</code>,
+          <code>polygon</code>, and nested <code>g</code> groups.</li>
+        <li><strong>Paint</strong> — <code>fill</code>, <code>stroke</code> (colour or
+          <code>none</code>), <code>fill-opacity</code>, <code>stroke-opacity</code>,
+          <code>opacity</code>, <code>stroke-width</code>, <code>stroke-dasharray</code>,
+          <code>stroke-linecap</code>, <code>stroke-linejoin</code>, and <code>fill-rule="evenodd"</code>
+          so a shape with a subpath inside it renders the hole (used by donuts, glyphs, icons).</li>
+        <li><strong>Transforms</strong> — <code>translate</code>, <code>scale</code>,
+          <code>rotate</code>, <code>skewX</code>/<code>skewY</code> and <code>matrix</code>, plus
+          a top-level <code>viewBox</code> / <code>preserveAspectRatio</code>. Presentation
+          attributes and inline <code>style</code> are both honoured.</li>
+        <li><strong>Unsupported</strong> — filters, gradients, patterns, nested <code>image</code>
+          elements and <code>text</code> are ignored rather than approximated; convert those to
+          paths in your editor first.</li>
+      </ul>
+      <div class="note">
+        Sizing follows the intrinsic rules of an image: give an explicit <code>width</code> (or
+        <code>height</code>) in points and the other dimension follows the aspect ratio; omit both
+        and the SVG's <code>viewBox</code> gives its intrinsic size (converted at 96 dpi, so
+        1&nbsp;px&nbsp;=&nbsp;0.75&nbsp;pt), capped to the content width.
+      </div>
+    </section>
+
+    <section id="flex">
+      <h2>Flexbox layout</h2>
+      <p>
+        A <code>display: flex</code> container lays out any flow blocks along a row or a column.
+        The engine implements a pragmatic CSS-flexbox subset: main-axis direction, optional wrap,
+        <code>justify-content</code>, <code>align-items</code> / <code>align-self</code>,
+        <code>gap</code> and per-item <code>flex-grow</code> / <code>flex-shrink</code> /
+        <code>flex-basis</code>. A flex container is measured as one atomic fragment, so it never
+        splits across pages — nest a <code>flex</code> inside another to build a two-dimensional
+        layout (row of columns, or column of rows).
+      </p>
+      <pre data-copy><code>// IR: a KPI strip that distributes three cards evenly.
+{
+  type: 'flex',
+  direction: 'row',
+  justify: 'space-between',
+  alignItems: 'center',
+  gap: 12,
+  children: [
+    { block: { type: 'paragraph', content: 'Revenue ↑' }, grow: 1 },
+    { block: { type: 'paragraph', content: 'Cost ↓' },   grow: 1 },
+    { block: { type: 'paragraph', content: 'Margin ↑' }, grow: 1 },
+  ],
+}</code></pre>
+      <pre data-copy><code>&lt;!-- HTML: the same row via CSS. --&gt;
+&lt;div style="display:flex; justify-content:space-between; align-items:center; gap:12pt"&gt;
+  &lt;div style="flex:1 1 auto"&gt;Revenue ↑&lt;/div&gt;
+  &lt;div style="flex:1 1 auto"&gt;Cost ↓&lt;/div&gt;
+  &lt;div style="flex:1 1 auto"&gt;Margin ↑&lt;/div&gt;
+&lt;/div&gt;
+
+&lt;!-- Wrapping row of chips with a per-item align-self override. --&gt;
+&lt;div style="display:flex; flex-wrap:wrap; gap:6pt 10pt"&gt;
+  &lt;span class="chip"&gt;alpha&lt;/span&gt;
+  &lt;span class="chip" style="align-self:flex-end"&gt;tall&lt;/span&gt;
+  &lt;span class="chip"&gt;gamma&lt;/span&gt;
+&lt;/div&gt;</code></pre>
+      <table>
+        <thead><tr><th>CSS</th><th>IR</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><code>display: flex</code></td><td><code>type: 'flex'</code></td><td>Turns the element into a flex container.</td></tr>
+          <tr><td><code>flex-direction: row | column</code></td><td><code>direction</code></td><td>Default <code>row</code>; <code>column</code> stacks vertically.</td></tr>
+          <tr><td><code>flex-wrap: wrap</code></td><td><code>wrap: true</code></td><td>Row axis only; breaks items into multiple lines.</td></tr>
+          <tr><td><code>justify-content</code></td><td><code>justify</code></td><td><code>flex-start</code> · <code>center</code> · <code>flex-end</code> · <code>space-between</code> · <code>space-around</code> · <code>space-evenly</code>.</td></tr>
+          <tr><td><code>align-items</code> / <code>align-self</code></td><td><code>alignItems</code> / <code>children[].alignSelf</code></td><td><code>flex-start</code> · <code>center</code> · <code>flex-end</code> · <code>stretch</code>; <code>align-self</code> wins per item. <code>stretch</code> paints the item's <code>background-color</code> at line height.</td></tr>
+          <tr><td><code>gap</code> / <code>row-gap</code> / <code>column-gap</code></td><td><code>gap</code> / <code>rowGap</code> / <code>columnGap</code></td><td>Any Length; between items on the main axis and between wrapped lines.</td></tr>
+          <tr><td><code>flex-grow</code> · <code>flex-shrink</code> · <code>flex-basis</code> · <code>flex: g s b</code></td><td><code>children[].grow</code> / <code>shrink</code> / <code>basis</code></td><td>Items are measured at max-content width first; leftover space is distributed by <code>grow</code>, overflow is removed by <code>shrink × base</code>.</td></tr>
+        </tbody>
+      </table>
+      <div class="note">
+        The container is atomic: if the whole row will not fit below, it moves whole to the next
+        page. Keep rows short. <code>position: absolute</code> / <code>float</code> are not part
+        of the flow and are ignored; use a nested <code>flex</code> for side-by-side overlays.
+      </div>
+    </section>
+
     <section id="cli">
       <h2>The CLI</h2>
       <p>Convert authoring HTML files to PDF, or build the bundled demo report.</p>
@@ -761,6 +910,8 @@ npm run demo</code></pre>
         <a href="getting-started.html#navigation">TOC, bookmarks &amp; links</a>
         <a href="getting-started.html#breaks">Breaks &amp; keep-together</a>
         <a href="getting-started.html#barcodes">Barcodes</a>
+        <a href="getting-started.html#svg">SVG vector images</a>
+        <a href="getting-started.html#flex">Flexbox layout</a>
         <a href="getting-started.html#web-fonts">Web fonts &amp; CJK</a>
         <a href="getting-started.html#cli">Command line</a>
       </nav>

@@ -122,9 +122,19 @@ h1, h2 { margin-bottom: 4pt; }           /* list */</code></pre>
         <thead><tr><th>Markup</th><th>Becomes</th><th>Attributes</th></tr></thead>
         <tbody>
           <tr>
-            <td><code>&lt;div data-chart="bar|<wbr>line|<wbr>area|<wbr>pie|<wbr>donut|<wbr>combo|<wbr>waterfall"&gt;</code></td>
+            <td><code>&lt;div data-chart="bar|<wbr>line|<wbr>area|<wbr>pie|<wbr>donut|<wbr>combo|<wbr>waterfall|<wbr>scatter|<wbr>bubble|<wbr>radar|<wbr>gauge|<wbr>heatmap"&gt;</code></td>
             <td><code>ChartBlock</code></td>
-            <td><code>data-title</code>, <code>data-categories</code>, <code>data-series</code>, <code>data-values</code> (+ <code>data-name</code>/<code>data-color</code>), <code>data-colors</code>, <code>data-stacked</code> (<code>true</code> or <code>100%</code>), <code>data-show-values</code>, <code>data-category-labels</code>, <code>data-legend</code>, <code>data-inner-radius</code>, <code>data-plot-height</code>, <code>data-min</code>/<code>data-max</code>/<code>data-ticks</code>/<code>data-value-format</code>/<code>data-axis-labels</code>/<code>data-grid-lines</code>; depth: <code>data-series-types="<wbr>bar,line"</code>, <code>data-series-axes="<wbr>left,right"</code>, <code>data-right-min</code>/<code>data-right-max</code>/<code>data-right-ticks</code>/<code>data-right-format</code>/<code>data-right-axis-labels</code>, <code>data-totals="0,4"</code>, <code>data-waterfall-colors="<wbr>increase=…; decrease=…; total=…"</code>; height via <code>style</code>.</td>
+            <td><code>data-title</code>, <code>data-categories</code>, <code>data-series</code>, <code>data-values</code> (+ <code>data-name</code>/<code>data-color</code>), <code>data-colors</code>, <code>data-stacked</code> (<code>true</code> or <code>100%</code>), <code>data-show-values</code>, <code>data-category-labels</code>, <code>data-legend</code>, <code>data-inner-radius</code>, <code>data-plot-height</code>, <code>data-min</code>/<code>data-max</code>/<code>data-ticks</code>/<code>data-value-format</code>/<code>data-axis-labels</code>/<code>data-grid-lines</code>; depth: <code>data-series-types="<wbr>bar,line"</code>, <code>data-series-axes="<wbr>left,right"</code>, <code>data-right-min</code>/<code>data-right-max</code>/<code>data-right-ticks</code>/<code>data-right-format</code>/<code>data-right-axis-labels</code>, <code>data-totals="0,4"</code>, <code>data-waterfall-colors="<wbr>increase=…; decrease=…; total=…"</code>; new kinds: <code>data-series-x="<wbr>1,2;3,4"</code> &amp; <code>data-series-r="…"</code> (scatter/bubble, semicolon = per series), <code>data-x-format</code>, <code>data-range</code> + <code>data-series-low</code>/<code>data-series-high</code> (high–low bars), <code>data-reference-lines="<wbr>50:max; 80,color=#c00,axis=right"</code>, <code>data-gauge-value</code>/<code>data-gauge-max</code>, <code>data-heatmap-labels</code>/<code>data-heatmap-colors="<wbr>from=#eef4ff;to=#1e3a8a"</code>; height via <code>style</code>.</td>
+          </tr>
+          <tr>
+            <td><code>&lt;svg&gt;…&lt;/svg&gt;</code> or <code>&lt;img src="<wbr>icon.svg"&gt;</code></td>
+            <td><code>SvgBlock</code></td>
+            <td>An inline <code>&lt;svg&gt;</code> is re-serialised and drawn as real vector paths; an <code>&lt;img&gt;</code> whose <code>src</code> ends in <code>.svg</code> (or is a <code>data:image/svg+xml</code> URI) is routed to the same vector path. <code>width</code>/<code>height</code> (attributes or <code>style</code>) size it; the <code>viewBox</code> gives the intrinsic ratio. Remote <code>http(s)</code> SVG is fetched by the image pre-pass.</td>
+          </tr>
+          <tr>
+            <td><code>&lt;div style="<wbr>display:flex"&gt;</code></td>
+            <td><code>FlexBlock</code></td>
+            <td>A flex container; its children become flex items. Supported CSS: <code>flex-direction</code>, <code>flex-wrap</code>, <code>justify-content</code>, <code>align-items</code>, <code>gap</code>/<code>row-gap</code>/<code>column-gap</code>, and per-item <code>flex-grow</code>/<code>flex-shrink</code>/<code>flex-basis</code>/<code>flex</code>/<code>align-self</code>.</td>
           </tr>
           <tr>
             <td><code>&lt;table data-chart="…"&gt;</code></td>
@@ -203,7 +213,9 @@ h1, h2 { margin-bottom: 4pt; }           /* list */</code></pre>
           <tr><td><code>paragraph</code></td><td><code>content</code> (string | number | span | array), style/box props</td></tr>
           <tr><td><code>table</code></td><td><code>columns</code>, <code>headerRows</code>, <code>footerRows</code>, <code>staticRows</code>, <code>dataSource</code>, <code>detail</code>, <code>groups</code>, <code>showGrid</code>, <code>striped</code>, <code>repeatHeader</code>, <code>rowStyle</code>; conditional: <code>visible</code>, <code>styleWhen</code>, <code>colorScale</code>, <code>diagonal</code>, <code>blocks</code> on rows/cells</td></tr>
           <tr><td><code>image</code></td><td><code>src</code> (path / data: / bytes / URL), <code>width</code>, <code>height</code>, <code>intrinsic</code>, <code>alt</code></td></tr>
-          <tr><td><code>chart</code></td><td><code>kind</code>, <code>title</code>, <code>categories</code>, <code>series</code>, <code>stacked</code> (<code>true</code>/<code>'100%'</code>), <code>legend</code>, <code>colors</code>, <code>showValues</code>, <code>valueAxis</code>, <code>rightAxis</code>, <code>totals</code>, <code>waterfallColors</code>, <code>categoryLabels</code>, <code>innerRadius</code>, <code>plotHeight</code></td></tr>
+          <tr><td><code>svg</code></td><td><code>src</code> (inline markup / data: / .svg path / bytes / URL), <code>width</code>, <code>height</code>, <code>intrinsic</code>, <code>alt</code> — drawn as vector paths</td></tr>
+          <tr><td><code>flex</code></td><td><code>direction</code>, <code>wrap</code>, <code>justify</code>, <code>alignItems</code>, <code>gap</code>/<code>rowGap</code>/<code>columnGap</code>, <code>children: FlexItem[]</code> (each <code>{ block, grow, shrink, basis, alignSelf }</code>)</td></tr>
+          <tr><td><code>chart</code></td><td><code>kind</code>, <code>title</code>, <code>categories</code>, <code>series</code>, <code>stacked</code> (<code>true</code>/<code>'100%'</code>), <code>legend</code>, <code>colors</code>, <code>showValues</code>, <code>valueAxis</code>, <code>rightAxis</code>, <code>totals</code>, <code>waterfallColors</code>, <code>categoryLabels</code>, <code>innerRadius</code>, <code>plotHeight</code>, <code>referenceLines</code>, <code>range</code>, <code>gaugeValue</code>, <code>gaugeMax</code>, <code>heatmapLabels</code>, <code>heatmapColors</code></td></tr>
           <tr><td><code>toc</code></td><td><code>title</code>, <code>maxLevel</code>, <code>leaders</code>, <code>indent</code>, <code>pageNumbers</code>, <code>gap</code></td></tr>
           <tr><td><code>barcode</code></td><td><code>symbology</code>, <code>value</code>, <code>moduleSize</code>, <code>errorCorrection</code>, <code>quietZone</code>, <code>showText</code>, <code>color</code></td></tr>
           <tr><td><code>spacer</code></td><td><code>size</code></td></tr>
@@ -238,12 +250,17 @@ h1, h2 { margin-bottom: 4pt; }           /* list */</code></pre>
       <h3><code>ChartBlock</code></h3>
       <pre data-copy><code>{
   type: 'chart',
-  kind: 'bar' | 'line' | 'area' | 'pie' | 'donut' | 'combo' | 'waterfall',
+  kind: 'bar' | 'line' | 'area' | 'pie' | 'donut' | 'combo' | 'waterfall'
+       | 'scatter' | 'bubble' | 'radar' | 'gauge' | 'heatmap',
   title?: Content,
   categories?: string[] | string | Expr,        // array, CSV ('Q1,Q2'), or binding
   series: Array&lt;{
     name?: string,
     values: number[] | string | Expr,           // array, CSV ('12,18'), or binding
+    xValues?: number[] | string | Expr,         // scatter/bubble: x of each point
+    rValues?: number[] | string | Expr,         // bubble only: marker radius
+    low?: number[] | string | Expr,             // range bars: lower end (with `high`)
+    high?: number[] | string | Expr,            // range bars: upper end
     color?: ColorInput,
     format?: string,                            // value-label pattern
     type?: 'bar' | 'line' | 'area',             // combo only, default 'bar'
@@ -256,7 +273,9 @@ h1, h2 { margin-bottom: 4pt; }           /* list */</code></pre>
   categoryLabels?: boolean,                     // default true
   valueAxis?: {
     min?: number, max?: number, ticks?: number, // ticks default 5
-    format?: string, labels?: boolean, gridLines?: boolean,
+    format?: string,                            // y-axis tick pattern
+    xFormat?: string,                           // scatter/bubble numeric x-axis pattern
+    labels?: boolean, gridLines?: boolean,
   },
   rightAxis?: {                                 // combo charts only
     min?: number, max?: number, ticks?: number,
@@ -266,6 +285,18 @@ h1, h2 { margin-bottom: 4pt; }           /* list */</code></pre>
   waterfallColors?: { increase?: ColorInput, decrease?: ColorInput, total?: ColorInput },
   innerRadius?: number,                         // donut hole, default 0.55
   plotHeight?: number,                          // fallback height (default 160pt)
+  range?: boolean,                              // bar: draw high–low instead of zero-based
+  referenceLines?: Array&lt;{
+    value: number,                              // axis value the line sits at
+    axis?: 'left' | 'right',                    // combo charts, default 'left'
+    color?: ColorInput,
+    label?: string,                             // drawn at the right end
+    dash?: number[],                            // default solid hairline
+  }&gt;,
+  gaugeValue?: number | string | Expr,          // gauge: needle value (default series[0].values[0])
+  gaugeMax?: number,                            // gauge: full-scale maximum (default 100)
+  heatmapLabels?: boolean,                      // heatmap: print each cell value (default true)
+  heatmapColors?: { from?: ColorInput, to?: ColorInput }, // default #eef4ff → #1e3a8a
   height?: number | string, id?, ...box/style props
 }</code></pre>
       <p>
@@ -285,6 +316,24 @@ h1, h2 { margin-bottom: 4pt; }           /* list */</code></pre>
         seeds that balance) and joins consecutive bars with dashed connectors. The default
         increase/decrease/total colours can be overridden with
         <code>waterfallColors</code>.
+      </p>
+      <p>
+        New kinds: <code>scatter</code> and <code>bubble</code> plot numeric points —
+        <code>xValues</code> is the x coordinate (defaulting to the category index) and
+        <code>rValues</code> is the marker radius, normalised to a sensible on-plot range.
+        <code>radar</code> draws one closed polygon per series over <code>categories</code>
+        arranged around a circle, with concentric rings and axis labels.
+        <code>gauge</code> is a half-annulus meter with a needle reading
+        <code>gaugeValue</code> against <code>gaugeMax</code>.
+        <code>heatmap</code> paints a rectangular grid of interpolated cells (rows come from
+        <code>series</code>, columns from each row's <code>values</code>), with an automatic
+        contrast colour for the printed value.
+        Any cartesian chart (<code>bar</code>, <code>line</code>, <code>area</code>,
+        <code>combo</code>, <code>scatter</code>) accepts a <code>referenceLines</code> array of
+        horizontal threshold lines, each optionally labelled and dashed and pinned to either
+        axis in a combo chart. Set <code>range: true</code> on a bar chart to draw each bar as a
+        high–low bar between <code>series[].low</code> and <code>series[].high</code>; if only
+        one endpoint is present, <code>values</code> supplies the other.
       </p>
 
       <h3><code>TocBlock</code></h3>
@@ -320,6 +369,67 @@ h1, h2 { margin-bottom: 4pt; }           /* list */</code></pre>
         The codes are drawn as vector rectangles; nothing is rasterised. EAN-13 accepts 12 digits
         (the check digit is appended) or 13 (the check digit is validated). Invalid values throw
         at layout time.
+      </p>
+
+      <h3><code>SvgBlock</code></h3>
+      <pre data-copy><code>{
+  type: 'svg',
+  src: string | Uint8Array,   // inline &lt;svg&gt; markup, data: URI, .svg path/URL, or raw bytes
+  intrinsic?: { width: number, height: number },  // px; derived from viewBox when omitted
+  width?: number | string,    // Length; sizes the drawing (height follows the aspect ratio)
+  height?: number | string,
+  alt?: string,
+  id?, margin*, padding*, ...box/style props
+}</code></pre>
+      <p>
+        The engine parses SVG into vector paths and draws them as real PDF paths, so the result
+        stays crisp at any zoom and is searchable/selectable where text was converted to outlines.
+        Supported elements: <code>path</code> (all commands including <code>A</code> arcs,
+        flattened to polylines), <code>rect</code> (with <code>rx</code>/<code>ry</code>),
+        <code>circle</code>, <code>ellipse</code>, <code>line</code>, <code>polyline</code>,
+        <code>polygon</code> and nested <code>g</code> groups. Supported paint and geometry:
+        <code>fill</code>/<code>stroke</code> (colour, <code>none</code>), <code>fill-opacity</code>/
+        <code>stroke-opacity</code>/<code>opacity</code>, <code>fill-rule="evenodd"</code> for holes,
+        <code>stroke-width</code>, <code>stroke-dasharray</code>, <code>stroke-linecap</code>/
+        <code>stroke-linejoin</code>, <code>transform</code> (<code>translate</code>,
+        <code>scale</code>, <code>rotate</code>, <code>skewX/Y</code>, <code>matrix</code>),
+        <code>viewBox</code> and <code>preserveAspectRatio</code>. Presentation attributes and inline
+        <code>style</code> are both honoured; unsupported elements (filters, gradients, images,
+        text) are ignored. Remote <code>http(s)</code> <code>src</code> values are fetched by the
+        same pre-pass that resolves remote raster images.
+      </p>
+
+      <h3><code>FlexBlock</code></h3>
+      <pre data-copy><code>{
+  type: 'flex',
+  direction?: 'row' | 'column',                 // main axis, default 'row'
+  wrap?: boolean,                                // row axis only, default false
+  justify?: 'flex-start' | 'center' | 'flex-end'
+          | 'space-between' | 'space-around' | 'space-evenly',  // default 'flex-start'
+  alignItems?: 'flex-start' | 'center' | 'flex-end' | 'stretch', // default 'stretch'
+  gap?: number | string,                         // Length, default 0
+  rowGap?: number | string,                      // overrides gap between lines
+  columnGap?: number | string,                   // overrides gap between items
+  children: FlexItem[],
+  width?, height?, margin*, padding*, backgroundColor?, ...box/style props
+}</code></pre>
+
+      <h3><code>FlexItem</code></h3>
+      <pre data-copy><code>{
+  block: Block,                                  // any flow block, or a nested flex
+  grow?: number,                                 // flex-grow, default 0
+  shrink?: number,                               // flex-shrink, default 1
+  basis?: number | string,                       // flex-basis (Length); defaults to block's size
+  alignSelf?: 'auto' | 'flex-start' | 'center' | 'flex-end' | 'stretch', // overrides alignItems
+  width?, height?, margin*, padding*, backgroundColor?, ...box/style props
+}</code></pre>
+      <p>
+        Each item is measured at max-content width, then main-axis free space is distributed via
+        <code>grow</code>/<code>shrink</code> (weighted by <code>shrink × base</code> on overflow).
+        The container is one atomic fragment — it never splits across pages — and any item can
+        itself be another <code>flex</code> block, so a two-dimensional layout is a row of
+        columns (or the reverse). Cross-axis <code>stretch</code> paints the item's
+        <code>backgroundColor</code> across the full line height.
       </p>
 
       <h3>Heading outline</h3>

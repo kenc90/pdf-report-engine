@@ -6,7 +6,7 @@
  * the offline path (local paths / `data:` / bytes) handles everything as usual.
  */
 import { probeImageSize, type ImageSize } from './image.js';
-import type { ReportDoc, ImageBlock } from '../ir/schema.js';
+import type { ReportDoc, ImageBlock, SvgBlock, FlexBlock, Block } from '../ir/schema.js';
 
 export interface ImageResolveOptions {
   /** Fetch `http(s)` image sources. Default `true`. Set `false` for air-gapped renders. */
@@ -39,6 +39,15 @@ function isImageBlock(node: unknown): node is ImageBlock {
     typeof node === 'object' &&
     node !== null &&
     (node as { type?: unknown }).type === 'image' &&
+    typeof (node as { src?: unknown }).src === 'string'
+  );
+}
+
+function isSvgBlock(node: unknown): node is SvgBlock {
+  return (
+    typeof node === 'object' &&
+    node !== null &&
+    (node as { type?: unknown }).type === 'svg' &&
     typeof (node as { src?: unknown }).src === 'string'
   );
 }
@@ -104,13 +113,37 @@ export async function resolveRemoteImages(report: ReportDoc, opts: ImageResolveO
     return { ...block, src: bytes, intrinsic };
   };
 
-  // Walk a list of blocks, replacing any image nodes in place within the array.
+  // Resolve a vector SVG block: fetch its markup to bytes so `core/svg.ts` can
+  // parse it offline. No raster probing — the viewBox gives the intrinsic size.
+  const resolveSvgNode = async (block: SvgBlock): Promise<SvgBlock> => {
+    const src = block.src as string;
+    if (!REMOTE.test(src)) return block;
+    const bytes = await load(src);
+    if (!bytes) {
+      if (opts.onError === 'skip') return { ...block, src: '' };
+      throw new Error(`Remote SVG "${src}" could not be resolved (fetchRemote disabled and no resolver supplied)`);
+    }
+    return { ...block, src: bytes };
+  };
+
+  // Walk a list of blocks, replacing any image/svg nodes in place within the array,
+  // and recursing into flex containers (whose children are ordinary blocks).
   const resolveBlocks = async <T>(blocks: T[] | undefined): Promise<T[] | undefined> => {
     if (!blocks) return blocks;
     const out = [...blocks];
     for (let i = 0; i < out.length; i += 1) {
       const node = out[i];
       if (isImageBlock(node)) out[i] = (await resolveNode(node)) as unknown as T;
+      else if (isSvgBlock(node)) out[i] = (await resolveSvgNode(node)) as unknown as T;
+      else if (node && typeof node === 'object' && (node as { type?: unknown }).type === 'flex') {
+        const flex = node as unknown as FlexBlock;
+        const children: FlexBlock['children'] = [];
+        for (const child of flex.children) {
+          const inner = (await resolveBlocks([child.block] as Block[]))![0]!;
+          children.push(inner === child.block ? child : { ...child, block: inner });
+        }
+        out[i] = { ...flex, children } as unknown as T;
+      }
     }
     return out;
   };

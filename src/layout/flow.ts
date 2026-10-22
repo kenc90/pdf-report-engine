@@ -28,6 +28,26 @@ export type DrawCommand =
       fillOpacity?: number;
       stroke?: { color: RGB; lineWidth: number; dash?: DashPattern };
       close?: boolean;
+      /**
+       * Winding rule used when filling. Defaults to `'nonzero'` (the PDF `f`
+       * operator, and what the rest of the engine emits); `'evenodd'` maps to
+       * `f*` and is how SVG `fill-rule="evenodd"` self-overlapping paths — a
+       * donut made of two same-direction circles — punch their holes.
+       */
+      fillRule?: 'nonzero' | 'evenodd';
+    }
+  | {
+      op: 'path';
+      /**
+       * One or more subpaths. Keeping them in a single command (rather than
+       * separate `poly`s) is what lets SVG fills express holes: both the
+       * `evenodd` rule and reverse-wound `nonzero` need the rings in one path.
+       */
+      subpaths: Array<{ points: PolyPoint[]; closed: boolean }>;
+      fill?: RGB;
+      fillOpacity?: number;
+      fillRule?: 'nonzero' | 'evenodd';
+      stroke?: { color: RGB; lineWidth: number; dash?: DashPattern };
     }
   | { op: 'text'; x: number; baselineY: number; runs: PositionedRun[]; gapWidth: number; decorations: Decoration[] }
   | { op: 'underline'; x1: number; y1: number; x2: number; color: RGB; lineWidth: number; lineThrough?: boolean }
@@ -108,6 +128,14 @@ export function translateCommands(commands: DrawCommand[], dx: number, dy: numbe
         return { ...cmd, x1: cmd.x1 + dx, y1: cmd.y1 + dy, x2: cmd.x2 + dx };
       case 'poly':
         return { ...cmd, points: cmd.points.map(([x, y]) => [x + dx, y + dy] as PolyPoint) };
+      case 'path':
+        return {
+          ...cmd,
+          subpaths: cmd.subpaths.map((sp) => ({
+            ...sp,
+            points: sp.points.map(([x, y]) => [x + dx, y + dy] as PolyPoint),
+          })),
+        };
       case 'text':
         return { ...cmd, x: cmd.x + dx, baselineY: cmd.baselineY + dy };
     }

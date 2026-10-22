@@ -182,9 +182,44 @@ export interface ImageBlock extends BlockBase {
   alt?: string;
 }
 
+/**
+ * A vector SVG image, drawn as real PDF paths (crisp at any zoom, selectable as
+ * geometry rather than pixels). `src` is inline `<svg>` markup, a
+ * `data:image/svg+xml` URI, a filesystem path, or raw bytes; `http(s)` URLs are
+ * fetched to bytes by the remote-image pre-pass before layout.
+ *
+ * Sizing mirrors {@link ImageBlock}: explicit `width`/`height` win, otherwise the
+ * viewBox (or `width`/`height` attributes) give the intrinsic aspect ratio and a
+ * 96-dpi default size, capped to the content width.
+ *
+ * Supported SVG subset: `path`/`rect`/`circle`/`ellipse`/`line`/`polyline`/
+ * `polygon`, nested `g` groups with `transform`, and fill/stroke paint including
+ * `fill-rule`, `-opacity`, `stroke-width` and `stroke-dasharray`. Text, gradients,
+ * filters and clip/mask are not modelled (a gradient fill falls back to solid).
+ */
+export interface SvgBlock extends BlockBase {
+  type: 'svg';
+  src: string | Uint8Array;
+  /** Explicit intrinsic size (px); derived from the viewBox when omitted. */
+  intrinsic?: { width: number; height: number };
+  alt?: string;
+}
+
 // --- charts ---------------------------------------------------------------
 
-export type ChartKind = 'bar' | 'line' | 'area' | 'pie' | 'donut' | 'combo' | 'waterfall';
+export type ChartKind =
+  | 'bar'
+  | 'line'
+  | 'area'
+  | 'pie'
+  | 'donut'
+  | 'combo'
+  | 'waterfall'
+  | 'scatter'
+  | 'bubble'
+  | 'radar'
+  | 'gauge'
+  | 'heatmap';
 
 export interface ChartSeries {
   /** Legend label. */
@@ -195,6 +230,25 @@ export interface ChartSeries {
    * explicit `Expr`. Bindings must resolve to an array of numbers.
    */
   values: number[] | string | Expr;
+  /**
+   * Scatter / bubble charts: the x-coordinate of each point. Defaults to the
+   * category index (0, 1, 2, …) when omitted, so a single `values` array still
+   * plots as an evenly spaced cloud. Same three shapes `values` accepts.
+   */
+  xValues?: number[] | string | Expr;
+  /**
+   * Bubble charts only: the marker radius for each point (same shapes as
+   * `values`). Radii are normalised to a sensible on-plot pixel range.
+   */
+  rValues?: number[] | string | Expr;
+  /**
+   * Range bar charts only (`block.range === true`): the lower end of each bar.
+   * Paired with `high`; when only one of them is given, `values` supplies the
+   * other end.
+   */
+  low?: number[] | string | Expr;
+  /** Range bar charts only: the upper end of each bar. */
+  high?: number[] | string | Expr;
   color?: ColorInput;
   /** Number pattern for value labels on this series. */
   format?: string;
@@ -218,6 +272,8 @@ export interface ValueAxisOptions {
   ticks?: number;
   /** Number pattern for tick labels (e.g. `'#,##0'`). */
   format?: string;
+  /** Scatter / bubble: number pattern for the numeric x-axis tick labels. */
+  xFormat?: string;
   /** Draw the value-axis labels (default true). */
   labels?: boolean;
   /** Draw horizontal grid lines (default true). */
@@ -268,6 +324,38 @@ export interface ChartBlock extends BlockBase {
   innerRadius?: number;
   /** Plot height; defaults to `height`, or 160pt. */
   plotHeight?: number;
+  /**
+   * Horizontal reference / threshold lines drawn across the value axis (cartesian
+   * charts: bar/line/area/combo/scatter/range). Each is placed at `value`, labelled
+   * at its right end, and can read the right axis in a combo chart.
+   */
+  referenceLines?: ReferenceLine[];
+  /**
+   * Bar charts: draw each bar as a high–low range instead of a zero-based value.
+   * The bar spans `series[].low` → `series[].high` (either may be a binding).
+   */
+  range?: boolean;
+  /** Gauge charts only: the needle value. Defaults to `series[0].values[0]`. */
+  gaugeValue?: number | string | Expr;
+  /** Gauge charts only: the full-scale maximum (default 100). */
+  gaugeMax?: number;
+  /** Heatmap charts only: print each cell's value inside it (default true). */
+  heatmapLabels?: boolean;
+  /** Heatmap colour ramp (default `#eef4ff` → `#1e3a8a`). */
+  heatmapColors?: { from?: ColorInput; to?: ColorInput };
+}
+
+/** A horizontal reference / threshold line on a value axis. */
+export interface ReferenceLine {
+  /** Axis value the line sits at. */
+  value: number;
+  /** Which value axis to read (combo charts). Default `'left'`. */
+  axis?: 'left' | 'right';
+  color?: ColorInput;
+  /** Label drawn at the right end of the line. */
+  label?: string;
+  /** Dash pattern (default a solid hairline). */
+  dash?: number[];
 }
 
 // --- table of contents ----------------------------------------------------
@@ -481,7 +569,48 @@ export interface TableBlock extends BlockBase {
   subtotalToken?: string;
 }
 
-export type Block = ParagraphBlock | HeadingBlock | TableBlock | SpacerBlock | PageBreakBlock | ImageBlock | ChartBlock | TocBlock | BarcodeBlock;
+/**
+ * A CSS-flexbox container laid out as a single atomic fragment (it never splits
+ * across pages). Children are any flow block plus the flex item props below.
+ * A pragmatic subset is modelled: row/column main axis, optional wrap, the
+ * `justify-content` / `align-items` distributions, `gap`, and `flex-grow` /
+ * `flex-shrink` / `flex-basis` sizing.
+ */
+export interface FlexBlock extends BlockBase {
+  type: 'flex';
+  /** Main axis. Default `'row'`; `'column'` stacks vertically. */
+  direction?: 'row' | 'column';
+  /** Allow items to wrap onto new lines (default false). Row axis only. */
+  wrap?: boolean;
+  /** Main-axis distribution. Default `'flex-start'`. */
+  justify?: 'flex-start' | 'center' | 'flex-end' | 'space-between' | 'space-around' | 'space-evenly';
+  /** Cross-axis alignment of items within a line. Default `'stretch'`. */
+  alignItems?: 'flex-start' | 'center' | 'flex-end' | 'stretch';
+  /** Spacing between items and between wrapped lines (Length, default 0). */
+  gap?: number | string;
+  /** Row-gap override (falls back to `gap`). */
+  rowGap?: number | string;
+  /** Column-gap override (falls back to `gap`). */
+  columnGap?: number | string;
+  children: FlexItem[];
+}
+
+/**
+ * One child of a {@link FlexBlock}. `grow`/`shrink`/`basis` drive main-axis
+ * sizing; the rest are ordinary block props (width/height/margins/box …).
+ */
+export interface FlexItem extends BlockBase {
+  /** The wrapped content: any flow block, or a nested flex container. */
+  block: Block;
+  grow?: number;
+  shrink?: number;
+  /** Main-axis base size (Length); defaults to the block's own width/height. */
+  basis?: number | string;
+  /** Per-item cross-axis override of the container's `alignItems`. */
+  alignSelf?: 'auto' | 'flex-start' | 'center' | 'flex-end' | 'stretch';
+}
+
+export type Block = ParagraphBlock | HeadingBlock | TableBlock | SpacerBlock | PageBreakBlock | ImageBlock | SvgBlock | ChartBlock | TocBlock | BarcodeBlock | FlexBlock;
 
 export type BandType = 'pageHeader' | 'pageFooter' | 'title' | 'summary' | 'background';
 

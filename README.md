@@ -33,9 +33,18 @@ glyph embedding all happen in-process via [`pdfkit`](https://pdfkit.org) +
 - **HTML-subset adapter** so you can author with plain markup.
 - **CSS stylesheet subset** — `<style>` rules with tag, class, id, descendant (` `) and
   child (`>`) selectors, resolved by CSS specificity; inline `style` still wins.
-- **Vector charts** — data-bound `bar`, `line`, `area`, `pie`, `donut`, `combo` and
-  `waterfall` charts with axes, grid lines, legends, stacked modes, 100% stacking, a secondary
-  axis and value labels. Every mark is a real PDF path/rectangle, so charts stay crisp at any zoom.
+- **Vector charts** — data-bound `bar`, `line`, `area`, `pie`, `donut`, `combo`, `waterfall`,
+  `scatter`, `bubble`, `radar`, `gauge` and `heatmap` charts with axes, grid lines, legends,
+  stacked modes, 100% stacking, a secondary axis, horizontal **reference / threshold lines**,
+  high–low **range bars** and value labels. Every mark is a real PDF path/rectangle, so charts
+  stay crisp at any zoom.
+- **SVG vector images** — inline `<svg>`, `data:image/svg+xml`, `.svg` files and remote SVG URLs
+  render as real PDF paths (not rasterised). Supports `path` (all commands incl. arcs),
+  `rect`/`circle`/`ellipse`/`line`/`polyline`/`polygon`, nested `g` groups with `transform`, and
+  fill/stroke paint including `fill-rule` (evenodd holes), opacity and dash arrays.
+- **Flexbox layout** — a `display: flex` container lays out any blocks along a row or column with
+  `flex-direction`, `flex-wrap`, `justify-content`, `align-items` / `align-self`, `gap` and per-item
+  `flex-grow` / `flex-shrink` / `flex-basis`, as a single atomic fragment.
 - **Rich table cells** — a cell can hold a stack of blocks (images, QR/barcodes, charts, nested
   tables, paragraphs), laid out inside the padded cell. Rows grow to fit and stay atomic, so
   pagination is unchanged.

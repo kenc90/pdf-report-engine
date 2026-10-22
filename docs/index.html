@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>pdf-report-engine — pure-JS paginated PDF report engine</title>
-  <meta name="description" content="A pure-JavaScript paginated PDF report engine: report IR or HTML to real vector PDFs with charts, bookmarks, barcodes, selectable text and Jasper-style pagination. No Chromium." />
+  <meta name="description" content="A pure-JavaScript paginated PDF report engine: report IR or HTML to real vector PDFs with charts, inline SVG vector images, flexbox layout, bookmarks, barcodes, selectable text and Jasper-style pagination. No Chromium." />
   <script>
     (function () {
       try {
@@ -102,9 +102,25 @@
         </div>
         <div class="card">
           <h4>Vector charts</h4>
-          <p>Bar, line, area, pie, donut, <strong>combo</strong> and <strong>waterfall</strong> —
-          stacked series, 100% stacking, a secondary axis, legends, value axes and number
-          formats, authored as IR blocks or declarative <code>data-chart</code> elements.</p>
+          <p>Bar, line, area, pie, donut, <strong>combo</strong>, <strong>waterfall</strong>,
+          <strong>scatter / bubble</strong>, <strong>radar</strong>, <strong>gauge</strong> and
+          <strong>heatmap</strong> — stacked series, 100% stacking, a secondary axis, horizontal
+          reference / threshold lines, high–low range bars, legends, value axes and number formats,
+          authored as IR blocks or declarative <code>data-chart</code> elements.</p>
+        </div>
+        <div class="card">
+          <h4>SVG vector images</h4>
+          <p>Inline <code>&lt;svg&gt;</code>, <code>.svg</code> files, <code>data:image/svg+xml</code>
+          and remote SVG URLs render as real PDF paths — <code>path</code>/<code>rect</code>/
+          <code>circle</code>/<code>ellipse</code>/<code>polyline</code>/<code>polygon</code>, nested
+          <code>&lt;g&gt;</code> transforms and <code>fill-rule="evenodd"</code> holes included.</p>
+        </div>
+        <div class="card">
+          <h4>Flexbox layout</h4>
+          <p>A <code>display: flex</code> container lays any blocks along a row or column with
+          <code>flex-direction</code>, <code>flex-wrap</code>, <code>justify-content</code>,
+          <code>align-items</code>/<code>align-self</code>, <code>gap</code> and per-item
+          <code>flex-grow</code>/<code>-shrink</code>/<code>-basis</code> — one atomic fragment.</p>
         </div>
         <div class="card">
           <h4>Bookmarks, TOC &amp; links</h4>
@@ -165,7 +181,10 @@
         bar / stacked bar / line / area / pie / donut charts, QR / Code 128 / EAN-13 codes,
         highlights and internal links. The newer depth features have focused samples:
         <code>rich-cells.html</code>, <code>conditional-format.html</code>,
-        <code>color-scale.html</code> and <code>chart-depth.html</code> (combo / 100% / waterfall).
+        <code>color-scale.html</code> and <code>chart-depth.html</code> (combo / 100% / waterfall);
+        <code>svg-flex.html</code> shows inline <code>&lt;svg&gt;</code>, a <code>.svg</code>
+        <code>&lt;img&gt;</code>, a <code>display: flex</code> row and the new
+        radar / gauge / heatmap / scatter chart kinds.
       </p>
     </section>
 

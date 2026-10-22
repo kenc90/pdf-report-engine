@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>SVG, flexbox &amp; new charts</title>
+  <style>
+    @page { size: a4; margin: 18mm 16mm; }
+
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #243447; }
+    h1 { color: #0f2f57; margin-bottom: 2pt; }
+    h1, h2 { color: #0f2f57; }
+    h2 { margin-top: 14pt; border-bottom: 0.6pt solid #c9d6e6; padding-bottom: 3pt; }
+
+    .muted { color: #6b7c93; font-size: 8.5pt; }
+
+    /* A flex "chip" used in the wrapping row below. */
+    .chip { background-color: #eef4ff; border: 0.6pt solid #a9c0e0; padding: 3pt 6pt; color: #1e3a8a; }
+
+    /* Flex KPI cards. */
+    .card { background-color: #f7fafc; border: 0.6pt solid #cbd5e1; padding: 8pt; }
+    .card strong { color: #0f2f57; font-size: 15pt; }
+    .card span { color: #64748b; font-size: 8pt; }
+  </style>
+</head>
+<body>
+  <header data-band="pageHeader" style="font-size:8pt; color:#94a3b8; letter-spacing:2pt; text-transform:uppercase; border-bottom:0.8pt solid #e2e8f0; padding-bottom:3pt">
+    Northwind Group &middot; SVG, flexbox &amp; new charts
+  </header>
+  <footer data-band="pageFooter" style="font-size:8pt; color:#94a3b8; text-align:right">
+    Page {PAGE} of {TOTAL}
+  </footer>
+
+  <h1 id="top">SVG vector images, flexbox &amp; new chart kinds</h1>
+  <p class="muted">
+    Everything on this page renders as real vector PDF: inline <code>&lt;svg&gt;</code> art,
+    a <code>.svg</code> <code>&lt;img&gt;</code>, a <code>display: flex</code> layout and the
+    new scatter / bubble / radar / gauge / heatmap charts with range bars and reference lines.
+  </p>
+
+  <!-- ══ Flexbox: a KPI strip of three evenly-grown cards, plus an inline SVG logo. ══ -->
+  <h2 id="flex" class="section-title">Flexbox layout</h2>
+  <p class="muted">A <code>display: flex</code> row with <code>justify-content</code>, <code>gap</code> and per-item <code>flex</code>.</p>
+  <div style="display:flex; justify-content:space-between; align-items:stretch; gap:10pt; margin-top:6pt">
+    <div class="card" style="flex:1 1 auto"><strong>$72.1M</strong><br><span>REVENUE</span></div>
+    <div class="card" style="flex:1 1 auto"><strong>+18.4%</strong><br><span>YOY GROWTH</span></div>
+    <div class="card" style="flex:1 1 auto"><strong>1,240</strong><br><span>HEADCOUNT</span></div>
+  </div>
+
+  <!-- A flex row pairing an inline SVG icon with text, centred on the cross axis. -->
+  <div style="display:flex; align-items:center; gap:10pt; margin-top:10pt">
+    <svg viewBox="0 0 24 24" width="34" height="34" aria-label="logo">
+      <circle cx="12" cy="12" r="11" fill="#0f2f57"/>
+      <path d="M7 12.5l3 3 7-7" stroke="#ffffff" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <div style="flex:1 1 auto">
+      <strong>Northwind verified</strong> — the SVG above is drawn as real PDF paths, and the
+      text sits beside it in the same flex row.
+    </div>
+  </div>
+
+  <!-- A wrapping row of chips with a per-item align-self override. -->
+  <p class="muted" style="margin-top:10pt">A wrapping flex row (<code>flex-wrap: wrap</code>); the tall chip uses <code>align-self: flex-end</code>.</p>
+  <div style="display:flex; flex-wrap:wrap; gap:6pt 8pt; align-items:flex-start; margin-top:4pt">
+    <span class="chip">alpha</span>
+    <span class="chip">bravo</span>
+    <span class="chip" style="align-self:flex-end; padding:10pt 6pt">tall (align-self:flex-end)</span>
+    <span class="chip">charlie</span>
+    <span class="chip">delta</span>
+    <span class="chip">echo</span>
+  </div>
+
+  <!-- ══ SVG: inline markup, an even-odd donut, and a .svg <img> file. ══ -->
+  <h2 id="svg" class="section-title">SVG vector images</h2>
+  <p class="muted">Left: an inline <code>&lt;svg&gt;</code> star. Centre: a <code>fill-rule="evenodd"</code> ring with a real hole. Right: an <code>&lt;img&gt;</code> pointing at a <code>.svg</code> file.</p>
+  <div style="display:flex; justify-content:space-around; align-items:center; gap:12pt; margin-top:8pt">
+    <!-- Inline star path -->
+    <svg viewBox="0 0 24 24" width="70" height="70">
+      <path d="M12 2l2.9 6.3 6.9.7-5.1 4.6 1.4 6.8L12 17.7 5.9 20.4l1.4-6.8L2.2 9l6.9-.7z" fill="#e08a1e"/>
+    </svg>
+    <!-- Even-odd ring: outer square + inner square subpath => hole -->
+    <svg viewBox="0 0 40 40" width="70" height="70">
+      <path fill-rule="evenodd" fill="#0f2f57"
+            d="M20 2a18 18 0 1 0 0 36 18 18 0 0 0 0-36z M20 10a10 10 0 1 1 0 20 10 10 0 0 1 0-20z"/>
+    </svg>
+    <!-- A .svg file routed through the same vector pipeline -->
+    <img src="assets/logo.svg" width="80" alt="logo">
+  </div>
+
+  <!-- A grouped set of vector icons via nested <g> transforms and dashed strokes. -->
+  <div style="display:flex; justify-content:flex-start; gap:14pt; align-items:center; margin-top:10pt">
+    <svg viewBox="0 0 24 24" width="40" height="40"><rect x="3" y="3" width="18" height="18" rx="3" fill="none" stroke="#1b7f4b" stroke-width="2"/><path d="M8 12h8" stroke="#1b7f4b" stroke-width="2" stroke-dasharray="2 2"/></svg>
+    <svg viewBox="0 0 24 24" width="40" height="40"><g transform="rotate(45 12 12)"><rect x="6" y="6" width="12" height="12" fill="#7c2d12" opacity="0.8"/></g></svg>
+    <svg viewBox="0 0 24 24" width="40" height="40"><polygon points="12,2 22,20 2,20" fill="#1e3a8a"/><circle cx="12" cy="14" r="3" fill="#ffffff"/></svg>
+  </div>
+
+  <!-- ══ New chart kinds: scatter / bubble. ══ -->
+  <h2 id="scatter" class="section-title">Scatter &amp; bubble</h2>
+  <div data-chart="scatter" data-title="Latency vs. load" data-x-format="#,##0"
+       data-series="P95:120,180,240,210,300,260" data-series-x="10,20,30,40,50,60"
+       data-reference-lines="250:SLO,color=#c00,dash=3:2"
+       style="height:160pt; margin-top:8pt"></div>
+
+  <div data-chart="bubble" data-title="City population (x) vs. income (y), sized by area"
+       data-series-x="10,20,30,40" data-series-r="3,8,5,12"
+       data-series="Metro:42,65,38,91"
+       style="height:160pt; margin-top:10pt"></div>
+
+  <!-- ══ High–low range bars with a threshold line. ══ -->
+  <h2 id="range" class="section-title">Range bars &amp; reference lines</h2>
+  <p class="muted">A bar chart with <code>data-range="true"</code> draws each bar between its low/high endpoints; a red reference line marks the heat warning.</p>
+  <div data-chart="bar" data-title="Daily temperature (&deg;C)" data-range="true"
+       data-categories="Mon,Tue,Wed,Thu,Fri"
+       data-series-low="12,14,10,15,17" data-series-high="24,26,20,23,27"
+       data-reference-lines="22:heat warning,color=#c00"
+       style="height:160pt; margin-top:8pt"></div>
+
+  <!-- ══ Radar. ══ -->
+  <h2 id="radar" class="section-title">Radar</h2>
+  <div data-chart="radar" data-title="Vehicle comparison"
+       data-categories="Speed,Power,Range,Grip,Comfort,Value"
+       data-series="Car A:80,60,70,90,75,65; Car B:70,85,55,65,88,72"
+       data-legend="right" style="height:220pt; margin-top:8pt"></div>
+
+  <!-- ══ Gauge. ══ -->
+  <h2 id="gauge" class="section-title">Gauge</h2>
+  <div style="display:flex; justify-content:space-around; gap:10pt">
+    <div data-chart="gauge" data-title="SLA compliance" data-gauge-value="72" data-gauge-max="100"
+         data-series="score:72" style="height:130pt; flex:1 1 auto"></div>
+    <div data-chart="gauge" data-title="Uptime %" data-gauge-value="99.2" data-gauge-max="100"
+         data-series="up:99.2" style="height:130pt; flex:1 1 auto"></div>
+  </div>
+
+  <!-- ══ Heatmap. ══ -->
+  <h2 id="heatmap" class="section-title">Heatmap</h2>
+  <div data-chart="heatmap" data-title="Weekly activity by shift"
+       data-categories="Mon,Tue,Wed,Thu,Fri,Sat"
+       data-series="Morning:3,5,8,4,2,6; Afternoon:6,7,4,9,5,3; Evening:2,3,5,7,8,4"
+       data-heatmap-colors="from=#eef4ff;to=#1e3a8a"
+       style="height:170pt; margin-top:8pt"></div>
+
+</body>
+</html>

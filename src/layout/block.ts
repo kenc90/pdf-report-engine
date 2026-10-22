@@ -36,6 +36,8 @@ import { layoutTable } from './table.js';
 import { layoutChart } from './chart.js';
 import { layoutToc } from './toc.js';
 import { layoutBarcode } from './barcode.js';
+import { layoutSvg } from './svg.js';
+import { layoutFlex } from './flex.js';
 
 export interface BlockLayoutOptions {
   /** Horizontal origin of the content area within the page (usually 0 here). */
@@ -65,6 +67,12 @@ export function layoutBlock(block: Block, ctx: LayoutContext, opts: BlockLayoutO
       break;
     case 'image':
       frags = layoutImage(effective, ctx, opts, inherited);
+      break;
+    case 'svg':
+      frags = layoutSvg(effective, ctx, opts, inherited);
+      break;
+    case 'flex':
+      frags = layoutFlex(effective, ctx, opts, inherited);
       break;
     case 'pageBreak':
       frags = [{ height: 0, before: 0, after: 0, commands: [], isPageBreak: true, breakBefore: 'page' }];

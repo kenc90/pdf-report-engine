@@ -76,7 +76,10 @@ const DEMO_DATA = {
 // Default report — deliberately exercises most of the library's authoring features:
 // Google Fonts, a <style> sheet with tag/class/id selectors, page bands + running tokens,
 // a title/summary band, a generated TOC, KPI cards (borderless tables), vector charts
-// (combo, 100% stacked and waterfall included), rich inline formatting (highlights +
+// (bar/line/area/pie/donut, combo, 100% stacked, waterfall, plus the new
+// scatter/bubble/radar/gauge/heatmap kinds with range bars and reference lines laid out
+// in display:flex rows), SVG vector images (inline <svg> and an even-odd ring),
+// rich inline formatting (highlights +
 // links), an embedded image, a data-bound table with conditional formatting and
 // colour-scale heatmaps, rich block cells (image / QR / sparkline / nested table),
 // merged cells, a diagonal corner-header two-way (cross-tab) table, QR/Code 128/EAN-13
@@ -182,6 +185,52 @@ const DEFAULT_HTML = `<!-- ══ Web fonts straight from the HTML: the engine c
      data-values="42,72,-38,-6,0" data-totals="0,4" data-show-values="true"
      data-waterfall-colors="increase=#15803d; decrease=#b91c1c; total=#0f2f57"
      data-value-format="#,##0.0" style="height:150pt; margin-top:10pt"></div>
+
+<!-- ══ New chart kinds: scatter (with a reference line), radar, gauge and a heatmap. ══ -->
+<h2 id="newcharts" class="section-title">New chart kinds</h2>
+<div style="display:flex; gap:10pt; align-items:stretch; margin-top:10pt">
+  <div data-chart="scatter" data-title="Latency vs. load" data-x-format="#,##0"
+       data-series="P95:120,180,240,210,300" data-series-x="10,20,30,40,50"
+       data-reference-lines="250:SLO,color=#c00,dash=3:2"
+       style="height:150pt; flex:1 1 48%"></div>
+  <div data-chart="radar" data-title="Vehicle comparison"
+       data-categories="Speed,Power,Range,Grip,Comfort,Value"
+       data-series="Car A:80,60,70,90,75,65; Car B:70,85,55,65,88,72"
+       data-legend="right" style="height:150pt; flex:1 1 48%"></div>
+</div>
+<div style="display:flex; gap:10pt; align-items:stretch; margin-top:10pt">
+  <div data-chart="gauge" data-title="SLA compliance" data-gauge-value="72" data-gauge-max="100"
+       data-series="score:72" style="height:130pt; flex:1 1 32%"></div>
+  <div data-chart="gauge" data-title="Uptime %" data-gauge-value="99.2" data-gauge-max="100"
+       data-series="up:99.2" style="height:130pt; flex:1 1 32%"></div>
+  <div data-chart="bar" data-title="Daily range (&deg;C)" data-range="true"
+       data-categories="Mon,Tue,Wed,Thu" data-series-low="12,14,10,15" data-series-high="24,26,20,23"
+       data-reference-lines="22:warning,color=#c00" style="height:130pt; flex:1 1 32%"></div>
+</div>
+<div data-chart="heatmap" data-title="Weekly activity by shift" data-categories="Mon,Tue,Wed,Thu,Fri,Sat"
+     data-series="Morning:3,5,8,4,2,6; Afternoon:6,7,4,9,5,3; Evening:2,3,5,7,8,4"
+     data-heatmap-colors="from=#eef4ff;to=#1e3a8a" style="height:150pt; margin-top:10pt"></div>
+
+<!-- ══ SVG vector images: inline <svg> drawn as real PDF paths, no rasterisation. ══ -->
+<h2 id="vectors" class="section-title">SVG &amp; flexbox</h2>
+<p style="font-size:8.5pt; color:#94a3b8">This row is a <code>display:flex</code> container; each icon below is inline <code>&lt;svg&gt;</code> emitting true vector paths.</p>
+<div style="display:flex; justify-content:space-around; align-items:center; gap:12pt; margin-top:8pt">
+  <svg viewBox="0 0 24 24" width="52" height="52">
+    <circle cx="12" cy="12" r="11" fill="#0f2f57"/>
+    <path d="M7 12.5l3 3 7-7" stroke="#ffffff" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+  <svg viewBox="0 0 24 24" width="52" height="52">
+    <path d="M12 2l2.9 6.3 6.9.7-5.1 4.6 1.4 6.8L12 17.7 5.9 20.4l1.4-6.8L2.2 9l6.9-.7z" fill="#e08a1e"/>
+  </svg>
+  <!-- fill-rule="evenodd": the inner circle subpath punches a real hole. -->
+  <svg viewBox="0 0 24 24" width="52" height="52">
+    <path fill-rule="evenodd" fill="#1b7f4b"
+          d="M12 1a11 11 0 1 0 0 22 11 11 0 0 0 0-22z M12 6a6 6 0 1 1 0 12 6 6 0 0 1 0-12z"/>
+  </svg>
+  <svg viewBox="0 0 24 24" width="52" height="52">
+    <g transform="rotate(45 12 12)"><rect x="6" y="6" width="12" height="12" rx="2" fill="#7c2d12" opacity="0.85"/></g>
+  </svg>
+</div>
 
 <!-- ══ Rich inline formatting + base-14 Latin-1 coverage. ══ -->
 <h2 id="highlights" class="section-title">Highlights</h2>
