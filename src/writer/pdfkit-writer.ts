@@ -11,6 +11,7 @@ import type { DrawCommand, DashPattern } from '../layout/flow.js';
 import type { PositionedRun } from '../text/typeset.js';
 import type { RGB, ColorInput } from '../core/color.js';
 import { toRGB } from '../core/color.js';
+import { imagePathAccessEnabled, isFileSystemSource } from '../core/image.js';
 
 type PDFDocument = PDFKit.PDFDocument;
 
@@ -240,9 +241,21 @@ function drawCommand(doc: PDFDocument, cmd: DrawCommand, x: number, y: number, b
  * Coerce an image source to what pdfkit accepts across runtimes: a filesystem
  * path or `data:` URI passes through; bytes become a Node Buffer where one exists,
  * otherwise a base64 `data:` URI (a browser bundle has no global `Buffer`).
+ *
+ * A path string is refused while the host has disabled filesystem image sources
+ * (`setImagePathAccess('deny')`): pdfkit opens path strings itself, so the policy
+ * has to be enforced here as well as in `core/image.ts`.
  */
 function imageSource(src: string | Uint8Array): string | Buffer {
-  if (typeof src === 'string') return src;
+  if (typeof src === 'string') {
+    if (!imagePathAccessEnabled() && isFileSystemSource(src)) {
+      throw new Error(
+        `image source "${src}" is a filesystem path, which this host has disabled ` +
+          '(setImagePathAccess("deny")); pass bytes, a data: URI, or an http(s) URL',
+      );
+    }
+    return src;
+  }
   const g = globalThis as { Buffer?: { from: (b: Uint8Array) => unknown } };
   if (typeof g.Buffer?.from === 'function') return g.Buffer.from(src) as Buffer;
   return `data:${sniffImageMime(src)};base64,${bytesToBase64(src)}`;

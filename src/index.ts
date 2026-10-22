@@ -11,7 +11,13 @@ export { createReport, renderToBuffer, type RenderOptions, type RenderResult } f
 
 export { resolveRemoteImages, type ImageResolveOptions } from './core/remote-image.js';
 
-export { setImageFileReader, type ImageFileReader } from './core/image.js';
+export {
+  setImageFileReader,
+  setImagePathAccess,
+  imagePathAccessEnabled,
+  type ImageFileReader,
+  type ImagePathAccess,
+} from './core/image.js';
 
 export { htmlToReportDoc, parseHtml, type HtmlOptions, type HElement, type HNode, type HText } from './adapter/html.js';
 

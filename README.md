@@ -762,7 +762,9 @@ From the package root (`pdf-report-engine`):
 | --- | --- |
 | `createReport(report, options?)` | Build the `pdfkit` doc + paginated `pages`; returns `{ doc, pages, registry }`. |
 | `renderToBuffer(report, options?)` | `createReport` + collect to a `Buffer`. |
-| `RenderOptions` | `{ fonts?: FontSource[], now?: () => Date, baseStyle?: Partial<StyleProps>, images?: ImageResolveOptions }`. |
+| `RenderOptions` | `{ fonts?: FontSource[], now?: () => Date, baseStyle?: Partial<StyleProps>, images?: ImageResolveOptions, resolveFonts?: FontResolveOptions, bufferPages?: boolean }`. |
+| `setImageFileReader(reader)` | Install the synchronous reader for path-based image/SVG sources (the Node CLI calls it once). |
+| `setImagePathAccess('allow' \| 'deny')` | Forbid reading image/SVG sources from the host filesystem. Default `'allow'`. |
 | `htmlToReportDoc(html, options?)` | HTML subset → `ReportDoc`. |
 | `parseHtml(html)` | HTML subset → element tree (`HElement`). |
 | `readFontFiles(entries)` | Load `FontFileEntry[]` (paths or bytes) → `FontSource[]`. |
@@ -773,6 +775,45 @@ From the package root (`pdf-report-engine`):
 
 `RenderOptions.now` is an injectable clock (for deterministic `now()` in expressions and
 PDF timestamps) — useful in tests.
+
+`RenderOptions.bufferPages` defaults to `true` (pdfkit holds every page's encoded stream and
+writes them at `doc.end()`). This engine never revisits a written page, so a host that pipes the
+document straight to its caller can pass `false` and let each page flush as the next one starts —
+lower peak memory, earlier first bytes.
+
+## Hosting untrusted payloads
+
+Everything above assumes the report document is yours. When it arrives from somebody else — an
+HTTP request, a queue message, a template a user edited — the payload decides which URLs get
+fetched and (by default) which files get opened. Three switches close that, all opt-in:
+
+```ts
+import { renderToBuffer, setImagePathAccess } from 'pdf-report-engine';
+
+// Once at startup: no image/SVG `src` may name a file on this host. Paths yield
+// no bytes and the writer refuses them instead of handing the path to pdfkit;
+// `data:` URIs and http(s) URLs keep working. Clearing the file reader is NOT
+// the off switch — with no reader registered, paths still open via node:fs.
+setImagePathAccess('deny');
+
+const pdf = await renderToBuffer(report, {
+  // Never fetch from the payload's own URLs. Supply loaders instead, so the host
+  // — not the document — picks the transport: allowlist hosts, refuse redirects,
+  // reject link-local/private targets, cache, and count bytes as they stream.
+  images: { fetchRemote: false, resolveImage: loadFromCdn, maxBytes: 5_000_000 },
+  resolveFonts: { fetchRemote: false, resolveFont: loadFontFromCdn, maxFaces: 8 },
+  bufferPages: false,
+});
+```
+
+`maxBytes` is enforced *while* downloading: a declared `content-length` over the cap short-circuits
+the request, and a chunked body is cancelled the moment its running total crosses it. It is still a
+per-asset bound, so cap the number of assets per document too — and bound rows, blocks and pages,
+since layout is synchronous and CPU is the only scarce resource on a server.
+
+`setImagePathAccess` and `setImageFileReader` are process-wide: the layout pass is synchronous and
+has no options object to consult. Give untrusted renders their own worker rather than flipping the
+switch per request.
 
 ## Project layout
 

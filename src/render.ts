@@ -29,6 +29,23 @@ export interface RenderOptions {
   now?: () => Date;
   /** Overrides the document's base style before inheritance. */
   baseStyle?: Partial<StyleProps>;
+  /**
+   * Keep every page's content in memory until `doc.end()` (pdfkit's `bufferPages`).
+   *
+   * Default `true`, which is what the engine has always done: pdfkit holds each page's
+   * encoded stream in its page buffer and flushes only when the document ends, so
+   * nothing is written out until the whole document is assembled. That is required
+   * if a caller wants to revisit pages (`switchToPage`, `bufferedPageRange`).
+   *
+   * Hosts that write pages out once and never look back — notably servers piping the
+   * finished document straight to a response — can pass `false` to have pdfkit flush
+   * each page as the next one starts: the encoded page stream then leaves memory
+   * instead of accumulating into a second full copy of the document, giving lower
+   * peak memory and earlier first bytes. This engine writes pages strictly in order
+   * and never revisits one (TOC/page cross-references are resolved by re-paginating
+   * before any writing), so `false` is safe for it.
+   */
+  bufferPages?: boolean;
   /** How `http(s)` image sources are handled (used by the async {@link renderToBuffer}). */
   images?: ImageResolveOptions;
   /**
@@ -55,7 +72,7 @@ export function createReport(report: ReportDoc, options: RenderOptions = {}): Re
     margin: 0,
     margins: { top: 0, right: 0, bottom: 0, left: 0 },
     autoFirstPage: false,
-    bufferPages: true,
+    bufferPages: options.bufferPages ?? true,
     info: toPdfInfo(report),
   });
 

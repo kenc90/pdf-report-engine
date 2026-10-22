@@ -12,6 +12,11 @@
  * In a browser neither exists, so a path source yields `null` — pass bytes, a
  * `data:` URI, or an `http(s)` URL instead. This module deliberately avoids a
  * top-level `node:fs` import so it can be bundled for the browser.
+ *
+ * Because those path sources come straight from the report document, a host that
+ * renders payloads it did not author can lock the door with
+ * `setImagePathAccess('deny')`: paths then resolve to no bytes and the writer
+ * refuses them instead of handing the path to pdfkit. See {@link setImagePathAccess}.
  */
 
 export interface ImageSize {
@@ -27,9 +32,47 @@ let imageFileReader: ImageFileReader | null = null;
  * Register a reader so `probeImageSize`/`loadImageBytes` can open filesystem
  * paths. The Node CLI calls this once at startup; browser callers can ignore it.
  * Pass `null` to clear.
+ *
+ * Clearing is *not* the same as disabling: with no reader registered, a path is
+ * still opened through `process.getBuiltinModule('node:fs')` when that exists. To
+ * forbid path reads outright, use {@link setImagePathAccess}.
  */
 export function setImageFileReader(reader: ImageFileReader | null): void {
   imageFileReader = reader;
+}
+
+/** Whether report content may name an image/SVG `src` as a path on the host disk. */
+export type ImagePathAccess = 'allow' | 'deny';
+let imagePathAccess: ImagePathAccess = 'allow';
+
+/**
+ * Allow (default) or forbid reading image/SVG sources from the host filesystem.
+ *
+ * An `ImageBlock`'s `src` is arbitrary document content, and any string that is
+ * neither `data:` nor `http(s)` is treated as a path to open. That is what you want
+ * in a script you wrote yourself, and exactly what you do not want in a host that
+ * renders documents somebody sent it: there, a `src` of `/etc/passwd` or
+ * `C:/internal/notes.txt` gets its bytes embedded in a PDF the sender then reads
+ * back. `'deny'` closes both halves of that path — `loadImageBytes` returns `null`
+ * for path sources, and the writer refuses to pass a path to pdfkit.
+ *
+ * Process-wide and synchronous by necessity (the layout pass has no options object
+ * to consult), so call it once at startup, like {@link setImageFileReader}. A
+ * single-process host that mixes trusted CLI renders with untrusted requests in one
+ * runtime should instead give each side its own worker.
+ */
+export function setImagePathAccess(access: ImagePathAccess): void {
+  imagePathAccess = access;
+}
+
+/** Whether filesystem-path image sources are currently permitted. */
+export function imagePathAccessEnabled(): boolean {
+  return imagePathAccess === 'allow';
+}
+
+/** True when `src` would be opened as a file on the host rather than decoded inline. */
+export function isFileSystemSource(src: string): boolean {
+  return src.length > 0 && !src.startsWith('data:') && !isHttp(src);
 }
 
 /**
@@ -90,6 +133,7 @@ export function loadImageBytes(src: string | Uint8Array): Uint8Array | null {
   if (typeof src !== 'string') return src;
   if (src.startsWith('data:')) return decodeDataUri(src);
   if (isHttp(src)) return null;
+  if (imagePathAccess === 'deny') return null;
   try {
     const reader = imageFileReader ?? builtinReadFileSync();
     return reader ? reader(src) : null;

@@ -24,13 +24,17 @@
 import type { ReportDoc, FontReference } from '../ir/schema.js';
 import type { FontSource } from './registry.js';
 import { collectCharset } from './charset.js';
+import { readBoundedBytes, type LimitedFetchResponse } from '../core/fetch-body.js';
 
 export interface FontResolveOptions {
   /** Fetch remote font CSS/files. Default `true`. Set `false` for air-gapped renders. */
   fetchRemote?: boolean;
   /** Per-request timeout in ms. Default 15000. */
   timeoutMs?: number;
-  /** Refuse font files larger than this many bytes. Default 25 MiB. */
+  /**
+   * Refuse font files larger than this many bytes. Default 25 MiB.
+   * Enforced while streaming, so an oversized body is cancelled rather than buffered.
+   */
   maxBytes?: number;
   /** Custom loader for font *bytes* (proxy, auth, cache, fixtures). Overrides built-in fetch. */
   resolveFont?: (url: string) => Promise<Uint8Array | null>;
@@ -74,10 +78,7 @@ interface FaceRule {
 interface Abortable {
   signal?: unknown;
 }
-interface FetchResponse {
-  ok: boolean;
-  status: number;
-  arrayBuffer(): Promise<ArrayBuffer>;
+interface FetchResponse extends LimitedFetchResponse {
   text(): Promise<string>;
 }
 type FetchLike = (url: string, init?: Abortable) => Promise<FetchResponse>;
@@ -120,9 +121,7 @@ async function defaultFetchBytes(url: string, opts: FontResolveOptions): Promise
   const maxBytes = opts.maxBytes ?? 25 * 1024 * 1024;
   const res = await withTimeout((signal) => fetchImpl(url, { signal }), opts.timeoutMs ?? 15000);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const bytes = new Uint8Array(await res.arrayBuffer());
-  if (bytes.length > maxBytes) throw new Error(`font exceeds ${maxBytes} bytes`);
-  return bytes;
+  return readBoundedBytes(res, maxBytes, 'font');
 }
 
 async function defaultFetchText(url: string, opts: FontResolveOptions): Promise<string | null> {

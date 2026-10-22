@@ -6,6 +6,7 @@
  * the offline path (local paths / `data:` / bytes) handles everything as usual.
  */
 import { probeImageSize, type ImageSize } from './image.js';
+import { readBoundedBytes, type LimitedFetchResponse } from './fetch-body.js';
 import type { ReportDoc, ImageBlock, SvgBlock, FlexBlock, Block } from '../ir/schema.js';
 
 export interface ImageResolveOptions {
@@ -13,7 +14,10 @@ export interface ImageResolveOptions {
   fetchRemote?: boolean;
   /** Per-request timeout in ms. Default 15000. */
   timeoutMs?: number;
-  /** Refuse responses larger than this many bytes. Default 25 MiB. */
+  /**
+   * Refuse responses larger than this many bytes. Default 25 MiB.
+   * Enforced while streaming, so an oversized body is cancelled rather than buffered.
+   */
   maxBytes?: number;
   /** Custom loader (proxy, auth, cache, fixtures). Overrides the built-in fetch. */
   resolveImage?: (url: string) => Promise<Uint8Array | null>;
@@ -25,11 +29,7 @@ export interface ImageResolveOptions {
 interface Abortable {
   signal?: unknown;
 }
-interface FetchResponse {
-  ok: boolean;
-  status: number;
-  arrayBuffer(): Promise<ArrayBuffer>;
-}
+type FetchResponse = LimitedFetchResponse;
 type FetchLike = (url: string, init?: Abortable) => Promise<FetchResponse>;
 
 const REMOTE = /^https?:\/\//i;
@@ -64,9 +64,7 @@ async function defaultFetch(url: string, opts: ImageResolveOptions): Promise<Uin
   try {
     const res = await fetchImpl(url, { signal: controller.signal });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const bytes = new Uint8Array(await res.arrayBuffer());
-    if (bytes.length > maxBytes) throw new Error(`image exceeds ${maxBytes} bytes`);
-    return bytes;
+    return readBoundedBytes(res, maxBytes, 'image');
   } finally {
     clearTimeout(timer);
   }

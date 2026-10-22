@@ -53,6 +53,9 @@
           <tr><td><code>parseHtml(html)</code></td><td>HTML subset → element tree (<code>HElement</code>) without converting.</td></tr>
           <tr><td><code>readFontFiles(entries)</code></td><td>Load <code>FontFileEntry[]</code> (paths or bytes) → <code>FontSource[]</code>.</td></tr>
           <tr><td><code>resolveRemoteImages(report, opts)</code></td><td>Run the URL→bytes image pre-pass yourself (advanced).</td></tr>
+          <tr><td><code>setImageFileReader(reader)</code></td><td>Install the synchronous file reader used for path-based image/SVG sources (the Node CLI calls this once). Clearing it does <em>not</em> disable path reads — see <code>setImagePathAccess</code>.</td></tr>
+          <tr><td><code>setImagePathAccess('allow' | 'deny')</code></td><td>Forbid reading image/SVG sources from the host filesystem. <code>'allow'</code> is the default and the historical behaviour; call <code>'deny'</code> once at startup when you render documents you did not author. See <a href="#hosting">Hosting untrusted payloads</a>.</td></tr>
+          <tr><td><code>imagePathAccessEnabled()</code></td><td>Read the current path-access policy.</td></tr>
           <tr><td><code>resolveRemoteFonts(report, opts)</code></td><td>Turn <code>report.fonts</code> (Google <code>&lt;link&gt;</code>/<code>@import</code>, <code>@font-face</code>, font URLs) into embedded <code>FontSource[]</code> — decodes WOFF2 when needed.</td></tr>
           <tr><td><code>parseFontFace(css)</code></td><td>Parse <code>@font-face</code> rules out of a CSS string.</td></tr>
           <tr><td><code>FontRegistry</code></td><td>Lower-level face registration / measurement.</td></tr>
@@ -70,12 +73,22 @@
   baseStyle?: Partial&lt;StyleProps&gt;;            // applied before IR style inheritance
   images?: ImageResolveOptions;               // remote image handling (renderToBuffer only)
   resolveFonts?: FontResolveOptions;          // remote/web-font handling (renderToBuffer only)
+  bufferPages?: boolean;                      // default true; false = flush each page as it ends
 }</code></pre>
+      <p>
+        <code>bufferPages</code> is pdfkit's own page buffering. Left at its default the encoded
+        stream of every page is held in memory and written only when the document ends — which is
+        what you need if you intend to revisit pages (<code>switchToPage</code>,
+        <code>bufferedPageRange</code>). This engine never revisits a page (TOC and page-number
+        cross-references are resolved by re-paginating before anything is written), so a host that
+        pipes the document straight to a caller can pass <code>false</code> and drop that second
+        full copy of the document from memory.
+      </p>
       <h3><code>ImageResolveOptions</code></h3>
       <pre data-copy><code>{
   fetchRemote?: boolean;                      // default true
   timeoutMs?: number;                         // default 15000
-  maxBytes?: number;                          // default 25 MiB
+  maxBytes?: number;                          // default 25 MiB; enforced while streaming
   resolveImage?: (url) => Promise&lt;Uint8Array | null&gt;; // proxy / auth / cache / fixtures
   onError?: 'throw' | 'skip';                 // default 'throw'
 }</code></pre>
@@ -83,13 +96,57 @@
       <pre data-copy><code>{
   fetchRemote?: boolean;                      // default true
   timeoutMs?: number;                         // default 15000
-  maxBytes?: number;                          // default 25 MiB per file
+  maxBytes?: number;                          // default 25 MiB per file; enforced while streaming
   maxFaces?: number;                          // cap faces per call (default 64)
   resolveFont?: (url) => Promise&lt;Uint8Array | null&gt;; // proxy / auth / cache / fixtures
   resolveText?: (url) => Promise&lt;string | null&gt;;     // override CSS stylesheet fetch
   decodeWoff2?: (bytes) => Promise&lt;Uint8Array&gt;;      // override the WOFF2 → TTF decoder
   onError?: 'throw' | 'skip';                 // default 'skip' — a missing web font is non-fatal
 }</code></pre>
+    </section>
+
+    <section id="hosting">
+      <h2>Hosting untrusted payloads</h2>
+      <p>
+        When the report document arrives over a network instead of being authored by you, three
+        switches decide what the engine is allowed to touch. Each has a default that keeps scripts
+        working unchanged, so opting in is explicit:
+      </p>
+      <table>
+        <thead><tr><th>Input in the payload</th><th>What the engine does by default</th><th>To close it</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>src: '/etc/passwd'</code> on an <code>image</code> / <code>svg</code> block</td>
+            <td>Any string that is not a <code>data:</code> URI or <code>http(s)</code> URL is opened as a
+            path on the host and its bytes are embedded in the PDF.</td>
+            <td><code>setImagePathAccess('deny')</code> at startup — paths yield no bytes and the writer
+            refuses them instead of handing the path to pdfkit. <code>data:</code> URIs and URLs keep working.</td>
+          </tr>
+          <tr>
+            <td><code>src: 'https://…'</code> on an <code>image</code> / <code>svg</code> block, or a
+            font URL in <code>report.fonts</code></td>
+            <td>Fetched by the async pre-pass with global <code>fetch</code>. Redirects are followed by
+            the runtime, so an allowlisted host can bounce the request anywhere the service can reach.</td>
+            <td><code>fetchRemote: false</code> plus your own <code>resolveImage</code> /
+            <code>resolveFont</code> / <code>resolveText</code> that allowlist hosts, refuse redirects and
+            reject link-local or private targets.</td>
+          </tr>
+          <tr>
+            <td>A huge remote body behind a small <code>maxBytes</code></td>
+            <td>Rejected — and now rejected <em>before</em> it is buffered: a declared
+            <code>content-length</code> short-circuits the request, and a chunked body is cancelled the
+            moment the running total crosses the cap.</td>
+            <td>Nothing, if you set <code>maxBytes</code>. Keep in mind the cap covers bytes
+            <em>per asset</em>, not per document: bound the number of assets too.</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="note">
+        <code>setImagePathAccess</code> and <code>setImageFileReader</code> are process-wide, because
+        the synchronous layout pass has no options object to consult. A host that mixes trusted CLI
+        renders with untrusted requests in one process should give each its own worker instead of
+        flipping the switch per request.
+      </div>
     </section>
 
     <section id="html-options">
@@ -856,7 +913,7 @@ formatNumber(Infinity, '#,##0.00')                // ∞</code></pre>
         <code>CellNode</code>, <code>GroupNode</code>, <code>DataSource</code>, <code>Expr</code>,
         <code>DiagonalHeader</code>,
         <code>FontReference</code>, <code>RenderOptions</code>, <code>ImageResolveOptions</code>,
-        <code>FontResolveOptions</code>, <code>HtmlOptions</code>.
+        <code>FontResolveOptions</code>, <code>HtmlOptions</code>, <code>ImagePathAccess</code>.
       </p>
     </section>
 
@@ -923,6 +980,7 @@ formatNumber(Infinity, '#,##0.00')                // ∞</code></pre>
         <a href="api.html#ir">IR block types</a>
         <a href="api.html#options">Render options</a>
         <a href="api.html#html-options">HTML adapter options</a>
+        <a href="api.html#hosting">Hosting untrusted payloads</a>
         <a href="api.html#expr">Expression language</a>
         <a href="api.html#style">Style &amp; box properties</a>
         <a href="examples.html">Example recipes</a>
