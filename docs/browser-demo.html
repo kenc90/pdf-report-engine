@@ -73,6 +73,35 @@
     #editor::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, .34); }
     #editor::-webkit-scrollbar-corner { background: transparent; }
 
+    /* ---- detach / attach: expand the workbench so the active panel fills the whole
+       viewport (uses all the page space) while the tabs still switch editor <-> preview.
+       No split view — one panel at a time, just maximised. Esc re-attaches too. ---- */
+    .tabs .tabs-spacer { flex: 1 1 auto; }
+    .detach-toggle {
+      display: inline-flex; align-items: center; gap: 6px; align-self: center;
+      margin-bottom: 5px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px;
+      background: var(--card); color: var(--heading); font: 600 12.5px/1 inherit; cursor: pointer;
+    }
+    .detach-toggle:hover { background: var(--toc-hover); }
+    .detach-toggle svg { width: 15px; height: 15px; }
+    .detach-toggle .icon-attach { display: none; }
+    #workbench.detached .detach-toggle .icon-attach { display: block; }
+    #workbench.detached .detach-toggle .icon-detach { display: none; }
+
+    body.detached { overflow: hidden; }
+    #workbench.detached {
+      position: fixed; inset: 0; z-index: 999; margin: 0;
+      display: flex; flex-direction: column; padding: 10px 12px; background: var(--page-bg);
+    }
+    #workbench.detached .workbench { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+    #workbench.detached .tabs { flex: 0 0 auto; }
+    #workbench.detached .panel.active { display: block; flex: 1 1 auto; min-height: 0; }
+    #workbench.detached .editor-shell, #workbench.detached .editor-stack { height: 100%; }
+    #workbench.detached #editor { height: 100%; min-height: 0; resize: none; }
+    #workbench.detached #preview { height: 100%; min-height: 0; }
+    #workbench.detached .toolbar { margin: 10px 0 0; }
+    #workbench.detached .fonts-list, #workbench.detached .hint { display: none; }
+
     /* ---- toolbar ---- */
     .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 14px 0 4px; }
     .toolbar .spacer { flex: 1 1 auto; }
@@ -139,6 +168,12 @@
         <div class="tabs" role="tablist" aria-label="Editor and preview">
           <button class="tab active" id="tab-editor" role="tab" aria-selected="true" aria-controls="panel-editor" type="button">HTML editor</button>
           <button class="tab" id="tab-preview" role="tab" aria-selected="false" aria-controls="panel-preview" type="button">PDF preview <span class="badge" id="pagecount" hidden></span></button>
+          <span class="tabs-spacer" aria-hidden="true"></span>
+          <button class="detach-toggle" id="detach" type="button" aria-pressed="false" title="Detach to fill the page with the editor / preview (Esc to re-attach)">
+            <svg class="icon-detach" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+            <svg class="icon-attach" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M10 14l-7 7"/></svg>
+            <span id="detach-label">Detach</span>
+          </button>
         </div>
         <div class="panel active" id="panel-editor" role="tabpanel" aria-labelledby="tab-editor">
           <div class="editor-shell">

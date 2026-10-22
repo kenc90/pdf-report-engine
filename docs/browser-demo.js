@@ -31,6 +31,29 @@ function showTab(which) {
 tabEditor.addEventListener('click', () => showTab('editor'));
 tabPreview.addEventListener('click', () => { showTab('preview'); generate(); });
 
+// Detach / attach: expand the workbench so the active panel fills the whole
+// viewport (still one tab at a time — no split), or collapse it back to the inline
+// height. The `.detached` CSS (browser-demo.html) drives the layout; this flips state.
+const workbenchSection = document.getElementById('workbench');
+const detachBtn = document.getElementById('detach');
+const detachLabel = document.getElementById('detach-label');
+let detached = false;
+
+function setDetached(on) {
+  detached = on;
+  workbenchSection.classList.toggle('detached', on);
+  document.body.classList.toggle('detached', on);
+  detachBtn.setAttribute('aria-pressed', String(on));
+  detachLabel.textContent = on ? 'Attach' : 'Detach';
+  detachBtn.title = on
+    ? 'Attach back into the page (Esc)'
+    : 'Detach to fill the page with the editor / preview (Esc to re-attach)';
+  // The panels' height changed — realign the colour overlay and gutter with the textarea.
+  syncScroll();
+}
+detachBtn.addEventListener('click', () => setDetached(!detached));
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && detached) setDetached(false); });
+
 // A tiny inline logo so the images feature works with no network / no file access.
 const LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAAAwCAIAAAA3jserAAAAu0lEQVR42u3SQQ2AMBREwe8AB1hATj1hAitI4YSOGuBCSpu2TPIU7E5c+zpcy5bUoCBDk+BwGBxkwEEGHGTAQQYcZMBBhoIMDYbDMXCQAQcZcJABBxlwkAEHGeoXhw/gIAMOMuAgAw4y4CBDPeCwOBxkwEEGHGTAQYba4jAxHGTAQQYcZKgWDrPCQQYcZMBBhmrhMCUcZMBBhspxWBCO547z1sQFGfoYh+HgIAMOMlSOw15wkKE3OCz1wzKtiMUHl/QIoAAAAABJRU5ErkJggg==';
 
