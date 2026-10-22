@@ -614,6 +614,15 @@ stays deterministic across machines rather than dipping into whatever the OS hap
 > with an optional local font picker). The bundle it loads is produced by `npm run build:browser`
 > (esbuild, with `pdfkit` routed to its self-contained browser build so no Node polyfill config is needed).
 
+> **Deploying the prebuilt bundle:** `npm run build:browser` writes **two** files into
+> `docs/browser/` — `pdf-report-engine.js` (the ESM bundle) and `wawoff2-decoder.js` (a classic
+> script). Ship them **together, in the same folder.** The engine loads `wawoff2-decoder.js`
+> lazily at runtime as a sibling (resolved via `import.meta.url`) and only when it must decode
+> **WOFF2** — e.g. a browser hitting a Google Fonts / `@font-face` link, which Google serves as
+> WOFF2. Load the bundle with `<script type="module">` or `import()` (a plain non-module script
+> has no `import.meta.url`, so the sibling lookup fails). If you only embed TTF/OTF/TTC bytes and
+> never WOFF2, the decoder is never fetched, but deploy it anyway so web-font paths keep working.
+
 The core engine (IR/HTML → paginated PDF) is pure JavaScript and runs in a browser bundle.
 It uses **no top-level `node:*` imports** in the library graph, so Vite / webpack / esbuild
 can bundle it without a Node polyfill *for our code*. Two things are still required, however,
