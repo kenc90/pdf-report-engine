@@ -122,9 +122,9 @@ h1, h2 { margin-bottom: 4pt; }           /* list */</code></pre>
         <thead><tr><th>Markup</th><th>Becomes</th><th>Attributes</th></tr></thead>
         <tbody>
           <tr>
-            <td><code>&lt;div data-chart="bar|line|area|pie|donut|combo|waterfall"&gt;</code></td>
+            <td><code>&lt;div data-chart="bar|<wbr>line|<wbr>area|<wbr>pie|<wbr>donut|<wbr>combo|<wbr>waterfall"&gt;</code></td>
             <td><code>ChartBlock</code></td>
-            <td><code>data-title</code>, <code>data-categories</code>, <code>data-series</code>, <code>data-values</code> (+ <code>data-name</code>/<code>data-color</code>), <code>data-colors</code>, <code>data-stacked</code> (<code>true</code> or <code>100%</code>), <code>data-show-values</code>, <code>data-category-labels</code>, <code>data-legend</code>, <code>data-inner-radius</code>, <code>data-plot-height</code>, <code>data-min</code>/<code>data-max</code>/<code>data-ticks</code>/<code>data-value-format</code>/<code>data-axis-labels</code>/<code>data-grid-lines</code>; depth: <code>data-series-types="bar,line"</code>, <code>data-series-axes="left,right"</code>, <code>data-right-min</code>/<code>data-right-max</code>/<code>data-right-ticks</code>/<code>data-right-format</code>/<code>data-right-axis-labels</code>, <code>data-totals="0,4"</code>, <code>data-waterfall-colors="increase=…; decrease=…; total=…"</code>; height via <code>style</code>.</td>
+            <td><code>data-title</code>, <code>data-categories</code>, <code>data-series</code>, <code>data-values</code> (+ <code>data-name</code>/<code>data-color</code>), <code>data-colors</code>, <code>data-stacked</code> (<code>true</code> or <code>100%</code>), <code>data-show-values</code>, <code>data-category-labels</code>, <code>data-legend</code>, <code>data-inner-radius</code>, <code>data-plot-height</code>, <code>data-min</code>/<code>data-max</code>/<code>data-ticks</code>/<code>data-value-format</code>/<code>data-axis-labels</code>/<code>data-grid-lines</code>; depth: <code>data-series-types="<wbr>bar,line"</code>, <code>data-series-axes="<wbr>left,right"</code>, <code>data-right-min</code>/<code>data-right-max</code>/<code>data-right-ticks</code>/<code>data-right-format</code>/<code>data-right-axis-labels</code>, <code>data-totals="0,4"</code>, <code>data-waterfall-colors="<wbr>increase=…; decrease=…; total=…"</code>; height via <code>style</code>.</td>
           </tr>
           <tr>
             <td><code>&lt;table data-chart="…"&gt;</code></td>
@@ -137,7 +137,7 @@ h1, h2 { margin-bottom: 4pt; }           /* list */</code></pre>
             <td><code>data-title</code>, <code>data-level</code>/<code>data-max-level</code>, <code>data-leaders</code>, <code>data-page-numbers</code>, <code>data-indent</code>, <code>data-gap</code>.</td>
           </tr>
           <tr>
-            <td><code>&lt;div data-barcode="qr|code128|ean13"&gt;</code></td>
+            <td><code>&lt;div data-barcode="qr|<wbr>code128|<wbr>ean13"&gt;</code></td>
             <td><code>BarcodeBlock</code></td>
             <td><code>data-value</code> (or element text), <code>data-bind</code>/<code>data-format</code>, <code>data-error-correction</code>, <code>data-module-size</code>, <code>data-quiet-zone</code>, <code>data-show-text</code>, <code>data-color</code>.</td>
           </tr>
@@ -154,7 +154,7 @@ h1, h2 { margin-bottom: 4pt; }           /* list */</code></pre>
           <tr>
             <td><code>data-color-scale="…"</code></td>
             <td><code>ColorScale</code></td>
-            <td>Cell heatmap: <code>min=0;max=100;from=#eef4ff;to=#1e3a8a;text=false</code>. Omit <code>min</code>/<code>max</code> to derive the range from the column's data across the table; dark fills switch the text to white unless <code>text=false</code>.</td>
+            <td>Cell heatmap: <code>min=0;<wbr>max=100;<wbr>from=#eef4ff;<wbr>to=#1e3a8a;<wbr>text=false</code>. Omit <code>min</code>/<code>max</code> to derive the range from the column's data across the table; dark fills switch the text to white unless <code>text=false</code>.</td>
           </tr>
           <tr>
             <td><code>&lt;th&gt;/&lt;td&gt; data-diagonal</code></td>

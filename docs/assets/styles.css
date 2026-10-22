@@ -384,8 +384,10 @@ code { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monosp
   padding: 1px 6px;
   border-radius: 5px;
   font-size: 0.86em;
-  /* Let long identifier/URL tokens break so they can't widen the page on narrow screens. */
-  overflow-wrap: anywhere;
+  /* `break-word` (not `anywhere`): a long token still breaks at end-of-line so it
+     can't widen the page, but — unlike `anywhere` — it does NOT shrink min-content,
+     so an auto-layout table column can't collapse to less than one whole word. */
+  overflow-wrap: break-word;
 }
 pre code { color: inherit; background: none; padding: 0; }
 .copy {
