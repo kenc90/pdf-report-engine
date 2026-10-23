@@ -134,14 +134,34 @@ function build() {
       const title = sectionTitle(body);
       const anchor = sec.id || (title && slugify(title.title)) || '';
       if (!anchor) continue;
+      // A section may bundle several `<h3 id>`/`<h4 id>` subsections (a feature
+      // family). Emit one entry for the section's own intro, then one per
+      // subsection, so every family member stays individually searchable and
+      // deep-linkable — which lets related features share a home instead of
+      // each grabbing its own top-level section.
+      const subs = subHeadings(body);
+      const introEnd = subs.length ? subs[0].start : body.length;
       entries.push({
         page: file,
         pageLabel: page,
         anchor,
         title: title ? title.title : anchor,
-        kind: 'section',
-        text: snippet(body, title ? title.htmlEnd : 0, body.length),
+        kind: subs.length ? 'group' : 'section',
+        text: snippet(body, title ? title.htmlEnd : 0, introEnd),
       });
+      for (let s = 0; s < subs.length; s += 1) {
+        const sub = subs[s];
+        if (!sub.id) continue;
+        const nextStart = s + 1 < subs.length ? subs[s + 1].start : body.length;
+        entries.push({
+          page: file,
+          pageLabel: page,
+          anchor: sub.id,
+          title: sub.title,
+          kind: 'section',
+          text: snippet(body, sub.end, nextStart),
+        });
+      }
     }
   }
   return { generatedAt: new Date().toISOString(), entries };

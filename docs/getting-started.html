@@ -566,6 +566,44 @@ pages.forEach((p, i) =&gt; console.log(i + 1, p.height, p.body.map((f) =&gt; f.f
           <tr><td><code>style="height:…"</code></td><td>Overall chart height; title, labels and legend strips are reserved inside it.</td></tr>
         </tbody>
       </table>
+
+      <h3 id="gantt">Gantt / timeline chart</h3>
+      <p>
+        A <code>data-chart="gantt"</code> element renders a project timeline with task bars,
+        optional progress overlays, and dependency arrows.
+      </p>
+      <pre data-copy><code>&lt;div data-chart="gantt"
+     data-title="Sprint Plan"
+     data-gantt-unit="day"
+     data-gantt-start="0"
+     data-gantt-end="20"
+     data-gantt-tasks="Design:0:4;Backend:3:10;Frontend:6:14;Testing:15:20"&gt;
+&lt;/div&gt;</code></pre>
+      <pre data-copy><code>// IR
+{
+  type: 'chart',
+  kind: 'gantt',
+  series: [],
+  ganttTasks: [
+    { name: 'Design', start: 0, end: 4 },
+    { name: 'Backend', start: 3, end: 10, color: '#06b6d4', progress: 0.7 },
+    { name: 'Testing', start: 8, end: 12, dependsOn: [1] },
+  ],
+  ganttStart: 0,
+  ganttEnd: 20,
+  ganttUnit: 'day',
+}</code></pre>
+      <table>
+        <thead><tr><th>Task field</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>name</code></td><td>Label in the left gutter.</td></tr>
+          <tr><td><code>start</code></td><td>Offset from <code>ganttStart</code> (in <code>ganttUnit</code> increments).</td></tr>
+          <tr><td><code>end</code> / <code>duration</code></td><td>Bar end offset (absolute) or length.</td></tr>
+          <tr><td><code>color</code></td><td>Bar fill colour.</td></tr>
+          <tr><td><code>progress</code></td><td>0–1; draws a darker sub-bar.</td></tr>
+          <tr><td><code>dependsOn</code></td><td>Task indices to draw L-shaped arrows from.</td></tr>
+        </tbody>
+      </table>
     </section>
 
     <section id="navigation">
@@ -628,6 +666,22 @@ const report = { outline: false, body: [...] };   // no bookmark tree; a toc blo
         Give a heading an <code>id</code> when you want TOC rows or <code>#id</code> links to
         target it. The bookmark entry itself does not require one.
       </div>
+
+      <h3 id="links">Hyperlinks &amp; internal links</h3>
+      <p>
+        Text wrapped in <code>&lt;a href&gt;</code> becomes a clickable link in the generated PDF.
+        External URLs (<code>https://…</code>) open in the reader’s browser; internal anchors
+        (<code>#section-name</code>) jump to the matching <code>id</code> within the document.
+      </p>
+      <pre data-copy><code>&lt;p&gt;Visit &lt;a href="https://github.com/kenc90/pdf-report-engine"&gt;the repository&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;Jump to &lt;a href="#section-2"&gt;Section 2&lt;/a&gt;.&lt;/p&gt;
+&lt;h2 id="section-2"&gt;Section 2&lt;/h2&gt;</code></pre>
+      <p>
+        Links are underlined and coloured automatically (via the style cascade). The engine
+        registers named destinations for every heading <code>id</code> and draws link annotations
+        at the correct glyph positions during the write pass.
+      </p>
+      <p>No extra IR or API call is needed — the HTML adapter maps <code>&lt;a&gt;</code> to <code>ContentSpan.link</code> and the writer emits <code>doc.link()</code> / <code>doc.goTo()</code>.</p>
     </section>
 
     <section id="barcodes">
@@ -731,6 +785,55 @@ const pdf = await renderToBuffer(report);</code></pre>
         <code>htmlToReportDoc(html, { styles: { muted: { color: '#6b7c93', fontSize: 8.5 } } })</code>
         — the class map sits between the stylesheet and inline style.
       </div>
+
+      <h3 id="box-polish">CSS box polish</h3>
+      <p>
+        A background box can be <strong>rounded</strong>, <strong>shadowed</strong> and filled with a
+        <strong>linear gradient</strong> — authored straight from the HTML subset
+        (<code>border-radius</code>, <code>box-shadow</code>, <code>background: linear-gradient(…)</code>)
+        or set on the IR as <code>borderRadius</code> / <code>boxShadow</code> / <code>backgroundImage</code>.
+        Everything stays vector: the rounding is a clipped bézier path, the gradient is painted as
+        blended strips, the shadow as stacked translucent silhouettes — no rasterisation.
+      </p>
+      <pre data-copy><code>&lt;!-- A rounded, gradient banner with a soft drop shadow. --&gt;
+&lt;div style="background: linear-gradient(to right, #1e3a8a, #38bdf8);
+            color: #fff; border-radius: 8px; box-shadow: 2px 3px 6px rgba(15,47,87,0.35);
+            padding: 10pt 12pt;"&gt;
+  Quarterly results are in.
+&lt;/div&gt;
+
+&lt;!-- A plain rounded callout (background fill only). --&gt;
+&lt;p style="background-color: #eef4ff; border-radius: 10px; padding: 9pt 11pt;"&gt;
+  A tinted, rounded note box.
+&lt;/p&gt;</code></pre>
+      <pre data-copy><code>// IR: the same decorations are ordinary box properties.
+{
+  type: 'paragraph',
+  content: 'Card',
+  backgroundColor: '#ffffff',
+  backgroundImage: { direction: 'to bottom', from: '#f8fafc', to: '#c7d2fe' },
+  borderRadius: 12,                               // number or [tl, tr, br, bl]
+  boxShadow: { offsetX: 2, offsetY: 3, blur: 6, color: '#0f2f57', opacity: 0.3 },
+}</code></pre>
+      <p>
+        A raster <code>&lt;img&gt;</code> is clipped to its rounded corners and can carry a shadow too.
+        These are the honest limits of the first pass:
+      </p>
+      <ul>
+        <li><strong>Fills round; borders do not.</strong> <code>border-radius</code> curves the
+        background box (and clips an image); a straight <code>border</code> line is never curved.</li>
+        <li><strong>Two-stop, cardinal gradients.</strong> Direction is <code>to top/right/bottom/left</code>
+        or an angle (e.g. <code>45deg</code>), snapped to the nearest of the four axes; only the first
+        and last colour are modelled. A wrapping box samples the ramp against its whole height, so the
+        gradient stays continuous across lines.</li>
+        <li><strong>Shadow is approximate.</strong> <code>blur</code> is faked with layered fills;
+        <code>inset</code> and a <code>spread</code> radius are ignored.</li>
+        <li><strong>Outer-edge rounding only.</strong> On a box that wraps to several lines, only the top
+        corners of the first line and the bottom corners of the last round; interior junctions stay square.</li>
+      </ul>
+      <p>
+        See it together in <a href="examples.html#ex-polish"><code>samples/box-polish.html</code></a>.
+      </p>
     </section>
 
     <section id="images">
@@ -866,24 +969,6 @@ const pdf = await renderToBuffer(report);</code></pre>
       </div>
     </section>
 
-    <section id="links">
-      <h2>Hyperlinks &amp; internal links</h2>
-      <p>
-        Text wrapped in <code>&lt;a href&gt;</code> becomes a clickable link in the generated PDF.
-        External URLs (<code>https://…</code>) open in the reader’s browser; internal anchors
-        (<code>#section-name</code>) jump to the matching <code>id</code> within the document.
-      </p>
-      <pre data-copy><code>&lt;p&gt;Visit &lt;a href="https://github.com/kenc90/pdf-report-engine"&gt;the repository&lt;/a&gt;.&lt;/p&gt;
-&lt;p&gt;Jump to &lt;a href="#section-2"&gt;Section 2&lt;/a&gt;.&lt;/p&gt;
-&lt;h2 id="section-2"&gt;Section 2&lt;/h2&gt;</code></pre>
-      <p>
-        Links are underlined and coloured automatically (via the style cascade). The engine
-        registers named destinations for every heading <code>id</code> and draws link annotations
-        at the correct glyph positions during the write pass.
-      </p>
-      <p>No extra IR or API call is needed — the HTML adapter maps <code>&lt;a&gt;</code> to <code>ContentSpan.link</code> and the writer emits <code>doc.link()</code> / <code>doc.goTo()</code>.</p>
-    </section>
-
     <section id="rich-text">
       <h2>Rich inline text</h2>
       <p>
@@ -969,46 +1054,6 @@ const pdf = await renderToBuffer(report);</code></pre>
       <p>The <code>ColumnBlock</code> is kept atomic (never splits across pages). Vertical rules are optional lines drawn at column boundaries.</p>
     </section>
 
-    <section id="gantt">
-      <h2>Gantt / timeline chart</h2>
-      <p>
-        A <code>data-chart="gantt"</code> element renders a project timeline with task bars,
-        optional progress overlays, and dependency arrows.
-      </p>
-      <pre data-copy><code>&lt;div data-chart="gantt"
-     data-title="Sprint Plan"
-     data-gantt-unit="day"
-     data-gantt-start="0"
-     data-gantt-end="20"
-     data-gantt-tasks="Design:0:4;Backend:3:10;Frontend:6:14;Testing:15:20"&gt;
-&lt;/div&gt;</code></pre>
-      <pre data-copy><code>// IR
-{
-  type: 'chart',
-  kind: 'gantt',
-  series: [],
-  ganttTasks: [
-    { name: 'Design', start: 0, end: 4 },
-    { name: 'Backend', start: 3, end: 10, color: '#06b6d4', progress: 0.7 },
-    { name: 'Testing', start: 8, end: 12, dependsOn: [1] },
-  ],
-  ganttStart: 0,
-  ganttEnd: 20,
-  ganttUnit: 'day',
-}</code></pre>
-      <table>
-        <thead><tr><th>Task field</th><th>Description</th></tr></thead>
-        <tbody>
-          <tr><td><code>name</code></td><td>Label in the left gutter.</td></tr>
-          <tr><td><code>start</code></td><td>Offset from <code>ganttStart</code> (in <code>ganttUnit</code> increments).</td></tr>
-          <tr><td><code>end</code> / <code>duration</code></td><td>Bar end offset (absolute) or length.</td></tr>
-          <tr><td><code>color</code></td><td>Bar fill colour.</td></tr>
-          <tr><td><code>progress</code></td><td>0–1; draws a darker sub-bar.</td></tr>
-          <tr><td><code>dependsOn</code></td><td>Task indices to draw L-shaped arrows from.</td></tr>
-        </tbody>
-      </table>
-    </section>
-
     <section id="streaming">
       <h2>Streaming output</h2>
       <p>
@@ -1032,57 +1077,6 @@ while (true) {
       <p>
         Internally this sets <code>bufferPages: false</code>, which tells pdfkit to flush each
         page’s encoded stream as soon as the next page starts — the ideal mode for HTTP streaming.
-      </p>
-    </section>
-
-    <section id="box-polish">
-      <h2>CSS box polish</h2>
-      <p>
-        A background box can be <strong>rounded</strong>, <strong>shadowed</strong> and filled with a
-        <strong>linear gradient</strong> — authored straight from the HTML subset
-        (<code>border-radius</code>, <code>box-shadow</code>, <code>background: linear-gradient(…)</code>)
-        or set on the IR as <code>borderRadius</code> / <code>boxShadow</code> / <code>backgroundImage</code>.
-        Everything stays vector: the rounding is a clipped bézier path, the gradient is painted as
-        blended strips, the shadow as stacked translucent silhouettes — no rasterisation.
-      </p>
-      <pre data-copy><code>&lt;!-- A rounded, gradient banner with a soft drop shadow. --&gt;
-&lt;div style="background: linear-gradient(to right, #1e3a8a, #38bdf8);
-            color: #fff; border-radius: 8px; box-shadow: 2px 3px 6px rgba(15,47,87,0.35);
-            padding: 10pt 12pt;"&gt;
-  Quarterly results are in.
-&lt;/div&gt;
-
-&lt;!-- A plain rounded callout (background fill only). --&gt;
-&lt;p style="background-color: #eef4ff; border-radius: 10px; padding: 9pt 11pt;"&gt;
-  A tinted, rounded note box.
-&lt;/p&gt;</code></pre>
-      <pre data-copy><code>// IR: the same decorations are ordinary box properties.
-{
-  type: 'paragraph',
-  content: 'Card',
-  backgroundColor: '#ffffff',
-  backgroundImage: { direction: 'to bottom', from: '#f8fafc', to: '#c7d2fe' },
-  borderRadius: 12,                               // number or [tl, tr, br, bl]
-  boxShadow: { offsetX: 2, offsetY: 3, blur: 6, color: '#0f2f57', opacity: 0.3 },
-}</code></pre>
-      <p>
-        A raster <code>&lt;img&gt;</code> is clipped to its rounded corners and can carry a shadow too.
-        These are the honest limits of the first pass:
-      </p>
-      <ul>
-        <li><strong>Fills round; borders do not.</strong> <code>border-radius</code> curves the
-        background box (and clips an image); a straight <code>border</code> line is never curved.</li>
-        <li><strong>Two-stop, cardinal gradients.</strong> Direction is <code>to top/right/bottom/left</code>
-        or an angle (e.g. <code>45deg</code>), snapped to the nearest of the four axes; only the first
-        and last colour are modelled. A wrapping box samples the ramp against its whole height, so the
-        gradient stays continuous across lines.</li>
-        <li><strong>Shadow is approximate.</strong> <code>blur</code> is faked with layered fills;
-        <code>inset</code> and a <code>spread</code> radius are ignored.</li>
-        <li><strong>Outer-edge rounding only.</strong> On a box that wraps to several lines, only the top
-        corners of the first line and the bottom corners of the last round; interior junctions stay square.</li>
-      </ul>
-      <p>
-        See it together in <a href="examples.html#ex-polish"><code>samples/box-polish.html</code></a>.
       </p>
     </section>
 

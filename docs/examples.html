@@ -861,7 +861,7 @@ const pdf = await renderToBuffer(report);</code></pre>
     </section>
 
     <section id="ex-links-rich">
-      <h2>Hyperlinks &amp; rich inline text</h2>
+      <h3>Hyperlinks &amp; rich inline text</h3>
       <p>Both features are fully declarative in HTML: links via <code>&lt;a href&gt;</code>, rich formatting via inline elements.</p>
       <pre data-copy><code>&lt;p&gt;
   Visit &lt;a href="https://example.com"&gt;our site&lt;/a&gt; or
@@ -875,7 +875,7 @@ const pdf = await renderToBuffer(report);</code></pre>
     </section>
 
     <section id="ex-watermark">
-      <h2>Page watermark</h2>
+      <h3>Page watermark</h3>
       <p>Add a rotated, translucent <em>non-selectable</em> watermark across every page in one line. Choose the paint layer with <code>layer</code>:</p>
       <pre data-copy><code>// IR — behind the body (default)
 const report = {
@@ -899,7 +899,7 @@ const html = `
     </section>
 
     <section id="ex-columns">
-      <h2>Multi-column layout</h2>
+      <h3>Multi-column layout</h3>
       <p>Distribute blocks across equal-width columns:</p>
       <pre data-copy><code>// IR
 {
@@ -922,7 +922,7 @@ const html = `&lt;div style="column-count:2; column-gap:14pt"&gt;
     </section>
 
     <section id="ex-gantt">
-      <h2>Gantt / timeline chart</h2>
+      <h3>Gantt / timeline chart</h3>
       <pre data-copy><code>// IR
 {
   type: 'chart',
@@ -944,7 +944,7 @@ const html = `&lt;div data-chart="gantt"
     </section>
 
     <section id="ex-streaming">
-      <h2>Streaming PDF output</h2>
+      <h3>Streaming PDF output</h3>
       <pre data-copy><code>import { renderToStream } from 'pdf-report-engine';
 
 // Express / Node HTTP response

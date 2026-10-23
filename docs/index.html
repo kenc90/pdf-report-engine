@@ -78,135 +78,38 @@
 
     <section id="features">
       <h2>Features</h2>
+
       <div class="grid">
         <div class="card">
-          <h4>Vector, selectable text</h4>
-          <p>Fonts embed as <code>/Type0</code> → <code>/CIDFontType2</code> composites with a
-          <code>/ToUnicode</code> CMap, so text extracts cleanly — including CJK.</p>
+          <h4>Authoring &amp; pagination</h4>
+          <p>Describe a report as data or simple markup and the engine lays it out, breaks lines
+          and paginates it — with repeating headers, group totals and page numbers, just like a
+          classic reporting tool.</p>
         </div>
         <div class="card">
-          <h4>Band pagination</h4>
-          <p>Jasper-style bands: <code>title</code>, <code>pageHeader</code>, <code>detail</code>,
-          <code>groupHeader/Footer</code>, <code>pageFooter</code>, <code>summary</code>, plus a
-          translucent <code>background</code> band for letterheads and watermarks.</p>
+          <h4>Styling &amp; layout</h4>
+          <p>A familiar CSS look: real selectors and a modern box model, including rounded corners,
+          soft shadows and gradient fills — all still crisp vector output.</p>
         </div>
         <div class="card">
-          <h4>Repeated headers &amp; groups</h4>
-          <p>Table column headers repeat on every page; groups carry subtotal footers, and
-          <code>keepWithNext</code> / <code>break-inside: avoid</code> hold blocks together.</p>
+          <h4>Tables &amp; conditional formatting</h4>
+          <p>Rich, report-grade tables that merge cells, hold images or charts inside a cell, and
+          recolour rows and cells based on their values.</p>
         </div>
         <div class="card">
-          <h4>Running tokens</h4>
-          <p><code>{PAGE}</code> / <code>{TOTAL}</code> resolved per page
-          inside bands.</p>
+          <h4>Charts &amp; vector graphics</h4>
+          <p>A full range of charts plus scalable graphics, images and barcodes — everything drawn
+          as real vector geometry, sharp at any zoom.</p>
         </div>
         <div class="card">
-          <h4>Two authoring modes</h4>
-          <p>Hand-build the <code>ReportDoc</code> IR in JS, or feed an HTML subset through
-          <code>htmlToReportDoc()</code>.</p>
+          <h4>Navigation &amp; branding</h4>
+          <p>Long documents stay easy to move through with bookmarks, a table of contents and
+          clickable links, and you can stamp a watermark across every page.</p>
         </div>
         <div class="card">
-          <h4>Vector charts</h4>
-          <p>Bar, line, area, pie, donut, <strong>combo</strong>, <strong>waterfall</strong>,
-          <strong>scatter / bubble</strong>, <strong>radar</strong>, <strong>gauge</strong> and
-          <strong>heatmap</strong> — stacked series, 100% stacking, a secondary axis, horizontal
-          reference / threshold lines, high–low range bars, legends, value axes and number formats,
-          authored as IR blocks or declarative <code>data-chart</code> elements.</p>
-        </div>
-        <div class="card">
-          <h4>SVG vector images</h4>
-          <p>Inline <code>&lt;svg&gt;</code>, <code>.svg</code> files, <code>data:image/svg+xml</code>
-          and remote SVG URLs render as real PDF paths — <code>path</code>/<code>rect</code>/
-          <code>circle</code>/<code>ellipse</code>/<code>polyline</code>/<code>polygon</code>, nested
-          <code>&lt;g&gt;</code> transforms and <code>fill-rule="evenodd"</code> holes included.</p>
-        </div>
-        <div class="card">
-          <h4>Flexbox layout</h4>
-          <p>A <code>display: flex</code> container lays any blocks along a row or column with
-          <code>flex-direction</code>, <code>flex-wrap</code>, <code>justify-content</code>,
-          <code>align-items</code>/<code>align-self</code>, <code>gap</code> and per-item
-          <code>flex-grow</code>/<code>-shrink</code>/<code>-basis</code> — one atomic fragment.</p>
-        </div>
-        <div class="card">
-          <h4>Bookmarks, TOC &amp; links</h4>
-          <p>Headings build a nested PDF outline; a <code>toc</code> block adds dot leaders with
-          real page numbers, and text links to URLs or <code>#anchors</code>.</p>
-        </div>
-        <div class="card">
-          <h4>QR &amp; barcodes</h4>
-          <p><code>qr</code>, <code>code128</code> and <code>ean13</code> blocks encode literal
-          values or bound data — vector modules, quiet zones and optional human-readable text.</p>
-        </div>
-        <div class="card">
-          <h4>Stylesheets &amp; highlights</h4>
-          <p>A real <code>&lt;style&gt;</code> subset: tag, class, id and compound selectors with
-          CSS specificity, descendant/child combinators, plus <code>&lt;mark&gt;</code> run
-          highlights.</p>
-        </div>
-        <div class="card">
-          <h4>Merged cells</h4>
-          <p>Horizontal <code>colSpan</code> and vertical <code>rowSpan</code> merges, including
-          combinations in one grid.</p>
-        </div>
-        <div class="card">
-          <h4>Diagonal corner header</h4>
-          <p>A two-way (cross-tab) table's corner cell splits by a diagonal slash, one axis
-          label in each triangle — <code>data-diagonal</code> / <code>CellNode.diagonal</code>.</p>
-        </div>
-        <div class="card">
-          <h4>Rich table cells</h4>
-          <p>Any cell can hold a block stack — images, QR/barcodes, charts, nested tables — laid
-          out inside its padded box. Rows grow to fit and stay atomic across pages.</p>
-        </div>
-        <div class="card">
-          <h4>Conditional formatting</h4>
-          <p><code>visible</code>, <code>styleWhen</code> rules and <code>colorScale</code>
-          heatmaps on blocks, rows and cells — with per-column auto ranges and white text on dark
-          fills.</p>
-        </div>
-        <div class="card">
-          <h4>Images — offline &amp; online</h4>
-          <p>Local paths, <code>data:</code> URIs, raw bytes, and <code>http(s)</code> URLs —
-          with aspect-ratio sizing, alignment and borders.</p>
-        </div>
-        <div class="card">
-          <h4>Sandboxed expressions</h4>
-          <p>Data bindings evaluate inside a <code>Proxy</code>-whitelisted scope — no raw
-          <code>eval</code> of globals.</p>
-        </div>
-        <div class="card">
-          <h4>Measure == render</h4>
-          <p>Text widths are measured through the exact code path pdfkit paints with, so wrapped
-          lines never overflow their box.</p>
-        </div>
-        <div class="card">
-          <h4>Page watermarks</h4>
-          <p>Declarative <code>watermark</code> field on <code>ReportDoc</code> or <code>&lt;meta name="watermark"&gt;</code> renders a rotated, translucent vector-outline stamp on every page — non-selectable, and layerable behind or on top of the body via <code>layer: 'background' | 'foreground'</code>.</p>
-        </div>
-        <div class="card">
-          <h4>Multi-column layout</h4>
-          <p>CSS <code>column-count</code> or <code>data-columns</code> distributes blocks into N equal-width columns with optional vertical rules between them.</p>
-        </div>
-        <div class="card">
-          <h4>Gantt / timeline chart</h4>
-          <p>A <code>data-chart="gantt"</code> element draws a project timeline: task bars, progress overlays, dependency arrows, and time-axis ticks.</p>
-        </div>
-        <div class="card">
-          <h4>Streaming output</h4>
-          <p><code>renderToStream()</code> returns a <code>ReadableStream&lt;Uint8Array&gt;</code> with incremental page flushing — ideal for HTTP response streaming.</p>
-        </div>
-        <div class="card">
-          <h4>CSS box polish</h4>
-          <p>Background boxes accept <code>border-radius</code>, <code>box-shadow</code> and a two-stop
-          <code>linear-gradient()</code> fill — from the HTML subset or as <code>borderRadius</code> /
-          <code>boxShadow</code> / <code>backgroundImage</code> on the IR. Rounded, gradient-filled and
-          shadowed callouts, banners and raster <code>&lt;img&gt;</code> — all still pure vector.</p>
-        </div>
-        <div class="card">
-          <h4>Encryption &amp; permissions</h4>
-          <p>A declarative <code>encrypt</code> field on <code>ReportDoc</code> writes a
-          password-protected PDF via pdfkit's standard security handler, with per-capability
-          <code>permissions</code> (printing, copying, modifying, filling forms…).</p>
+          <h4>Output &amp; security</h4>
+          <p>Get the finished PDF as a buffer or a stream, and add passwords and usage permissions
+          when a report needs to be protected.</p>
         </div>
       </div>
       <p class="note" style="margin-top:16px">
