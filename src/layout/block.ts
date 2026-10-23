@@ -25,8 +25,8 @@ import { probeImageSize, pxToPt } from '../core/image.js';
 import { resolveContent, type LayoutContext } from './context.js';
 import { typeset, type Line } from '../text/typeset.js';
 import type { ResolvedStyle } from '../text/style.js';
-import { resolveBox, resolveBorders, borderRGB, borderDash, type EdgeInsets } from './box.js';
-import type { Fragment, DrawCommand, OutlineEntry } from './flow.js';
+import { resolveBox, resolveBorders, resolveRadius, resolveShadow, resolveGradient, borderRGB, borderDash, type EdgeInsets } from './box.js';
+import type { Fragment, DrawCommand, OutlineEntry, Radius, ResolvedGradient, ResolvedShadow } from './flow.js';
 import { applyConditions, isVisible } from './condition.js';
 // `block <-> table` is a genuine cycle (a table lays out cell paragraphs via this
 // module, and this module dispatches table blocks to the table layout). Both sides
@@ -168,6 +168,9 @@ export function layoutParagraphCore(
     keepWithNext: box.keepWithNext,
     fill: style.backgroundColor,
     fillOffsetLeft: margin.left,
+    radius: resolveRadius(box),
+    gradient: resolveGradient(box),
+    shadow: resolveShadow(box),
   });
   // Reconstruct the rendered title from the typeset lines: bindings have been
   // evaluated and `text-transform` applied, so bookmarks match what the page shows.
@@ -195,6 +198,12 @@ export interface FragParams {
   fillOffsetLeft: number;
   /** Optional per-line x shift already applied to run.x (used by table cells). */
   borderMode?: 'block' | 'cell';
+  /** Corner rounding for the background box (CSS order). Applied to outer edges only. */
+  radius?: Radius;
+  /** Two-stop gradient painted instead of the flat `fill`. */
+  gradient?: Omit<ResolvedGradient, 'boxTop' | 'boxHeight'>;
+  /** Drop shadow drawn behind the background box. */
+  shadow?: ResolvedShadow;
 }
 
 /** Convert typeset lines into per-line fragments with backgrounds and borders baked in. */
@@ -204,13 +213,39 @@ export function fragmentsFromLines(lines: Line[], p: FragParams): Fragment[] {
   const first = 0;
   const last = lines.length - 1;
   const frags: Fragment[] = [];
+  // The background box is painted as one `fillRect` per line (so it can split
+  // across pages); the gradient and corner rounding need the *whole* box's
+  // height and each slice's offset to stay continuous across the stack.
+  const boxHeight = lines.reduce((sum, l) => sum + l.height, 0);
+  let boxTop = 0;
 
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i]!;
     const commands: DrawCommand[] = [];
     const height = line.height;
 
-    if (p.fill) commands.push({ op: 'fillRect', x: boxX, y: 0, w: boxW, h: height, color: toRGB(p.fill) });
+    if (p.fill !== undefined || p.gradient) {
+      const cmd: DrawCommand = {
+        op: 'fillRect',
+        x: boxX,
+        y: 0,
+        w: boxW,
+        h: height,
+        color: p.fill !== undefined ? toRGB(p.fill) : [0, 0, 0],
+      };
+      if (p.radius) cmd.radius = outerCorners(p.radius, i === first, i === last);
+      if (p.gradient) cmd.gradient = { ...p.gradient, boxTop, boxHeight };
+      // Draw the drop shadow exactly once, as the whole box's silhouette, on the
+      // first line's rect. Painting it per line would stack the blurred layers of
+      // adjacent lines and band the side shadows. The later lines' fills land on
+      // top of it, so only the soft outer halo stays visible.
+      if (p.shadow && i === first) {
+        cmd.shadow = p.shadow;
+        cmd.shadowH = boxHeight;
+        if (p.radius) cmd.shadowRadius = p.radius;
+      }
+      commands.push(cmd);
+    }
 
     const textX = boxX + p.padding.left;
     commands.push({
@@ -233,8 +268,19 @@ export function fragmentsFromLines(lines: Line[], p: FragParams): Fragment[] {
       breakAfter: i === last ? p.breakAfter : undefined,
       keepWithNext: i === last ? p.keepWithNext : false,
     });
+    boxTop += height;
   }
   return frags;
+}
+
+/**
+ * Keep only the corners that touch the box's outer edge: top corners round on
+ * the first line, bottom corners on the last, all four when the box is a single
+ * line. The straight left/right edges make interior rounding invisible anyway.
+ */
+function outerCorners(radius: Radius, isFirst: boolean, isLast: boolean): Radius {
+  const [tl, tr, br, bl] = radius;
+  return [isFirst ? tl : 0, isFirst ? tr : 0, isLast ? br : 0, isLast ? bl : 0];
 }
 
 function drawBorders(
@@ -306,7 +352,12 @@ function layoutImage(block: ImageBlock, _ctx: LayoutContext, opts: BlockLayoutOp
   const align = block.align ?? inherited.align ?? 'left';
   const x = margin.left + (align === 'center' ? (contentW - w) / 2 : align === 'right' ? contentW - w : 0);
 
-  const commands: DrawCommand[] = [{ op: 'image', x, y: 0, w, h, src: block.src }];
+  const radius = resolveRadius(block);
+  const shadow = resolveShadow(block);
+  const imgCmd: DrawCommand = { op: 'image', x, y: 0, w, h, src: block.src };
+  if (radius) (imgCmd as Extract<DrawCommand, { op: 'image' }>).radius = radius;
+  if (shadow) (imgCmd as Extract<DrawCommand, { op: 'image' }>).shadow = shadow;
+  const commands: DrawCommand[] = [imgCmd];
   const borders = resolveBorders(block);
   if (borders.top || borders.bottom || borders.left || borders.right) {
     drawBorders(commands, borders, x, 0, w, h, true, true, false);

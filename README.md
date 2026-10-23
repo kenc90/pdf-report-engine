@@ -72,6 +72,17 @@ glyph embedding all happen in-process via [`pdfkit`](https://pdfkit.org) +
   orientation and margins; a JS-provided `page` option still wins.
 - **Measurement == rendering oracle** — text widths are measured through the exact code
   path pdfkit paints with, so wrapped lines never overflow their box.
+- **PDF encryption & permissions** — set `encrypt: { userPassword, ownerPassword,
+  permissions }` on `ReportDoc` to write a password-protected PDF and restrict printing,
+  copying, modifying, annotating, form-filling, content accessibility or document
+  assembly. Omit it (or supply no password) and the output stays unencrypted, exactly as before.
+- **CSS box polish** — `border-radius`, `box-shadow` and a two-stop `linear-gradient(
+  …)` background round, shade and fill any background box (paragraphs, headings, list
+  items) and round/shade raster `<img>` images. Rounded backgrounds, gradient callouts
+  and soft shadows author straight from HTML or the IR. Note: a straight `border` line is
+  never curved (only the fill rounds), gradient direction snaps to the four cardinal axes,
+  shadow `blur` is approximated and `inset` shadows / `spread` are ignored, and rounded
+  corners apply to the box's outer edge only.
 
 ## Requirements
 

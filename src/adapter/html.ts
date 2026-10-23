@@ -48,6 +48,8 @@ import type {
   ColumnBlock,
   WatermarkSpec,
   GanttTask,
+  BoxShadow,
+  LinearGradient,
 } from '../ir/schema.js';
 
 // --- tiny, forgiving HTML tokenizer/parser ---------------------------------
@@ -231,8 +233,33 @@ function applyDecl(prop: string, value: string, set: (k: string, v: unknown) => 
       set('color', value);
       return;
     case 'background-color':
+      set('backgroundColor', value.trim());
+      return;
     case 'background':
-      set('backgroundColor', value.split(/\s+/)[0]);
+      // `background: linear-gradient(...)` sets a gradient; any other background
+      // keeps the old behaviour of taking the leading colour token.
+      if (/(?:-\w+-)?linear-gradient\(/i.test(value)) {
+        const g = parseLinearGradient(value);
+        if (g) set('backgroundImage', g);
+        else set('backgroundColor', value.split(/\s+/)[0]);
+      } else {
+        set('backgroundColor', value.split(/\s+/)[0]);
+      }
+      return;
+    case 'background-image':
+      {
+        const g = parseLinearGradient(value);
+        if (g) set('backgroundImage', g);
+      }
+      return;
+    case 'border-radius':
+      set('borderRadius', parseBorderRadius(value));
+      return;
+    case 'box-shadow':
+      {
+        const sh = parseBoxShadow(value);
+        if (sh) set('boxShadow', sh);
+      }
       return;
     case 'text-align':
       if (ALIGN[value]) set('align', ALIGN[value]);
@@ -436,6 +463,92 @@ function parseBorderShorthand(value: string): BorderShorthand | undefined {
     else color = p;
   }
   return [width, style, color];
+}
+
+// --- border-radius / box-shadow / linear-gradient --------------------------
+
+/** Split on a separator only outside parentheses, so `rgba(1, 2, 3, .5)` survives. */
+function splitOutsideParens(value: string, sep: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let cur = '';
+  for (const ch of value) {
+    if (ch === '(') depth += 1;
+    else if (ch === ')') depth -= 1;
+    if (ch === sep && depth === 0) {
+      out.push(cur);
+      cur = '';
+    } else cur += ch;
+  }
+  out.push(cur);
+  return out.map((s) => s.trim()).filter(Boolean);
+}
+
+/**
+ * `border-radius: 8px` / `0 12px` / `4px 8px 12px 16px` (CSS order top-left,
+ * top-right, bottom-right, bottom-left). Elliptical `h / v` syntax keeps the
+ * horizontal radii. Output is a resolved `[tl, tr, br, bl]` tuple in points.
+ */
+function parseBorderRadius(value: string): [number, number, number, number] | undefined {
+  const horiz = value.split('/')[0]!.trim();
+  if (!horiz || horiz === '0' || horiz.toLowerCase() === 'none') return undefined;
+  const parts = splitOutsideParens(horiz, ' ');
+  const nums = parts.map((p) => Math.max(0, toPt(p, 0)));
+  const [a = 0, b = a, c = a, d = b] = nums;
+  // CSS 1/2/3/4-value shorthand -> [top-left, top-right, bottom-right, bottom-left].
+  if (nums.length === 1) return [a, a, a, a];
+  if (nums.length === 2) return [a, b, a, b];
+  if (nums.length === 3) return [a, b, c, b];
+  return [a, b, c, d];
+}
+
+/**
+ * `box-shadow: 2px 3px 6px rgba(0,0,0,.4)` (single shadow, outer only). Order:
+ * up to four lengths (offsetX, offsetY, blur, spread) then a colour; the colour
+ * may also lead. `inset` is recorded so layout can drop it. `spread` is parsed
+ * but not modelled. Multiple comma-separated shadows take the first.
+ */
+function parseBoxShadow(value: string): BoxShadow | undefined {
+  const first = splitOutsideParens(value, ',')[0];
+  if (!first || first.toLowerCase() === 'none') return undefined;
+  const tokens = splitOutsideParens(first, ' ');
+  const sh: BoxShadow = {};
+  const lengths: number[] = [];
+  const colorParts: string[] = [];
+  for (const t of tokens) {
+    if (/^inset$/i.test(t)) sh.inset = true;
+    else if (/^-?(?:\d+\.?\d*|\.\d+)(pt|px|em|rem|cm|mm|in|%)?$/i.test(t)) lengths.push(toPt(t, 0));
+    else colorParts.push(t);
+  }
+  if (lengths.length < 2) return undefined;
+  sh.offsetX = lengths[0];
+  sh.offsetY = lengths[1];
+  if (lengths.length >= 3) sh.blur = lengths[2];
+  // lengths[3] would be `spread` — parsed above but intentionally not applied.
+  if (colorParts.length) sh.color = colorParts.join(' ');
+  return sh;
+}
+
+/**
+ * `linear-gradient([direction,] colorA, colorB)` -> a two-stop
+ * {@link LinearGradient}. Extra stops beyond the first two are ignored (the
+ * spec keeps `colorA`/`colorB`); vendor-prefixed names are accepted.
+ */
+function parseLinearGradient(value: string): LinearGradient | undefined {
+  const m = /(?:-[a-z]+-)?linear-gradient\((.*)\)/i.exec(value.trim());
+  if (!m) return undefined;
+  const args = splitOutsideParens(m[1]!, ',');
+  if (args.length < 2) return undefined;
+  let direction: string | undefined;
+  const isDirection = (s: string): boolean =>
+    /^(to\s+(?:top|bottom|left|right)(?:\s+(?:top|bottom|left|right))?|-?\d+(?:\.\d+)?deg)$/i.test(s.replace(/\s+/g, ' ').trim());
+  if (isDirection(args[0]!)) {
+    direction = args.shift()!.replace(/\s+/g, ' ').trim();
+  }
+  const from = args[0];
+  const to = args[args.length - 1];
+  if (!from || !to) return undefined;
+  return { direction, from, to };
 }
 
 // --- stylesheet cascade ----------------------------------------------------

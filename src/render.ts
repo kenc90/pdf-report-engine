@@ -16,7 +16,7 @@ import { paginate, type Page } from './pagination/engine.js';
 import { writePage } from './writer/pdfkit-writer.js';
 import { resolveRemoteImages, type ImageResolveOptions } from './core/remote-image.js';
 import { resolveRemoteFonts, type FontResolveOptions } from './fonts/remote.js';
-import type { ReportDoc, StyleProps } from './ir/schema.js';
+import type { ReportDoc, StyleProps, EncryptionSpec } from './ir/schema.js';
 import type { ResolvedStyle } from './text/style.js';
 import type { ExprContext } from './expr/eval.js';
 
@@ -74,6 +74,7 @@ export function createReport(report: ReportDoc, options: RenderOptions = {}): Re
     autoFirstPage: false,
     bufferPages: options.bufferPages ?? true,
     info: toPdfInfo(report),
+    ...toPdfSecurity(report.encrypt),
   });
 
   const registry = new FontRegistry();
@@ -223,6 +224,29 @@ function toPdfInfo(report: ReportDoc): Record<string, string> {
   if (info.keywords) out.Keywords = info.keywords;
   if (info.creator) out.Creater = info.creator;
   if (info.producer) out.Producer = info.producer;
+  return out;
+}
+
+/**
+ * Translate a {@link EncryptionSpec} into pdfkit's document options. Returns an
+ * empty object when encryption is not requested, so an unencrypted document is
+ * byte-identical to before this feature. pdfkit only installs the security
+ * handler when at least one password is present; a permissions-only spec (no
+ * password) is therefore ignored rather than silently dropping restrictions.
+ */
+function toPdfSecurity(
+  enc: EncryptionSpec | undefined,
+): { userPassword?: string; ownerPassword?: string; permissions?: Record<string, unknown> } {
+  if (!enc) return {};
+  const hasUser = typeof enc.userPassword === 'string' && enc.userPassword.length > 0;
+  const hasOwner = typeof enc.ownerPassword === 'string' && enc.ownerPassword.length > 0;
+  if (!hasUser && !hasOwner) return {};
+  const out: { userPassword?: string; ownerPassword?: string; permissions?: Record<string, unknown> } = {};
+  if (hasUser) out.userPassword = enc.userPassword;
+  if (hasOwner) out.ownerPassword = enc.ownerPassword;
+  // Without an owner password pdfkit still enforces `permissions` for openers,
+  // so forward them whenever any password is set.
+  if (enc.permissions) out.permissions = { ...enc.permissions };
   return out;
 }
 

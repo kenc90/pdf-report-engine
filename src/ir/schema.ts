@@ -7,6 +7,7 @@
  * Geometry: all lengths are `Length` (number = pt, or a string with unit).
  */
 import type { PageSpec } from '../core/page.js';
+import type { Length } from '../core/units.js';
 import type { ColorInput } from '../core/color.js';
 
 /** Expression language marker. See `expr/eval.ts` for the supported grammar. */
@@ -82,6 +83,44 @@ export interface BoxProps extends StyleProps {
   breakInside?: 'auto' | 'avoid';
   /** Glue this block to the next one, so a heading never ends a page alone. */
   keepWithNext?: boolean;
+  /**
+   * Corner rounding for the block's *background* fill (CSS `border-radius`).
+   * A single length rounds every corner; a 2–4 tuple is CSS shorthand order
+   * (`[top-left, top-right, bottom-right, bottom-left]`). Only the fill is
+   * rounded — a straight `border`/`borderX` line is never curved.
+   */
+  borderRadius?: Length | [Length, Length] | [Length, Length, Length, Length];
+  /**
+   * A drop shadow drawn behind the block's background box. `inset` shadows and
+   * the `spread` radius are not modelled, so an `inset` shadow is ignored.
+   */
+  boxShadow?: BoxShadow;
+  /**
+   * A two-stop linear gradient painted *instead of* `backgroundColor` on the
+   * block's background box. Direction defaults to `'to bottom'`.
+   */
+  backgroundImage?: LinearGradient;
+}
+
+/** A CSS-like outer drop shadow. All lengths are `Length` (number = pt). */
+export interface BoxShadow {
+  offsetX?: Length;
+  offsetY?: Length;
+  /** Softening radius in points (approximated by layered fills). Default 0. */
+  blur?: Length;
+  color?: ColorInput;
+  /** Shadow opacity 0..1 (default 0.28). Ignored when the colour carries alpha. */
+  opacity?: number;
+  /** `inset` shadows are not modelled; an inset shadow is dropped. */
+  inset?: boolean;
+}
+
+/** A two-stop linear gradient fill for a background box. */
+export interface LinearGradient {
+  /** `'to top' | 'to bottom' | 'to left' | 'to right'` or an angle such as `'90deg'`. Default `'to bottom'`. */
+  direction?: string;
+  from: ColorInput;
+  to: ColorInput;
 }
 
 export type BorderStyle = 'solid' | 'dashed' | 'dotted' | 'double' | 'none';
@@ -692,6 +731,35 @@ export interface WatermarkSpec {
   layer?: 'background' | 'foreground';
 }
 
+/**
+ * Content-copying / usage flags for an encrypted document. Each `true` grants
+ * the capability; omitted flags follow pdfkit's defaults (all permitted). The
+ * user (open) password still gates whether the document can be opened at all.
+ */
+export interface PdfPermissions {
+  printing?: boolean;
+  modifying?: boolean;
+  copying?: boolean;
+  annotating?: boolean;
+  fillingForms?: boolean;
+  contentAccessibility?: boolean;
+  documentAssembly?: boolean;
+}
+
+/**
+ * Standard security handler encryption (RC4 128-bit, via pdfkit).
+ *  - `userPassword`: required to *open* the document (empty = anyone opens, but
+ *    the `permissions` still restrict usage when an `ownerPassword` is set).
+ *  - `ownerPassword`: required to change permissions / decryption; when omitted
+ *    pdfkit generates one so permissions are still enforced for openers.
+ * At least one password must be present or the document is left unencrypted.
+ */
+export interface EncryptionSpec {
+  userPassword?: string;
+  ownerPassword?: string;
+  permissions?: PdfPermissions;
+}
+
 export interface ReportDoc {
   /** Optional free-form metadata; `title`/`author`/`subject`/`keywords` become PDF info. */
   info?: {
@@ -719,6 +787,11 @@ export interface ReportDoc {
   outline?: boolean;
   /** Page watermark drawn as rotated, semi-transparent vector outlines (non-selectable). */
   watermark?: WatermarkSpec;
+  /**
+   * Encrypt the document and set usage permissions. Omitted (or with no
+   * password) the PDF is written unencrypted, exactly as before.
+   */
+  encrypt?: EncryptionSpec;
 }
 
 /** Row descriptor after data expansion: either a concrete row or a band marker. */

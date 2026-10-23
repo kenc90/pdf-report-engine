@@ -62,6 +62,10 @@ export type {
   Expr,
   FontReference,
   WatermarkSpec,
+  EncryptionSpec,
+  PdfPermissions,
+  BoxShadow,
+  LinearGradient,
 } from './ir/schema.js';
 
 export { resolvePage, type ResolvedPage, type PageSpec } from './core/page.js';

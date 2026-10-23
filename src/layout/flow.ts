@@ -16,9 +16,52 @@ export type DashPattern = number[];
 /** A point in fragment-local space, used by `poly`. */
 export type PolyPoint = [number, number];
 
+/** Corner radii in points, in CSS order `[top-left, top-right, bottom-right, bottom-left]`. */
+export type Radius = [number, number, number, number];
+
+/**
+ * A two-stop linear gradient resolved to paint colours. `boxTop` / `boxHeight`
+ * describe where this rectangle sits inside the *logical* gradient box, so a
+ * box whose background is emitted as several stacked line-fragments still
+ * samples one continuous ramp rather than a per-fragment ramp.
+ */
+export interface ResolvedGradient {
+  from: RGB;
+  to: RGB;
+  dir: 'top' | 'bottom' | 'left' | 'right';
+  /** This rect's top offset within the logical box (points). */
+  boxTop: number;
+  /** Total logical box height the vertical ramp spans (points). */
+  boxHeight: number;
+}
+
+/** A drop shadow resolved to absolute points / colour, drawn behind a fill. */
+export interface ResolvedShadow {
+  dx: number;
+  dy: number;
+  blur: number;
+  color: RGB;
+  opacity: number;
+}
+
 export type DrawCommand =
-  | { op: 'fillRect'; x: number; y: number; w: number; h: number; color: RGB; opacity?: number }
-  | { op: 'strokeRect'; x: number; y: number; w: number; h: number; color: RGB; lineWidth: number; dash?: DashPattern }
+  | {
+      op: 'fillRect';
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+      color: RGB;
+      opacity?: number;
+      radius?: Radius;
+      gradient?: ResolvedGradient;
+      shadow?: ResolvedShadow;
+      /** When set, the shadow is drawn for a box this tall (the full logical box), not the fill's own `h`. */
+      shadowH?: number;
+      /** Full corner radius for the shadow silhouette (all four corners), independent of the per-line `radius`. */
+      shadowRadius?: Radius;
+    }
+  | { op: 'strokeRect'; x: number; y: number; w: number; h: number; color: RGB; lineWidth: number; dash?: DashPattern; radius?: Radius }
   | { op: 'line'; x1: number; y1: number; x2: number; y2: number; color: RGB; lineWidth: number; dash?: DashPattern }
   | {
       op: 'poly';
@@ -51,7 +94,7 @@ export type DrawCommand =
     }
   | { op: 'text'; x: number; baselineY: number; runs: PositionedRun[]; gapWidth: number; decorations: Decoration[] }
   | { op: 'underline'; x1: number; y1: number; x2: number; color: RGB; lineWidth: number; lineThrough?: boolean }
-  | { op: 'image'; x: number; y: number; w: number; h: number; src: string | Uint8Array };
+  | { op: 'image'; x: number; y: number; w: number; h: number; src: string | Uint8Array; radius?: Radius; shadow?: ResolvedShadow };
 
 /** A heading that becomes a PDF bookmark and a table-of-contents entry. */
 export interface OutlineEntry {

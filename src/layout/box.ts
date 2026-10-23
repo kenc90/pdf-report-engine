@@ -2,10 +2,10 @@
  * Box model helpers shared by every block: margin/padding resolution and border
  * shorthand normalisation. Kept tiny and pure so layout stays deterministic.
  */
-import { toPt, expandBox } from '../core/units.js';
+import { toPt, expandBox, type Length } from '../core/units.js';
 import { toRGB, type RGB, type ColorInput } from '../core/color.js';
-import type { BoxProps, BorderShorthand, BorderStyle, ResolvedBorder } from '../ir/schema.js';
-import type { DashPattern } from './flow.js';
+import type { BoxProps, BorderShorthand, BorderStyle, ResolvedBorder, BoxShadow, LinearGradient } from '../ir/schema.js';
+import type { DashPattern, Radius, ResolvedGradient, ResolvedShadow } from './flow.js';
 
 export interface EdgeInsets {
   top: number;
@@ -93,4 +93,62 @@ export function borderRGB(b: ResolvedBorder): RGB {
 
 export function borderDash(b: ResolvedBorder): DashPattern | undefined {
   return DASH[b.style];
+}
+
+/**
+ * Resolve `border-radius` into a `[top-left, top-right, bottom-right, bottom-left]`
+ * tuple in points. Returns `undefined` when no radius is declared. Negative
+ * corners clamp to 0; the writer additionally clamps each radius to half the
+ * shorter edge, so an over-large value cannot self-overlap.
+ */
+export function resolveRadius(box: BoxProps): Radius | undefined {
+  if (box.borderRadius === undefined) return undefined;
+  const e = expandBox<Length>(box.borderRadius as Length | [Length, Length] | [Length, Length, Length, Length], 0);
+  const c = (v: Length): number => Math.max(0, toPt(v, 0));
+  return [c(e.top), c(e.right), c(e.bottom), c(e.left)];
+}
+
+/**
+ * Resolve a `backgroundImage` two-stop gradient to paint colours plus a snapped
+ * cardinal direction. `boxTop`/`boxHeight` are filled in by the emitter, which
+ * knows the logical box the (possibly multi-line) background spans.
+ */
+export function resolveGradient(box: BoxProps): Omit<ResolvedGradient, 'boxTop' | 'boxHeight'> | undefined {
+  const g: LinearGradient | undefined = box.backgroundImage;
+  if (!g) return undefined;
+  return { from: toRGB(g.from), to: toRGB(g.to), dir: gradientDir(g.direction) };
+}
+
+function gradientDir(dir: string | undefined): ResolvedGradient['dir'] {
+  const d = (dir ?? 'to bottom').trim().toLowerCase();
+  const angle = /^(-?(?:\d+\.?\d*|\.\d+))deg$/.exec(d);
+  if (angle) {
+    // CSS: 0deg points up, increasing clockwise. Snap to the nearest cardinal.
+    const deg = ((parseFloat(angle[1]!) % 360) + 360) % 360;
+    const cardinals: ResolvedGradient['dir'][] = ['top', 'right', 'bottom', 'left'];
+    return cardinals[Math.round(deg / 90) % 4]!;
+  }
+  // Keyword / corner form (e.g. `to bottom right`): the vertical side wins over
+  // the horizontal one, so a corner snaps to a cardinal axis rather than erroring.
+  if (d.includes('top')) return 'top';
+  if (d.includes('bottom')) return 'bottom';
+  if (d.includes('left')) return 'left';
+  if (d.includes('right')) return 'right';
+  return 'bottom';
+}
+
+/**
+ * Resolve a `boxShadow` to absolute points and colour. Inset shadows are not
+ * modelled and return `undefined`; the blur is clamped non-negative.
+ */
+export function resolveShadow(box: BoxProps): ResolvedShadow | undefined {
+  const s: BoxShadow | undefined = box.boxShadow;
+  if (!s || s.inset) return undefined;
+  return {
+    dx: toPt(s.offsetX ?? 0, 0),
+    dy: toPt(s.offsetY ?? 0, 0),
+    blur: Math.max(0, toPt(s.blur ?? 0, 0)),
+    color: s.color !== undefined ? toRGB(s.color) : [0, 0, 0],
+    opacity: s.opacity ?? 0.28,
+  };
 }

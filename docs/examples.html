@@ -88,6 +88,35 @@ node examples/05-images.mjs</code></pre>
       </p>
     </section>
 
+    <section id="ex-polish">
+      <h3>CSS box polish: <code>samples/box-polish.html</code></h3>
+      <p>
+        A focused sample for <code>border-radius</code>, <code>box-shadow</code> and two-stop
+        <code>linear-gradient()</code> fills — rounded callouts, gradient banners, a soft-shadowed
+        card, a rounded-plus-gradient-plus-shadow hero box, and a raster <code>&lt;img&gt;</code>
+        clipped to rounded corners. Everything renders as vector geometry (clipped béziers, blended
+        strips, layered silhouettes), no rasterisation.
+      </p>
+      <pre data-copy><code>npm run html:pdf -- samples/box-polish.html -o output/</code></pre>
+      <p>See <a href="getting-started.html#box-polish">Getting started → CSS box polish</a> for the
+      IR form and the full list of limitations.</p>
+    </section>
+
+    <section id="ex-encrypt">
+      <h3>Password-protect a report</h3>
+      <p>Add <code>encrypt</code> to any <code>ReportDoc</code> to write a protected PDF. The output
+      is unencrypted (unchanged bytes) unless you set at least one password.</p>
+      <pre data-copy><code>const pdf = await renderToBuffer({
+  info: { title: 'Payroll' },
+  encrypt: {
+    userPassword: 'open-me',
+    ownerPassword: 'change-me',
+    permissions: { printing: true, copying: false, modifying: false },
+  },
+  body: [ /* … */ ],
+});</code></pre>
+    </section>
+
     <section id="ex-stream">
       <h3>Streaming with <code>createReport</code></h3>
       <p>The lower-level, synchronous entry returns the pdfkit <code>doc</code> and the paginated

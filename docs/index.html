@@ -195,6 +195,19 @@
           <h4>Streaming output</h4>
           <p><code>renderToStream()</code> returns a <code>ReadableStream&lt;Uint8Array&gt;</code> with incremental page flushing — ideal for HTTP response streaming.</p>
         </div>
+        <div class="card">
+          <h4>CSS box polish</h4>
+          <p>Background boxes accept <code>border-radius</code>, <code>box-shadow</code> and a two-stop
+          <code>linear-gradient()</code> fill — from the HTML subset or as <code>borderRadius</code> /
+          <code>boxShadow</code> / <code>backgroundImage</code> on the IR. Rounded, gradient-filled and
+          shadowed callouts, banners and raster <code>&lt;img&gt;</code> — all still pure vector.</p>
+        </div>
+        <div class="card">
+          <h4>Encryption &amp; permissions</h4>
+          <p>A declarative <code>encrypt</code> field on <code>ReportDoc</code> writes a
+          password-protected PDF via pdfkit's standard security handler, with per-capability
+          <code>permissions</code> (printing, copying, modifying, filling forms…).</p>
+        </div>
       </div>
       <p class="note" style="margin-top:16px">
         See them together: <a href="examples.html#ex-tour"><code>samples/dashboard.html</code></a>
@@ -205,7 +218,8 @@
         <code>color-scale.html</code> and <code>chart-depth.html</code> (combo / 100% / waterfall);
         <code>svg-flex.html</code> shows inline <code>&lt;svg&gt;</code>, a <code>.svg</code>
         <code>&lt;img&gt;</code>, a <code>display: flex</code> row and the new
-        radar / gauge / heatmap / scatter chart kinds.
+        radar / gauge / heatmap / scatter chart kinds; and <a href="examples.html#ex-polish"><code>box-polish.html</code></a>
+        demonstrates rounded, gradient-filled and shadowed boxes.
       </p>
     </section>
 

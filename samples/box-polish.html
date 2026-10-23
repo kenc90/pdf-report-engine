@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Box Polish — border-radius, box-shadow, linear-gradient</title>
+    <style>
+      @page { size: a4; margin: 16mm 15mm; }
+      body { font-family: Arial, Helvetica, sans-serif; font-size: 10.5pt; color: #1f2937; }
+      h1 { color: #0f2f57; margin: 0 0 2pt; }
+      h2 { color: #0f2f57; font-size: 13pt; margin: 16pt 0 6pt; }
+      .lead { color: #64748b; margin: 0 0 10pt; }
+      .note { font-size: 8.5pt; color: #94a3b8; margin: 6pt 0 0; }
+
+      /* A rounded callout: radius rounds the *background fill* only. */
+      .callout {
+        background-color: #eef4ff;
+        border-radius: 10px;
+        padding: 9pt 11pt;
+        margin: 6pt 0;
+      }
+
+      /* A gradient banner painted straight onto a heading box (two stops, one axis). */
+      .banner {
+        background: linear-gradient(to right, #1e3a8a, #38bdf8);
+        color: #ffffff;
+        border-radius: 8px;
+        padding: 10pt 12pt;
+        margin: 6pt 0;
+      }
+
+      /* A vertical gradient — the ramp runs top-to-bottom across the whole box. */
+      .gradient-block {
+        background: linear-gradient(to bottom, #f8fafc, #c7d2fe);
+        border-radius: 12px;
+        padding: 11pt 13pt;
+        margin: 6pt 0;
+      }
+
+      /* A soft drop shadow behind a card. Blur is approximate; inset/spread are ignored. */
+      .card {
+        background-color: #ffffff;
+        box-shadow: 2px 3px 6px rgba(15, 47, 87, 0.35);
+        border-radius: 12px;
+        padding: 12pt 14pt;
+        margin: 10pt 0;
+      }
+
+      /* All three together: rounded, gradient-filled and shadowed. */
+      .hero-card {
+        background: linear-gradient(to bottom right, #0ea5e9, #6366f1);
+        box-shadow: 3px 5px 9px rgba(2, 6, 23, 0.35);
+        border-radius: 16px;
+        color: #ffffff;
+        padding: 14pt 16pt;
+        margin: 12pt 0;
+      }
+
+      /* A raster image clipped to rounded corners, with a shadow behind it. */
+      .logo {
+        width: 200px;
+        border-radius: 14px;
+        box-shadow: 2px 3px 7px rgba(2, 6, 23, 0.30);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>CSS box polish</h1>
+    <p class="lead">
+      Background boxes accept <code>border-radius</code>, <code>box-shadow</code> and a two-stop
+      <code>linear-gradient(…)</code> fill — authored straight from this HTML subset or as
+      <code>borderRadius</code> / <code>boxShadow</code> / <code>backgroundImage</code> on the IR.
+    </p>
+
+    <h2>1. Rounded background</h2>
+    <div class="callout">
+      A paragraph whose background fill has <code>border-radius: 10px</code>. The rounding applies to
+      the <em>fill</em>; a straight <code>border</code> line is never curved, and on a wrapped box only
+      the outer top and bottom edges round (interior line junctions stay square).
+    </div>
+
+    <h2>2. Gradient fills</h2>
+    <div class="banner">
+      A heading bar filled with <code>linear-gradient(to right, #1e3a8a, #38bdf8)</code> — the
+      gradient replaces the flat background colour.
+    </div>
+    <div class="gradient-block">
+      <code>linear-gradient(to bottom, #f8fafc, #c7d2fe)</code> runs top-to-bottom across the whole
+      box. Even though a wrapping paragraph is painted one line at a time, the ramp is sampled against
+      the full box height, so it stays continuous rather than repeating per line.
+    </div>
+    <p class="note">
+      Direction accepts <code>to top/right/bottom/left</code> or an angle (e.g. <code>45deg</code>),
+      snapped to the nearest of the four cardinal axes. Only two stops are modelled — the first and
+      the last colour.
+    </p>
+
+    <h2>3. Drop shadow</h2>
+    <div class="card">
+      This card has <code>box-shadow: 2px 3px 6px rgba(15,47,87,0.35)</code> — an offset-x, offset-y,
+      blur and colour. The blur is faked with stacked translucent copies of the box silhouette, so it
+      is a soft approximation, not a Gaussian. <code>inset</code> shadows and a <code>spread</code>
+      radius are ignored.
+    </div>
+
+    <h2>4. Rounded + gradient + shadow</h2>
+    <div class="hero-card">
+      All three decorations on one box: a diagonal gradient fill, <code>border-radius: 16px</code> and a
+      drop shadow. Corner rounding and the gradient share one clipped path, so a rounded gradient box
+      is drawn as a single clean shape.
+    </div>
+
+    <h2>5. Rounded image</h2>
+    <p>
+      A raster <code>&lt;img&gt;</code> is clipped to its rounded corners and gets a shadow behind it:
+    </p>
+    <p style="margin: 8pt 0">
+      <img class="logo" src="assets/logo.png" alt="Logo" />
+    </p>
+    <p class="note">
+      Limitations in short: fills round but borders do not; gradient direction snaps to four axes with
+      two stops; shadow blur is approximate and inset/spread are dropped; a percentage radius is read
+      as points, so use an explicit length (or a large value that clamps to a half for a pill/circle).
+    </p>
+
+    <p class="note" style="text-align: right; margin-top: 14pt">Page {PAGE} of {TOTAL}</p>
+  </body>
+</html>

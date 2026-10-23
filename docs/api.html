@@ -150,6 +150,31 @@
       </div>
     </section>
 
+    <section id="encryption">
+      <h2>Encryption &amp; permissions</h2>
+      <p>
+        <code>ReportDoc.encrypt</code> (<code>EncryptionSpec</code>) writes the PDF through pdfkit's
+        standard security handler (RC4 128-bit). It is applied at document construction, so it works the
+        same for <code>renderToBuffer</code>, <code>renderToStream</code> and <code>createReport</code>.
+      </p>
+      <pre data-copy><code>encrypt?: {
+  userPassword?: string;      // required to OPEN the document
+  ownerPassword?: string;     // required to change permissions / decrypt (generated if omitted)
+  permissions?: {
+    printing?, modifying?, copying?, annotating?,
+    fillingForms?, contentAccessibility?, documentAssembly?   // each boolean, default permitted
+  },
+}</code></pre>
+      <p>
+        If neither password is set, <code>encrypt</code> is ignored and the PDF is written unencrypted
+        (byte-identical to omitting the field). A <code>userPassword</code> truly gates opening. The
+        <code>permissions</code> flags describe what a reader may do; PDF enforces them against the owner
+        password, which pdfkit supplies automatically when you do not set one — so they take effect as
+        long as any password is present. They are viewer-enforced hints, not durable protection.
+        <code>contentAccessibility</code> is the accessibility / text-extraction permission.
+      </p>
+    </section>
+
     <section id="html-options">
       <h2><code>HtmlOptions</code></h2>
       <pre data-copy><code>{
@@ -266,6 +291,7 @@ h1, h2 { margin-bottom: 4pt; }           /* list */</code></pre>
   body?:    Block[],
   outline?: boolean,                           // PDF bookmark tree from headings (default true)
   watermark?: { text, rotate?, fontSize?, color?, opacity?, fontFamily?, layer? }, // non-selectable vector-outline watermark; layer: 'background' | 'foreground'
+  encrypt?: { userPassword?, ownerPassword?, permissions? }, // password + usage permissions (RC4 128-bit via pdfkit); needs at least one password
   fonts?:   FontReference[],                   // Google <link>/@import, @font-face, font URLs
 }</code></pre>
 
@@ -841,6 +867,9 @@ formatNumber(Infinity, '#,##0.00')                // ∞</code></pre>
           <tr><td><code>keepWithNext</code></td><td>blocks</td><td>Glues this block to the one after it — the usual way to hold a heading with its first paragraph.</td></tr>
           <tr><td><code>id</code></td><td>every block</td><td>Defines a named destination that <code>#id</code> links jump to; also the anchor a TOC entry or bookmark resolves to.</td></tr>
           <tr><td><code>visible</code></td><td>top-level blocks</td><td>Only the literal <code>false</code> is consulted (the block lays out to nothing). An expression form is not evaluated, and rows/cells do not carry it.</td></tr>
+          <tr><td><code>borderRadius</code></td><td>paragraph/heading background fill, raster <code>image</code></td><td>One <code>Length</code> or <code>[tl, tr, br, bl]</code> (CSS order, points). Rounds the <em>background fill</em> and clips an image to rounded corners; a straight <code>border</code> line is never curved. Over-large corners scale down proportionally. On a box that wraps to several lines only the outer first/last line's corners round.</td></tr>
+          <tr><td><code>boxShadow</code></td><td>paragraph/heading background fill, raster <code>image</code></td><td><code>{ offsetX?, offsetY?, blur?, color?, opacity? }</code>. Drawn behind the box as stacked translucent silhouettes (blur is approximate). <code>inset</code> and a <code>spread</code> radius are not modelled — an <code>inset: true</code> shadow is ignored. Default opacity 0.28.</td></tr>
+          <tr><td><code>backgroundImage</code></td><td>paragraph/heading background fill</td><td>A two-stop <code>{ direction?, from, to }</code> linear gradient painted <em>instead of</em> <code>backgroundColor</code>. <code>direction</code> is <code>'to top'|'to bottom'|'to left'|'to right'</code> or an angle snapped to the nearest cardinal (default <code>'to bottom'</code>); corner keywords resolve to their vertical axis.</td></tr>
         </tbody>
       </table>
 
@@ -876,7 +905,9 @@ formatNumber(Infinity, '#,##0.00')                // ∞</code></pre>
             <td>
               <code>font-size</code>, <code>font-family</code>, <code>font-weight</code>,
               <code>font-style</code>, <code>color</code>, <code>background</code> /
-              <code>background-color</code>, <code>text-align</code>, <code>text-decoration</code>
+              <code>background-color</code> (or a two-stop <code>background: linear-gradient(…)</code> /
+              <code>background-image</code>), <code>border-radius</code>, <code>box-shadow</code>,
+              <code>text-align</code>, <code>text-decoration</code>
               (<code>underline</code> / <code>line-through</code>), <code>opacity</code>,
               <code>line-height</code>, <code>letter-spacing</code>, <code>white-space</code>,
               <code>text-transform</code>, <code>width</code>, <code>height</code>,

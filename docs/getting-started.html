@@ -1035,6 +1035,106 @@ while (true) {
       </p>
     </section>
 
+    <section id="box-polish">
+      <h2>CSS box polish</h2>
+      <p>
+        A background box can be <strong>rounded</strong>, <strong>shadowed</strong> and filled with a
+        <strong>linear gradient</strong> — authored straight from the HTML subset
+        (<code>border-radius</code>, <code>box-shadow</code>, <code>background: linear-gradient(…)</code>)
+        or set on the IR as <code>borderRadius</code> / <code>boxShadow</code> / <code>backgroundImage</code>.
+        Everything stays vector: the rounding is a clipped bézier path, the gradient is painted as
+        blended strips, the shadow as stacked translucent silhouettes — no rasterisation.
+      </p>
+      <pre data-copy><code>&lt;!-- A rounded, gradient banner with a soft drop shadow. --&gt;
+&lt;div style="background: linear-gradient(to right, #1e3a8a, #38bdf8);
+            color: #fff; border-radius: 8px; box-shadow: 2px 3px 6px rgba(15,47,87,0.35);
+            padding: 10pt 12pt;"&gt;
+  Quarterly results are in.
+&lt;/div&gt;
+
+&lt;!-- A plain rounded callout (background fill only). --&gt;
+&lt;p style="background-color: #eef4ff; border-radius: 10px; padding: 9pt 11pt;"&gt;
+  A tinted, rounded note box.
+&lt;/p&gt;</code></pre>
+      <pre data-copy><code>// IR: the same decorations are ordinary box properties.
+{
+  type: 'paragraph',
+  content: 'Card',
+  backgroundColor: '#ffffff',
+  backgroundImage: { direction: 'to bottom', from: '#f8fafc', to: '#c7d2fe' },
+  borderRadius: 12,                               // number or [tl, tr, br, bl]
+  boxShadow: { offsetX: 2, offsetY: 3, blur: 6, color: '#0f2f57', opacity: 0.3 },
+}</code></pre>
+      <p>
+        A raster <code>&lt;img&gt;</code> is clipped to its rounded corners and can carry a shadow too.
+        These are the honest limits of the first pass:
+      </p>
+      <ul>
+        <li><strong>Fills round; borders do not.</strong> <code>border-radius</code> curves the
+        background box (and clips an image); a straight <code>border</code> line is never curved.</li>
+        <li><strong>Two-stop, cardinal gradients.</strong> Direction is <code>to top/right/bottom/left</code>
+        or an angle (e.g. <code>45deg</code>), snapped to the nearest of the four axes; only the first
+        and last colour are modelled. A wrapping box samples the ramp against its whole height, so the
+        gradient stays continuous across lines.</li>
+        <li><strong>Shadow is approximate.</strong> <code>blur</code> is faked with layered fills;
+        <code>inset</code> and a <code>spread</code> radius are ignored.</li>
+        <li><strong>Outer-edge rounding only.</strong> On a box that wraps to several lines, only the top
+        corners of the first line and the bottom corners of the last round; interior junctions stay square.</li>
+      </ul>
+      <p>
+        See it together in <a href="examples.html#ex-polish"><code>samples/box-polish.html</code></a>.
+      </p>
+    </section>
+
+    <section id="encryption">
+      <h2>Encryption &amp; permissions</h2>
+      <p>
+        Set <code>encrypt</code> on the <code>ReportDoc</code> to write a password-protected PDF through
+        pdfkit's standard security handler (RC4 128-bit). A <code>userPassword</code> gates opening the
+        file; an <code>ownerPassword</code> gates changing permissions (one is generated if you omit it).
+        <strong>At least one password must be present</strong> — otherwise the document is written
+        unencrypted, byte-for-byte as before.
+      </p>
+      <pre data-copy><code>const report = {
+  info: { title: 'Payroll — confidential' },
+  encrypt: {
+    userPassword: 'reader-opens-with-this',   // required to open
+    ownerPassword: 'owner-can-change-this',   // required to lift restrictions
+    permissions: {
+      printing: true,
+      copying: false,          // block text/graphics extraction
+      modifying: false,
+      annotating: false,
+      fillingForms: false,
+      contentAccessibility: true,   // allow screen readers
+      documentAssembly: false,
+    },
+  },
+  body: [ /* … */ ],
+};
+
+const pdf = await renderToBuffer(report);   // the bytes are encrypted on write</code></pre>
+      <table>
+        <thead><tr><th>Permission</th><th>Grants (when <code>true</code>)</th></tr></thead>
+        <tbody>
+          <tr><td><code>printing</code></td><td>Print the document.</td></tr>
+          <tr><td><code>modifying</code></td><td>Edit the document beyond form filling and annotations.</td></tr>
+          <tr><td><code>copying</code></td><td>Copy text and graphics.</td></tr>
+          <tr><td><code>annotating</code></td><td>Add or change comments and form fields.</td></tr>
+          <tr><td><code>fillingForms</code></td><td>Fill in existing interactive forms.</td></tr>
+          <tr><td><code>contentAccessibility</code></td><td>Enable screen readers / text extraction for accessibility.</td></tr>
+          <tr><td><code>documentAssembly</code></td><td>Assemble the document (insert, rotate, delete pages; add bookmarks).</td></tr>
+        </tbody>
+      </table>
+      <div class="note">
+        Every flag defaults to permitted when omitted. PDF enforces the permissions against the owner
+        password, which pdfkit supplies automatically when you leave <code>ownerPassword</code> out — so
+        they take effect as long as any password is present. This is viewer-enforced RC4 security: treat
+        the flags as a usage hint, not durable protection, while a <code>userPassword</code> genuinely
+        gates opening.
+      </div>
+    </section>
+
     <section id="cli">
       <h2>The CLI</h2>
       <p>Convert authoring HTML files to PDF, or build the bundled demo report.</p>
@@ -1118,6 +1218,8 @@ npm run demo</code></pre>
         <a href="getting-started.html#columns">Multi-column</a>
         <a href="getting-started.html#gantt">Gantt chart</a>
         <a href="getting-started.html#streaming">Streaming</a>
+        <a href="getting-started.html#box-polish">CSS box polish</a>
+        <a href="getting-started.html#encryption">Encryption &amp; permissions</a>
         <a href="getting-started.html#web-fonts">Web fonts &amp; CJK</a>
         <a href="getting-started.html#cli">Command line</a>
       </nav>

@@ -7,10 +7,10 @@
  * page space and paints them one at a time.
  */
 import type { Page, PlacedFragment } from '../pagination/engine.js';
-import type { DrawCommand, DashPattern } from '../layout/flow.js';
+import type { DrawCommand, DashPattern, Radius, ResolvedGradient, ResolvedShadow } from '../layout/flow.js';
 import type { PositionedRun } from '../text/typeset.js';
 import type { RGB, ColorInput } from '../core/color.js';
-import { toRGB } from '../core/color.js';
+import { toRGB, mix } from '../core/color.js';
 import { imagePathAccessEnabled, isFileSystemSource } from '../core/image.js';
 
 type PDFDocument = PDFKit.PDFDocument;
@@ -64,7 +64,11 @@ function drawFragment(doc: PDFDocument, { fragment, x, y }: PlacedFragment, page
 
 function fragmentBaseFill(fragment: PlacedFragment['fragment']): RGB | undefined {
   for (const cmd of fragment.commands) {
-    if (cmd.op === 'fillRect' && cmd.y === 0 && cmd.h >= fragment.height - 0.01 && cmd.w > 0) return cmd.color;
+    // A gradient background has no single base colour, so run highlights must
+    // still repaint over it; skip those when detecting the flat block fill.
+    if (cmd.op === 'fillRect' && !cmd.gradient && cmd.y === 0 && cmd.h >= fragment.height - 0.01 && cmd.w > 0) {
+      return cmd.color;
+    }
   }
   return undefined;
 }
@@ -135,21 +139,33 @@ interface OutlineItem {
 
 function drawCommand(doc: PDFDocument, cmd: DrawCommand, x: number, y: number, baseFill?: RGB): void {
   switch (cmd.op) {
-    case 'fillRect':
-      if (cmd.opacity !== undefined && cmd.opacity < 1) {
-        doc.save();
-        doc.fillOpacity(cmd.opacity);
-        doc.fillColor(css(cmd.color)).rect(x + cmd.x, y + cmd.y, cmd.w, cmd.h).fill();
-        doc.restore();
-      } else {
-        doc.fillColor(css(cmd.color)).rect(x + cmd.x, y + cmd.y, cmd.w, cmd.h).fill();
+    case 'fillRect': {
+      const radius = cmd.radius ? clampRadius(cmd.radius, cmd.w, cmd.h) : undefined;
+      if (cmd.shadow) {
+        const shH = cmd.shadowH ?? cmd.h;
+        const shRadius = cmd.shadowRadius ? clampRadius(cmd.shadowRadius, cmd.w, shH) : radius;
+        drawShadow(doc, x + cmd.x, y + cmd.y, cmd.w, shH, shRadius, cmd.shadow);
       }
+      if (cmd.gradient) {
+        fillGradientRect(doc, x + cmd.x, y + cmd.y, cmd.w, cmd.h, radius, cmd.gradient);
+        return;
+      }
+      const soft = cmd.opacity !== undefined && cmd.opacity < 1;
+      if (soft || radius) doc.save();
+      if (soft) doc.fillOpacity(cmd.opacity!);
+      doc.fillColor(css(cmd.color));
+      traceBoxPath(doc, x + cmd.x, y + cmd.y, cmd.w, cmd.h, radius);
+      doc.fill();
+      if (soft || radius) doc.restore();
       return;
+    }
     case 'strokeRect': {
+      const radius = cmd.radius ? clampRadius(cmd.radius, cmd.w, cmd.h) : undefined;
       doc.save();
       doc.lineWidth(cmd.lineWidth).strokeColor(css(cmd.color));
       if (cmd.dash) applyDash(doc, cmd.dash);
-      doc.rect(x + cmd.x, y + cmd.y, cmd.w, cmd.h).stroke();
+      traceBoxPath(doc, x + cmd.x, y + cmd.y, cmd.w, cmd.h, radius);
+      doc.stroke();
       doc.restore();
       return;
     }
@@ -233,6 +249,18 @@ function drawCommand(doc: PDFDocument, cmd: DrawCommand, x: number, y: number, b
     case 'image': {
       // Layout already resolved a width+height that preserve the aspect ratio,
       // so pass both. `doc.image` accepts a path, a `data:` URI, or raw bytes.
+      const radius = cmd.radius ? clampRadius(cmd.radius, cmd.w, cmd.h) : undefined;
+      if (cmd.shadow) drawShadow(doc, x + cmd.x, y + cmd.y, cmd.w, cmd.h, radius, cmd.shadow);
+      if (radius && hasRadius(radius)) {
+        // A rounded image is a clipped raster: build the rounded outline, clip to
+        // it, then paint the bitmap inside so the corners fall away.
+        doc.save();
+        traceBoxPath(doc, x + cmd.x, y + cmd.y, cmd.w, cmd.h, radius);
+        doc.clip();
+        doc.image(imageSource(cmd.src), x + cmd.x, y + cmd.y, { width: cmd.w, height: cmd.h });
+        doc.restore();
+        return;
+      }
       doc.image(imageSource(cmd.src), x + cmd.x, y + cmd.y, { width: cmd.w, height: cmd.h });
       return;
     }
@@ -397,4 +425,124 @@ function css([r, g, b]: RGB): string {
 
 function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v;
+}
+
+// --- rounded rect / gradient / shadow primitives --------------------------
+
+/** True when any corner radius is meaningful (>= 0.01pt). */
+function hasRadius([tl, tr, br, bl]: Radius): boolean {
+  return tl > 0.01 || tr > 0.01 || br > 0.01 || bl > 0.01;
+}
+
+/**
+ * Scale all corners down together (CSS behaviour) so no two adjacent radii
+ * exceed the edge they share. Returns the input untouched when it already fits.
+ */
+function clampRadius(r: Radius, w: number, h: number): Radius {
+  const [tl, tr, br, bl] = r;
+  const ratio = (sum: number, edge: number): number => (sum > 0 && edge < sum ? edge / sum : 1);
+  const f = Math.min(
+    ratio(tl + tr, w),
+    ratio(bl + br, w),
+    ratio(tl + bl, h),
+    ratio(tr + br, h),
+  );
+  if (f >= 1) return r;
+  return [tl * f, tr * f, br * f, bl * f];
+}
+
+/** Grow every corner by `spread` (used to expand a rounded shadow silhouette). */
+function growRadius(r: Radius, spread: number): Radius {
+  return [r[0] + spread, r[1] + spread, r[2] + spread, r[3] + spread];
+}
+
+/**
+ * Add a rectangle to the current path as a series of straight edges joined by
+ * circular-ish cubic corners. A zero/uniform-free radius falls back to pdfkit's
+ * plain `rect`. Leaves the path open for a following `fill`/`stroke`/`clip`.
+ */
+function traceBoxPath(doc: PDFDocument, x: number, y: number, w: number, h: number, radius?: Radius): void {
+  if (!radius || !hasRadius(radius)) {
+    doc.rect(x, y, w, h);
+    return;
+  }
+  const [tl, tr, br, bl] = radius;
+  const k = 0.5522847498; // cubic approximation of a quarter circle
+  doc.moveTo(x + tl, y);
+  doc.lineTo(x + w - tr, y);
+  if (tr > 0) doc.bezierCurveTo(x + w - tr * (1 - k), y, x + w, y + tr * (1 - k), x + w, y + tr);
+  doc.lineTo(x + w, y + h - br);
+  if (br > 0) doc.bezierCurveTo(x + w, y + h - br * (1 - k), x + w - br * (1 - k), y + h, x + w - br, y + h);
+  doc.lineTo(x + bl, y + h);
+  if (bl > 0) doc.bezierCurveTo(x + bl * (1 - k), y + h, x, y + h - bl * (1 - k), x, y + h - bl);
+  doc.lineTo(x, y + tl);
+  if (tl > 0) doc.bezierCurveTo(x, y + tl * (1 - k), x + tl * (1 - k), y, x + tl, y);
+  doc.closePath();
+}
+
+/**
+ * Fill a rectangle (optionally rounded) with a two-stop linear gradient by
+ * clipping to the outline and painting `n` blended strips. The vertical ramp is
+ * sampled relative to the logical box (`boxTop`/`boxHeight`) so a background
+ * emitted as several stacked line-fragments still reads as one continuous ramp.
+ */
+function fillGradientRect(doc: PDFDocument, x: number, y: number, w: number, h: number, radius: Radius | undefined, grad: ResolvedGradient): void {
+  doc.save();
+  // A wrapping background is painted one clipped rect per line. Two abutting
+  // clips leave a hairline antialiasing seam at each line junction (visible on
+  // a gradient, hidden on a solid fill). Bleed the clip past the *square*
+  // (interior) edges so neighbouring line rects overlap and cover it; rounded
+  // outer edges are left exactly where they are.
+  const BLEED = 0.5;
+  const topSquare = !radius || (radius[0] <= 0.01 && radius[1] <= 0.01);
+  const bottomSquare = !radius || (radius[2] <= 0.01 && radius[3] <= 0.01);
+  const cy = y - (topSquare ? BLEED : 0);
+  const ch = h + (topSquare ? BLEED : 0) + (bottomSquare ? BLEED : 0);
+  traceBoxPath(doc, x, cy, w, ch, radius);
+  doc.clip();
+  const vertical = grad.dir === 'top' || grad.dir === 'bottom';
+  const span = vertical ? h : w;
+  const steps = Math.max(2, Math.min(64, Math.ceil(span)));
+  doc.fillOpacity(1);
+  for (let s = 0; s < steps; s += 1) {
+    const a = s / steps;
+    const b = (s + 1) / steps;
+    const mid = (a + b) / 2;
+    let t: number;
+    if (grad.dir === 'bottom') t = grad.boxHeight > 0 ? (grad.boxTop + mid * h) / grad.boxHeight : mid;
+    else if (grad.dir === 'top') t = grad.boxHeight > 0 ? 1 - (grad.boxTop + mid * h) / grad.boxHeight : 1 - mid;
+    else if (grad.dir === 'right') t = mid;
+    else t = 1 - mid; // 'left'
+    doc.fillColor(css(mix(grad.from, grad.to, clamp01(t))));
+    if (vertical) doc.rect(x, y + a * h, w, (b - a) * h + 0.5).fill();
+    else doc.rect(x + a * w, y, (b - a) * w + 0.5, h).fill();
+  }
+  doc.restore();
+}
+
+/**
+ * Paint a drop shadow behind a (rounded) box by stacking translucent, outward-
+ * grown copies of its silhouette. `blur` is faked by the number/size of layers;
+ * the whole group is drawn at `sh.opacity`, split evenly so overlaps accumulate
+ * toward the solid core and thin out at the soft edge.
+ */
+function drawShadow(doc: PDFDocument, x: number, y: number, w: number, h: number, radius: Radius | undefined, sh: ResolvedShadow): void {
+  const steps = sh.blur > 0.5 ? Math.max(4, Math.min(32, Math.round(sh.blur / 0.6))) : 1;
+  const layerAlpha = clamp01(sh.opacity) / steps;
+  doc.save();
+  doc.fillColor(css(sh.color));
+  doc.fillOpacity(layerAlpha);
+  for (let i = steps; i >= 1; i -= 1) {
+    const spread = sh.blur * (i / steps);
+    const sx = x + sh.dx - spread;
+    const sy = y + sh.dy - spread;
+    const sw = w + spread * 2;
+    const sh2 = h + spread * 2;
+    if (sw <= 0 || sh2 <= 0) continue;
+    const r = radius ? clampRadius(growRadius(radius, spread), sw, sh2) : undefined;
+    traceBoxPath(doc, sx, sy, sw, sh2, r);
+    doc.fill();
+  }
+  doc.fillOpacity(1);
+  doc.restore();
 }
