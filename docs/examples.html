@@ -847,19 +847,25 @@ const pdf = await renderToBuffer(report);</code></pre>
 
     <section id="ex-watermark">
       <h2>Page watermark</h2>
-      <p>Add a rotated, translucent text behind every page in one line:</p>
-      <pre data-copy><code>// IR
+      <p>Add a rotated, translucent <em>non-selectable</em> watermark across every page in one line. Choose the paint layer with <code>layer</code>:</p>
+      <pre data-copy><code>// IR — behind the body (default)
 const report = {
   watermark: { text: 'DRAFT', rotate: -35, fontSize: 72, color: '#c0c0c0', opacity: 0.18 },
   body: [{ type: 'paragraph', content: 'Confidential document' }],
 };
 
+// IR — on top of everything on the page
+const stamp = {
+  watermark: { text: 'VOID', rotate: -35, opacity: 0.35, layer: 'foreground' },
+  body: [ … ],
+};
+
 // HTML
 const html = `
-  &lt;meta name="watermark" content="DRAFT" /&gt;
+  &lt;meta name="watermark" content="DRAFT" data-watermark-layer="foreground" /&gt;
   &lt;body&gt;&lt;p&gt;Confidential&lt;/p&gt;&lt;/body&gt;
 `;</code></pre>
-      <p>The watermark is generated in the pagination pass as a background fragment with <code>rotate</code> and <code>opacity</code> set; the writer applies the rotation transform around the page center.</p>
+      <p>The watermark is drawn as filled vector glyph outlines (one <code>path</code> DrawCommand per page) rather than PDF text operators, so viewers cannot select or copy the string. The pagination pass attaches the fragment to <code>page.background</code> or <code>page.foreground</code> based on <code>layer</code>; the writer applies the rotation transform around the page center and paints that layer first (background) or last (foreground).</p>
       <p>See <code>samples/watermark.html</code> for the rendered output.</p>
     </section>
 

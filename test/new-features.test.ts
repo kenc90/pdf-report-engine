@@ -8,13 +8,14 @@
  *  - Hyperlinks and rich text are already tested in features.test.ts
  */
 import { describe, expect, it } from 'vitest';
+import fs from 'node:fs';
 import { FontRegistry, HeuristicFontHandle } from '../src/fonts/registry.js';
 import { resolveStyle } from '../src/text/style.js';
 import { LayoutContext } from '../src/layout/context.js';
 import { layoutBlock } from '../src/layout/block.js';
 import { paginate } from '../src/pagination/engine.js';
 import { htmlToReportDoc } from '../src/adapter/html.js';
-import { renderToBuffer, renderToStream, createReport } from '../src/index.js';
+import { renderToBuffer, renderToStream, createReport, readFontFiles, type FontSource } from '../src/index.js';
 import type { Block, ColumnBlock, ChartBlock, ReportDoc } from '../src/ir/schema.js';
 import type { Fragment } from '../src/layout/flow.js';
 
@@ -344,6 +345,106 @@ describe('writer fragment rotation', () => {
     // Verify the background has the watermark fragment
     const wm = pages[0]!.background.find((pf) => pf.fragment.rotate === -40);
     expect(wm).toBeDefined();
+    doc.end();
+  });
+});
+
+// --- watermark layer routing (foreground vs background) --------------------
+
+describe('watermark layer routing', () => {
+  const resolved = { width: 595, height: 842, margin: { top: 40, right: 40, bottom: 40, left: 40 }, content: { x: 40, y: 40, width: 515, height: 762 } };
+
+  function runWith(layer: 'background' | 'foreground' | undefined) {
+    const ctx = makeCtx();
+    const report: ReportDoc = {
+      body: [{ type: 'paragraph', content: 'Body text' }],
+      watermark: { text: 'MARK', layer },
+    };
+    return paginate({
+      ctx,
+      page: resolved,
+      contentWidth: resolved.content.width,
+      body: report.body!,
+      bands: undefined,
+      scope: {},
+      watermark: report.watermark,
+    });
+  }
+
+  it('default (undefined) places the fragment in page.background', () => {
+    const pages = runWith(undefined);
+    const wmBg = pages[0]!.background.find((pf) => pf.fragment.rotate !== undefined);
+    const wmFg = pages[0]!.foreground.find((pf) => pf.fragment.rotate !== undefined);
+    expect(wmBg).toBeDefined();
+    expect(wmFg).toBeUndefined();
+  });
+
+  it("layer: 'background' places the fragment in page.background", () => {
+    const pages = runWith('background');
+    expect(pages[0]!.background.some((pf) => pf.fragment.rotate !== undefined)).toBe(true);
+    expect(pages[0]!.foreground.length).toBe(0);
+  });
+
+  it("layer: 'foreground' places the fragment in page.foreground", () => {
+    const pages = runWith('foreground');
+    const wmFg = pages[0]!.foreground.find((pf) => pf.fragment.rotate !== undefined);
+    expect(wmFg).toBeDefined();
+    expect(pages[0]!.background.some((pf) => pf.fragment.rotate !== undefined)).toBe(false);
+  });
+});
+
+// --- HTML adapter: watermark layer -----------------------------------------
+
+describe('HTML adapter: watermark layer', () => {
+  it("parses data-watermark-layer='foreground' into spec.layer", () => {
+    const html = '<html><body data-watermark="CONF" data-watermark-layer="foreground"><p>x</p></body></html>';
+    const doc = htmlToReportDoc(html);
+    expect(doc.watermark!.layer).toBe('foreground');
+  });
+
+  it("accepts 'front' as an alias for foreground", () => {
+    const html = '<html><body data-watermark="CONF" data-watermark-layer="front"><p>x</p></body></html>';
+    const doc = htmlToReportDoc(html);
+    expect(doc.watermark!.layer).toBe('foreground');
+  });
+
+  it("parses data-watermark-layer='background' explicitly", () => {
+    const html = '<html><body data-watermark="CONF" data-watermark-layer="background"><p>x</p></body></html>';
+    const doc = htmlToReportDoc(html);
+    expect(doc.watermark!.layer).toBe('background');
+  });
+
+  it('leaves layer undefined when the attribute is absent', () => {
+    const html = '<html><body data-watermark="CONF"><p>x</p></body></html>';
+    const doc = htmlToReportDoc(html);
+    expect(doc.watermark!.layer).toBeUndefined();
+  });
+});
+
+// --- path-based (non-selectable) watermark ----------------------------------
+
+const ARIAL = 'C:/Windows/Fonts/arial.ttf';
+const hasArial = fs.existsSync(ARIAL);
+
+describe(hasArial ? 'watermark rendered as vector paths (real font)' : 'watermark paths (SKIPPED: no arial.ttf)', () => {
+  const maybe = hasArial ? it : it.skip;
+
+  maybe('emits path DrawCommands instead of text runs, and PDF bytes contain no Tj/TJ for the watermark text', async () => {
+    const fonts: FontSource[] = await readFontFiles([{ family: 'Arial', path: ARIAL, weight: 400 }]);
+    const marker = 'NONSELECTABLEXYZ';
+    const report: ReportDoc = {
+      style: { fontFamily: 'Arial' },
+      body: [{ type: 'paragraph', content: 'Body copy here.' }],
+      watermark: { text: marker, layer: 'foreground' },
+    };
+    // Model-level assertion: the watermark fragment on each page contains only
+    // `path` commands (no `text` command), so the writer never emits Tj/TJ for it.
+    const { doc, pages } = createReport(report, { fonts });
+    const wm = pages[0]!.foreground.find((pf) => pf.fragment.rotate !== undefined);
+    expect(wm).toBeDefined();
+    const ops = wm!.fragment.commands.map((c) => c.op);
+    expect(ops).toContain('path');
+    expect(ops).not.toContain('text');
     doc.end();
   });
 });

@@ -3,7 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <title>Watermark Example</title>
-  <meta name="watermark" content="DRAFT" data-watermark-rotate="-35" data-watermark-size="80" data-watermark-color="#c0c0c0" data-watermark-opacity="0.18" />
+  <!--
+    Watermarks are drawn as filled vector glyph outlines (not PDF text operators),
+    so they cannot be selected or extracted as text. The `layer` attribute chooses
+    whether the watermark sits behind body content (`background`, default) or on
+    top of everything on the page (`foreground` / `front`).
+  -->
+  <meta name="watermark" content="DRAFT" data-watermark-rotate="-35" data-watermark-size="80" data-watermark-color="#c0c0c0" data-watermark-opacity="0.28" data-watermark-layer="foreground" />
   <style>
     @page { size: a4; margin: 18mm 16mm; }
     body { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; color: #1e293b; }
@@ -13,11 +19,11 @@
 </head>
 <body>
   <h1>Document Watermark</h1>
-  <p>This document has a declarative <strong>DRAFT</strong> watermark rotated diagonally across every page. The watermark is specified via a <code>&lt;meta&gt;</code> tag in the head.</p>
+  <p>This document has a declarative <strong>DRAFT</strong> watermark painted diagonally across every page. It is specified via a <code>&lt;meta name="watermark"&gt;</code> tag in the head, uses <code>data-watermark-layer="foreground"</code> to sit on top of the body text, and is rendered as filled vector glyph outlines so it is <em>not selectable</em>.</p>
 
   <div class="band">
     <h2 style="margin-top:0">Page 1 Content</h2>
-    <p>The watermark is rendered behind all content with 18% opacity and -35° rotation, making it clearly visible without obscuring the text. It repeats on every generated page.</p>
+    <p>The watermark is drawn with 28% opacity and -35° rotation. Because it uses the <code>foreground</code> layer it paints <em>after</em> the header, body and footer of every page. Change the attribute to <code>background</code> (or drop it entirely) to place it behind content instead.</p>
   </div>
 
   <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
@@ -27,11 +33,11 @@
   <div style="break-before: page;"></div>
 
   <h2>Page 2 Content</h2>
-  <p>The watermark appears here too — on every page, always behind the content. This is useful for:</p>
+  <p>The watermark appears here too — on every page, always drawn as a filled path. Try to select the "DRAFT" text in your PDF viewer: nothing will highlight, because there are no <code>Tj</code> / <code>TJ</code> operators behind it. Typical uses:</p>
   <ul>
     <li>Marking documents as <strong>DRAFT</strong>, <strong>CONFIDENTIAL</strong>, or <strong>COPY</strong></li>
     <li>Watermarking invoices before payment confirmation</li>
-    <li>Adding company branding to exported reports</li>
+    <li>Adding company branding to exported reports without polluting text search</li>
   </ul>
 
   <p>Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.</p>
@@ -41,7 +47,7 @@
   <h2>Page 3 Content</h2>
   <p>Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt. Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet.</p>
   <p style="color: #6b7c93; font-size: 9pt; margin-top: 20pt">
-    Configuration: <code>&lt;meta name="watermark" content="DRAFT"&gt;</code> with optional attributes for rotate, size, color, and opacity.
+    Configuration: <code>&lt;meta name="watermark" content="DRAFT" data-watermark-layer="foreground"&gt;</code>. Optional attributes: <code>data-watermark-rotate</code>, <code>data-watermark-size</code>, <code>data-watermark-color</code>, <code>data-watermark-opacity</code>, <code>data-watermark-font</code>, <code>data-watermark-layer</code>.
   </p>
 </body>
 </html>

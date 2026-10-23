@@ -685,6 +685,11 @@ export interface WatermarkSpec {
   opacity?: number;
   /** Font family override. */
   fontFamily?: string;
+  /**
+   * Paint layer. `'background'` (default) draws the watermark behind body content;
+   * `'foreground'` draws it on top of everything else on the page.
+   */
+  layer?: 'background' | 'foreground';
 }
 
 export interface ReportDoc {
@@ -712,7 +717,7 @@ export interface ReportDoc {
    * when the body contains headings; set `false` to suppress it.
    */
   outline?: boolean;
-  /** Page watermark drawn as a rotated, semi-transparent text behind content. */
+  /** Page watermark drawn as rotated, semi-transparent vector outlines (non-selectable). */
   watermark?: WatermarkSpec;
 }
 

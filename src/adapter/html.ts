@@ -1852,5 +1852,8 @@ function buildWatermarkSpec(text: string, attrs: Record<string, string | undefin
   if (op !== undefined) { const n = Number(op); if (Number.isFinite(n)) spec.opacity = Math.min(1, Math.max(0, n)); }
   const ff = attrs['data-watermark-font'];
   if (ff) spec.fontFamily = ff;
+  const layer = attrs['data-watermark-layer'];
+  if (layer === 'foreground' || layer === 'front') spec.layer = 'foreground';
+  else if (layer === 'background' || layer === 'back') spec.layer = 'background';
   return spec;
 }

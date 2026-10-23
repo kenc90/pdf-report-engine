@@ -84,7 +84,8 @@ const DEMO_DATA = {
 // colour-scale heatmaps, rich block cells (image / QR / sparkline / nested table),
 // merged cells, a diagonal corner-header two-way (cross-tab) table, QR/Code 128/EAN-13
 // barcodes, a page break, and base-14 fallback; plus the six new features: hyperlinks,
-// rich inline text, a rotated page watermark, multi-column layout, a Gantt timeline chart,
+// rich inline text, a rotated page watermark (rendered as non-selectable vector outlines
+// on the foreground layer), multi-column layout, a Gantt timeline chart,
 // and streaming output (see renderToStream in the API docs).
 const DEFAULT_HTML = `<!-- ══ Web fonts straight from the HTML: the engine collects the charset from
      the IR, passes it as text= to Google's CSS API, fetches only the needed glyphs (tiny subset),
@@ -100,7 +101,7 @@ const DEFAULT_HTML = `<!-- ══ Web fonts straight from the HTML: the engine c
   mark { background-color: #ffe08a; }          /* tag selector */
 </style>
 
-<body data-watermark="SAMPLE" data-watermark-rotate="-35" data-watermark-size="72" data-watermark-color="#c0c0c0" data-watermark-opacity="0.18" style="font-family:Inter; font-size:10pt; color:#24303f">
+<body data-watermark="SAMPLE" data-watermark-rotate="-35" data-watermark-size="72" data-watermark-color="#c0c0c0" data-watermark-opacity="0.22" data-watermark-layer="foreground" style="font-family:Inter; font-size:10pt; color:#24303f">
 
 <!-- ══ Page bands: repeated on every page; {PAGE}/{TOTAL} resolve per page. ══ -->
 <header data-band="pageHeader" style="font-size:8pt; color:#94a3b8; letter-spacing:2pt; text-transform:uppercase; border-bottom:1pt solid #e2e8f0; padding-bottom:3pt">Northwind Group &middot; Quarterly Report</header>

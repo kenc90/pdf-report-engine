@@ -265,7 +265,7 @@ h1, h2 { margin-bottom: 4pt; }           /* list */</code></pre>
   bands?:   { title?, pageHeader?, pageFooter?, summary?, background? },
   body?:    Block[],
   outline?: boolean,                           // PDF bookmark tree from headings (default true)
-  watermark?: { text, rotate?, fontSize?, color?, opacity?, fontFamily? }, // page watermark
+  watermark?: { text, rotate?, fontSize?, color?, opacity?, fontFamily?, layer? }, // non-selectable vector-outline watermark; layer: 'background' | 'foreground'
   fonts?:   FontReference[],                   // Google <link>/@import, @font-face, font URLs
 }</code></pre>
 

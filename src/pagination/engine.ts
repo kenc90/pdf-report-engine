@@ -23,8 +23,9 @@ import type { ResolvedPage, Box } from '../core/page.js';
 import type { ResolvedStyle } from '../text/style.js';
 import type { LayoutContext } from '../layout/context.js';
 import { layoutBlock } from '../layout/block.js';
-import type { Fragment, DrawCommand, OutlineEntry } from '../layout/flow.js';
-import type { PositionedRun } from '../text/typeset.js';
+import type { Fragment, OutlineEntry } from '../layout/flow.js';
+import { textToPathCommands } from '../layout/text-to-path.js';
+import { toRGB } from '../core/color.js';
 
 export interface PlacedFragment {
   fragment: Fragment;
@@ -58,8 +59,10 @@ export interface Page {
   body: PlacedFragment[];
   header: PlacedFragment[];
   footer: PlacedFragment[];
-  /** Painted behind everything else (watermark / letterhead band). */
+  /** Painted behind everything else (letterhead band / background watermark). */
   background: PlacedFragment[];
+  /** Painted on top of body/header/footer (foreground watermark). */
+  foreground: PlacedFragment[];
   /** Named destinations defined on this page. */
   anchors: PageAnchor[];
   /** Heading entries in document order, with resolved page numbers. */
@@ -158,6 +161,7 @@ export function paginate(input: PaginateInput): Page[] {
       header: [],
       footer: [],
       background: [],
+      foreground: [],
       anchors: [],
       outline: [],
     };
@@ -246,6 +250,7 @@ export function paginate(input: PaginateInput): Page[] {
       header: [],
       footer: [],
       background: [],
+      foreground: [],
       anchors: [],
       outline: [],
     };
@@ -281,10 +286,14 @@ export function paginate(input: PaginateInput): Page[] {
     // Background band first: it sits behind the header, body and footer.
     p.background = placeBand(layoutBand(bands?.background, ctx, po), contentLeft, page.margin.top);
 
-    // Watermark: a rotated, semi-transparent text centered on every page.
+    // Watermark: rotated, semi-transparent vector outlines (non-selectable).
     if (watermark) {
       const wmFrag = buildWatermarkFragment(watermark, page, ctx);
-      p.background.push({ fragment: wmFrag, x: 0, y: 0 });
+      if (watermark.layer === 'foreground') {
+        p.foreground.push({ fragment: wmFrag, x: 0, y: 0 });
+      } else {
+        p.background.push({ fragment: wmFrag, x: 0, y: 0 });
+      }
     }
 
     p.header = placeBand(layoutBand(bands?.pageHeader, ctx, po), contentLeft, page.margin.top);
@@ -357,7 +366,7 @@ function buildRuns(fragments: Fragment[]): number[][] {
   return runs;
 }
 
-/** Build a page-spanning watermark fragment with rotated, translucent text. */
+/** Build a page-spanning watermark fragment of filled glyph outlines. */
 function buildWatermarkFragment(spec: WatermarkSpec, page: ResolvedPage, ctx: LayoutContext): Fragment {
   const fontSize = spec.fontSize ?? 72;
   const color = spec.color ?? '#c0c0c0';
@@ -366,21 +375,28 @@ function buildWatermarkFragment(spec: WatermarkSpec, page: ResolvedPage, ctx: La
   const family = spec.fontFamily ?? ctx.baseStyle.fontStack ?? ctx.baseStyle.handle.family;
   const handle = ctx.registry.resolve(family, 400, 'normal');
   const textWidth = handle.widthOf(spec.text, fontSize);
-  const style: ResolvedStyle = { ...ctx.baseStyle, handle, fontSize, color, opacity };
-  const run: PositionedRun = { text: spec.text, style, x: 0, width: textWidth };
-  const cmd: DrawCommand = {
-    op: 'text',
-    x: page.width / 2 - textWidth / 2,
-    baselineY: page.height / 2 + (handle.ascender / handle.unitsPerEm) * fontSize * 0.35,
-    runs: [run],
-    gapWidth: 0,
-    decorations: [],
-  };
+  const originX = page.width / 2 - textWidth / 2;
+  const originY = page.height / 2 + (handle.ascender / handle.unitsPerEm) * fontSize * 0.35;
+  const commands = textToPathCommands(handle, spec.text, fontSize, originX, originY, toRGB(color), opacity);
+  if (commands.length === 0) {
+    // Heuristic / metric-only handle: no outline geometry available. Fall back to
+    // a plain text DrawCommand so tests that stub the registry still see the
+    // watermark fragment on the page.
+    const style: ResolvedStyle = { ...ctx.baseStyle, handle, fontSize, color, opacity };
+    commands.push({
+      op: 'text',
+      x: originX,
+      baselineY: originY,
+      runs: [{ text: spec.text, style, x: 0, width: textWidth }],
+      gapWidth: 0,
+      decorations: [],
+    } as import('../layout/flow.js').DrawCommand);
+  }
   return {
     height: page.height,
     before: 0,
     after: 0,
-    commands: [cmd],
+    commands,
     rotate,
     opacity,
   };

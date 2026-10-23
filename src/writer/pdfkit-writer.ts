@@ -38,6 +38,7 @@ export function writePage(doc: PDFDocument, page: Page, options: WritePageOption
   for (const pf of page.header) drawFragment(doc, pf, page.width, page.height);
   for (const pf of page.body) drawFragment(doc, pf, page.width, page.height);
   for (const pf of page.footer) drawFragment(doc, pf, page.width, page.height);
+  for (const pf of page.foreground) drawFragment(doc, pf, page.width, page.height);
 }
 
 function drawFragment(doc: PDFDocument, { fragment, x, y }: PlacedFragment, pageW: number, pageH: number): void {

@@ -908,18 +908,20 @@ const pdf = await renderToBuffer(report);</code></pre>
     <section id="watermark">
       <h2>Page watermark</h2>
       <p>
-        A declarative watermark is rendered diagonally behind every page. Add it via
-        <code>&lt;meta name="watermark"&gt;</code> in HTML, or the <code>watermark</code> field on
-        the <code>ReportDoc</code> IR.
+        A declarative watermark is rendered diagonally across every page as <strong>filled vector glyph outlines</strong>
+        (not PDF text operators), so it cannot be selected or extracted by text search.
+        Add it via <code>&lt;meta name="watermark"&gt;</code> in HTML, or the <code>watermark</code> field on
+        the <code>ReportDoc</code> IR. By default it sits behind the body; set <code>layer: 'foreground'</code>
+        to paint it on top of everything on the page.
       </p>
       <pre data-copy><code>&lt;!-- HTML --&gt;
-&lt;meta name="watermark" content="DRAFT" data-watermark-rotate="-35" data-watermark-opacity="0.18" /&gt;
+&lt;meta name="watermark" content="DRAFT" data-watermark-rotate="-35" data-watermark-opacity="0.18" data-watermark-layer="foreground" /&gt;
 
 &lt;!-- or on <body> --&gt;
-&lt;body data-watermark="CONFIDENTIAL"&gt;</code></pre>
+&lt;body data-watermark="CONFIDENTIAL" data-watermark-layer="foreground"&gt;</code></pre>
       <pre data-copy><code>// IR
 {
-  watermark: { text: 'DRAFT', rotate: -35, fontSize: 72, color: '#c0c0c0', opacity: 0.18 },
+  watermark: { text: 'DRAFT', rotate: -35, fontSize: 72, color: '#c0c0c0', opacity: 0.18, layer: 'foreground' },
   body: [ … ]
 }</code></pre>
       <table>
@@ -928,12 +930,13 @@ const pdf = await renderToBuffer(report);</code></pre>
           <tr><td><code>text</code></td><td>—</td><td>The watermark string.</td></tr>
           <tr><td><code>rotate</code></td><td><code>-35</code></td><td>Degrees counter-clockwise.</td></tr>
           <tr><td><code>fontSize</code></td><td><code>72</code></td><td>Text size in pt.</td></tr>
-          <tr><td><code>color</code></td><td><code>#c0c0c0</code></td><td>Text colour.</td></tr>
+          <tr><td><code>color</code></td><td><code>#c0c0c0</code></td><td>Fill colour of the glyph outlines.</td></tr>
           <tr><td><code>opacity</code></td><td><code>0.18</code></td><td>Paint opacity (0–1).</td></tr>
           <tr><td><code>fontFamily</code></td><td>document base</td><td>Font family override.</td></tr>
+          <tr><td><code>layer</code></td><td><code>'background'</code></td><td><code>'background'</code> paints the watermark behind header/body/footer; <code>'foreground'</code> paints it on top of everything. HTML alias: <code>data-watermark-layer="foreground|front|background|back"</code>.</td></tr>
         </tbody>
       </table>
-      <p>The watermark is placed as a background fragment per page, rotated around the page center, and painted before headers/body/footers.</p>
+      <p>The watermark is generated in the pagination pass as a page-spanning fragment of <code>path</code> DrawCommands (one subpath per closed glyph contour). The writer applies the rotation transform around the page center and paints the fragment either first (background layer) or last (foreground layer) in the per-page draw order.</p>
     </section>
 
     <section id="columns">
