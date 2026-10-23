@@ -34,24 +34,31 @@ export function writePage(doc: PDFDocument, page: Page, options: WritePageOption
   // document's current page — both APIs bind to `doc.page` at call time.
   registerAnchors(doc, page);
   if (options.outline !== false) addBookmarks(doc, page);
-  for (const pf of page.background) drawFragment(doc, pf);
-  for (const pf of page.header) drawFragment(doc, pf);
-  for (const pf of page.body) drawFragment(doc, pf);
-  for (const pf of page.footer) drawFragment(doc, pf);
+  for (const pf of page.background) drawFragment(doc, pf, page.width, page.height);
+  for (const pf of page.header) drawFragment(doc, pf, page.width, page.height);
+  for (const pf of page.body) drawFragment(doc, pf, page.width, page.height);
+  for (const pf of page.footer) drawFragment(doc, pf, page.width, page.height);
 }
 
-function drawFragment(doc: PDFDocument, { fragment, x, y }: PlacedFragment): void {
+function drawFragment(doc: PDFDocument, { fragment, x, y }: PlacedFragment, pageW: number, pageH: number): void {
   const faded = fragment.opacity !== undefined && fragment.opacity < 1;
-  if (faded) {
+  const rotated = fragment.rotate !== undefined && fragment.rotate !== 0;
+  if (faded || rotated) {
     doc.save();
-    doc.opacity(fragment.opacity!);
+    if (rotated) {
+      const cx = x + pageW / 2;
+      const cy = y + fragment.height / 2;
+      // pdfkit's rotate() takes degrees directly (not radians).
+      doc.rotate(fragment.rotate!, { origin: [cx, cy] });
+    }
+    if (faded) doc.opacity(fragment.opacity!);
   }
   // A full-height fill is the block's own background. Runs inherit that colour
   // through the style cascade, and repainting it per glyph would only add
   // seams — so it is passed down as the "already painted" colour.
   const baseFill = fragmentBaseFill(fragment);
   for (const cmd of fragment.commands) drawCommand(doc, cmd, x, y, baseFill);
-  if (faded) doc.restore();
+  if (faded || rotated) doc.restore();
 }
 
 function fragmentBaseFill(fragment: PlacedFragment['fragment']): RGB | undefined {

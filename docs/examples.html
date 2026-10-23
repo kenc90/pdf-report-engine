@@ -830,6 +830,100 @@ const pdf = await renderToBuffer(report);</code></pre>
         are handled by their own parsers.
       </p>
     </section>
+
+    <section id="ex-links-rich">
+      <h2>Hyperlinks &amp; rich inline text</h2>
+      <p>Both features are fully declarative in HTML: links via <code>&lt;a href&gt;</code>, rich formatting via inline elements.</p>
+      <pre data-copy><code>&lt;p&gt;
+  Visit &lt;a href="https://example.com"&gt;our site&lt;/a&gt; or
+  jump to &lt;a href="#conclusion"&gt;the conclusion&lt;/a&gt;.
+  This is &lt;strong&gt;bold with &lt;em&gt;italic&lt;/em&gt;&lt;/strong&gt;,
+  &lt;span style="color:#dc2626"&gt;red text&lt;/span&gt;, and
+  &lt;mark&gt;highlighted&lt;/mark&gt; inline.
+&lt;/p&gt;</code></pre>
+      <p>No JS API is needed: the adapter converts <code>&lt;a&gt;</code> to <code>ContentSpan.link</code>, <code>&lt;strong&gt;</code> to fontWeight 700, etc. The writer emits <code>doc.link()</code>/<code>doc.goTo()</code> annotations.</p>
+      <p>See <code>samples/links.html</code> and <code>samples/rich-text.html</code> for full rendered examples.</p>
+    </section>
+
+    <section id="ex-watermark">
+      <h2>Page watermark</h2>
+      <p>Add a rotated, translucent text behind every page in one line:</p>
+      <pre data-copy><code>// IR
+const report = {
+  watermark: { text: 'DRAFT', rotate: -35, fontSize: 72, color: '#c0c0c0', opacity: 0.18 },
+  body: [{ type: 'paragraph', content: 'Confidential document' }],
+};
+
+// HTML
+const html = `
+  &lt;meta name="watermark" content="DRAFT" /&gt;
+  &lt;body&gt;&lt;p&gt;Confidential&lt;/p&gt;&lt;/body&gt;
+`;</code></pre>
+      <p>The watermark is generated in the pagination pass as a background fragment with <code>rotate</code> and <code>opacity</code> set; the writer applies the rotation transform around the page center.</p>
+      <p>See <code>samples/watermark.html</code> for the rendered output.</p>
+    </section>
+
+    <section id="ex-columns">
+      <h2>Multi-column layout</h2>
+      <p>Distribute blocks across equal-width columns:</p>
+      <pre data-copy><code>// IR
+{
+  type: 'columns',
+  count: 2,
+  gap: 14,
+  rule: { color: '#cbd5e1', width: 0.5 },
+  children: [
+    { type: 'heading', level: 3, content: 'Column 1' },
+    { type: 'paragraph', content: 'First column text...' },
+    { type: 'paragraph', content: 'Second column text...' },
+  ],
+}
+
+// HTML: just use CSS column-count
+const html = `&lt;div style="column-count:2; column-gap:14pt"&gt;
+  &lt;p&gt;Flows into two columns...&lt;/p&gt;
+&lt;/div&gt;`;</code></pre>
+      <p>See <code>samples/multi-column.html</code> for 2-column and 3-column layouts with rules.</p>
+    </section>
+
+    <section id="ex-gantt">
+      <h2>Gantt / timeline chart</h2>
+      <pre data-copy><code>// IR
+{
+  type: 'chart',
+  kind: 'gantt',
+  series: [],
+  ganttStart: 0, ganttEnd: 12, ganttUnit: 'week',
+  ganttTasks: [
+    { name: 'Design', start: 0, end: 3, progress: 1 },
+    { name: 'Backend', start: 2, end: 7, color: '#06b6d4', progress: 0.6 },
+    { name: 'Testing', start: 8, end: 12, dependsOn: [1] },
+  ],
+}
+
+// HTML
+const html = `&lt;div data-chart="gantt"
+  data-gantt-unit="week" data-gantt-start="0" data-gantt-end="12"
+  data-gantt-tasks="Design:0:3;Backend:2:7:#06b6d4:0.6;Testing:8:12:0,1"&gt;&lt;/div&gt;`;</code></pre>
+      <p>Task bars render at proportional positions, progress fills darker sub-bars, and dependencies draw L-shaped arrows. See <code>samples/gantt.html</code>.</p>
+    </section>
+
+    <section id="ex-streaming">
+      <h2>Streaming PDF output</h2>
+      <pre data-copy><code>import { renderToStream } from 'pdf-report-engine';
+
+// Express / Node HTTP response
+const stream = await renderToStream(report, { fonts });
+const reader = stream.getReader();
+res.setHeader('Content-Type', 'application/pdf');
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+  res.write(value);
+}
+res.end();</code></pre>
+      <p><code>renderToStream()</code> forces <code>bufferPages: false</code> internally, so each page’s bytes flush as soon as the next starts — lower peak memory for large documents.</p>
+    </section>
   </main>
 
   <footer class="site-footer">

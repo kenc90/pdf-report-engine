@@ -95,6 +95,8 @@ export interface Fragment {
   anchor?: string;
   /** Paint the whole fragment with this opacity (watermarks / background bands). */
   opacity?: number;
+  /** Rotation in degrees counter-clockwise, applied around the fragment center. */
+  rotate?: number;
 }
 
 /** Box geometry a fragment is painted into; used by borders and backgrounds. */

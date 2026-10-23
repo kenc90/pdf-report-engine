@@ -7,7 +7,7 @@
  * subset) and lower-level pieces are exported so callers can build a pipeline by
  * hand or extend the IR.
  */
-export { createReport, renderToBuffer, type RenderOptions, type RenderResult } from './render.js';
+export { createReport, renderToBuffer, renderToStream, type RenderOptions, type RenderResult } from './render.js';
 
 export { resolveRemoteImages, type ImageResolveOptions } from './core/remote-image.js';
 
@@ -38,9 +38,11 @@ export type {
   SvgBlock,
   FlexBlock,
   FlexItem,
+  ColumnBlock,
   ChartBlock,
   ChartKind,
   ChartSeries,
+  GanttTask,
   ReferenceLine,
   ValueAxisOptions,
   TocBlock,
@@ -59,6 +61,7 @@ export type {
   DataSource,
   Expr,
   FontReference,
+  WatermarkSpec,
 } from './ir/schema.js';
 
 export { resolvePage, type ResolvedPage, type PageSpec } from './core/page.js';

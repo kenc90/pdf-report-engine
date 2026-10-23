@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Hyperlinks and Internal Links</title>
+  <style>
+    @page { size: a4; margin: 18mm 16mm; }
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; color: #1e293b; }
+    h1 { color: #0f2f57; }
+    h2 { color: #1e40af; margin-top: 16pt; }
+    a { color: #2563eb; }
+    .toc { margin: 12pt 0; padding: 10pt; border: 0.5pt solid #cbd5e1; }
+    .toc a { display: block; margin: 4pt 0; }
+  </style>
+</head>
+<body>
+  <h1>Hyperlinks &amp; Internal Links</h1>
+
+  <div class="toc">
+    <h2 style="margin-top:0">Table of Contents</h2>
+    <a href="#section-intro">1. Introduction</a>
+    <a href="#section-external">2. External Links</a>
+    <a href="#section-internal">3. Internal Navigation</a>
+    <a href="#section-mixed">4. Mixed Usage</a>
+  </div>
+
+  <h2 id="section-intro">1. Introduction</h2>
+  <p>
+    This sample demonstrates clickable hyperlinks in the generated PDF.
+    Links are selectable and interactive in any PDF reader.
+  </p>
+
+  <h2 id="section-external">2. External Links</h2>
+  <p>
+    Visit the <a href="https://github.com/kenc90/pdf-report-engine">pdf-report-engine repository</a>
+    for source code, or read the <a href="https://kenc90.github.io/pdf-report-engine/">documentation site</a>.
+  </p>
+  <p>
+    You can also link to <a href="https://www.w3.org/TR/PDF/">the PDF specification</a>
+    or <a href="https://pdfkit.org">pdfkit</a>, the library underlying this engine.
+  </p>
+
+  <h2 id="section-internal">3. Internal Navigation</h2>
+  <p>
+    Jump back to the <a href="#section-intro">Introduction</a> or go directly to
+    <a href="#section-mixed">Mixed Usage</a>. Internal links use <code>#anchor</code> targets
+    which become PDF named destinations.
+  </p>
+
+  <h2 id="section-mixed">4. Mixed Usage</h2>
+  <p>
+    A single paragraph can contain both: learn about <a href="https://developer.mozilla.org/en-US/docs/Web/HTML/Element/a">the anchor element</a>
+    or return to <a href="#section-external">External Links</a> for more examples.
+  </p>
+  <p style="margin-top:16pt; color:#6b7c93; font-size:9pt">
+    All links in this document are fully clickable in any standards-compliant PDF viewer.
+  </p>
+</body>
+</html>

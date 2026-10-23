@@ -866,6 +866,172 @@ const pdf = await renderToBuffer(report);</code></pre>
       </div>
     </section>
 
+    <section id="links">
+      <h2>Hyperlinks &amp; internal links</h2>
+      <p>
+        Text wrapped in <code>&lt;a href&gt;</code> becomes a clickable link in the generated PDF.
+        External URLs (<code>https://…</code>) open in the reader’s browser; internal anchors
+        (<code>#section-name</code>) jump to the matching <code>id</code> within the document.
+      </p>
+      <pre data-copy><code>&lt;p&gt;Visit &lt;a href="https://github.com/kenc90/pdf-report-engine"&gt;the repository&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;Jump to &lt;a href="#section-2"&gt;Section 2&lt;/a&gt;.&lt;/p&gt;
+&lt;h2 id="section-2"&gt;Section 2&lt;/h2&gt;</code></pre>
+      <p>
+        Links are underlined and coloured automatically (via the style cascade). The engine
+        registers named destinations for every heading <code>id</code> and draws link annotations
+        at the correct glyph positions during the write pass.
+      </p>
+      <p>No extra IR or API call is needed — the HTML adapter maps <code>&lt;a&gt;</code> to <code>ContentSpan.link</code> and the writer emits <code>doc.link()</code> / <code>doc.goTo()</code>.</p>
+    </section>
+
+    <section id="rich-text">
+      <h2>Rich inline text</h2>
+      <p>
+        Per-run style overrides within a paragraph are fully supported: <strong>bold</strong>,
+        <em>italic</em>, <u>underline</u>, <s>strikethrough</s>, colour, font-size, background
+        highlight, and opacity — all via inline HTML elements or <code>style</code> attributes.
+      </p>
+      <pre data-copy><code>&lt;p&gt;
+  Normal &lt;strong&gt;bold&lt;/strong&gt; &lt;em&gt;italic&lt;/em&gt; &lt;u&gt;underline&lt;/u&gt;
+  &lt;mark&gt;highlight&lt;/mark&gt;
+  &lt;span style="color:#dc2626"&gt;red&lt;/span&gt;
+  &lt;span style="text-decoration:line-through"&gt;strikethrough&lt;/span&gt;
+  &lt;span style="font-weight:bold; font-style:italic"&gt;bold-italic&lt;/span&gt;
+&lt;/p&gt;</code></pre>
+      <p>
+        Each styled span becomes an <code>InlineSource</code> with a sparse <code>StyleProps</code>
+        override, typeset independently so the glyph positions, font switches, and decorations
+        (underline / line-through) are drawn precisely.
+      </p>
+    </section>
+
+    <section id="watermark">
+      <h2>Page watermark</h2>
+      <p>
+        A declarative watermark is rendered diagonally behind every page. Add it via
+        <code>&lt;meta name="watermark"&gt;</code> in HTML, or the <code>watermark</code> field on
+        the <code>ReportDoc</code> IR.
+      </p>
+      <pre data-copy><code>&lt;!-- HTML --&gt;
+&lt;meta name="watermark" content="DRAFT" data-watermark-rotate="-35" data-watermark-opacity="0.18" /&gt;
+
+&lt;!-- or on <body> --&gt;
+&lt;body data-watermark="CONFIDENTIAL"&gt;</code></pre>
+      <pre data-copy><code>// IR
+{
+  watermark: { text: 'DRAFT', rotate: -35, fontSize: 72, color: '#c0c0c0', opacity: 0.18 },
+  body: [ … ]
+}</code></pre>
+      <table>
+        <thead><tr><th>Property</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>text</code></td><td>—</td><td>The watermark string.</td></tr>
+          <tr><td><code>rotate</code></td><td><code>-35</code></td><td>Degrees counter-clockwise.</td></tr>
+          <tr><td><code>fontSize</code></td><td><code>72</code></td><td>Text size in pt.</td></tr>
+          <tr><td><code>color</code></td><td><code>#c0c0c0</code></td><td>Text colour.</td></tr>
+          <tr><td><code>opacity</code></td><td><code>0.18</code></td><td>Paint opacity (0–1).</td></tr>
+          <tr><td><code>fontFamily</code></td><td>document base</td><td>Font family override.</td></tr>
+        </tbody>
+      </table>
+      <p>The watermark is placed as a background fragment per page, rotated around the page center, and painted before headers/body/footers.</p>
+    </section>
+
+    <section id="columns">
+      <h2>Multi-column layout</h2>
+      <p>
+        Distribute child blocks across N equal-width columns using CSS
+        <code>column-count</code> or the <code>data-columns</code> attribute. The engine
+        sequentially fills columns by height (total / count).
+      </p>
+      <pre data-copy><code>&lt;div style="column-count: 2; column-gap: 14pt"&gt;
+  &lt;p&gt;First paragraph flows into column 1.&lt;/p&gt;
+  &lt;p&gt;This may continue into column 2.&lt;/p&gt;
+&lt;/div&gt;
+
+&lt;!-- Or via data attribute with a vertical rule --&gt;
+&lt;div data-columns="3" data-column-gap="10pt" data-column-rule="#cbd5e1"&gt;
+  &lt;p&gt;…&lt;/p&gt;
+&lt;/div&gt;</code></pre>
+      <pre data-copy><code>// IR
+{
+  type: 'columns',
+  count: 2,
+  gap: 14,
+  rule: { color: '#cbd5e1', width: 0.5 },
+  children: [
+    { type: 'paragraph', content: 'Left' },
+    { type: 'paragraph', content: 'Right' },
+  ],
+}</code></pre>
+      <p>The <code>ColumnBlock</code> is kept atomic (never splits across pages). Vertical rules are optional lines drawn at column boundaries.</p>
+    </section>
+
+    <section id="gantt">
+      <h2>Gantt / timeline chart</h2>
+      <p>
+        A <code>data-chart="gantt"</code> element renders a project timeline with task bars,
+        optional progress overlays, and dependency arrows.
+      </p>
+      <pre data-copy><code>&lt;div data-chart="gantt"
+     data-title="Sprint Plan"
+     data-gantt-unit="day"
+     data-gantt-start="0"
+     data-gantt-end="20"
+     data-gantt-tasks="Design:0:4;Backend:3:10;Frontend:6:14;Testing:15:20"&gt;
+&lt;/div&gt;</code></pre>
+      <pre data-copy><code>// IR
+{
+  type: 'chart',
+  kind: 'gantt',
+  series: [],
+  ganttTasks: [
+    { name: 'Design', start: 0, end: 4 },
+    { name: 'Backend', start: 3, end: 10, color: '#06b6d4', progress: 0.7 },
+    { name: 'Testing', start: 8, end: 12, dependsOn: [1] },
+  ],
+  ganttStart: 0,
+  ganttEnd: 20,
+  ganttUnit: 'day',
+}</code></pre>
+      <table>
+        <thead><tr><th>Task field</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>name</code></td><td>Label in the left gutter.</td></tr>
+          <tr><td><code>start</code></td><td>Offset from <code>ganttStart</code> (in <code>ganttUnit</code> increments).</td></tr>
+          <tr><td><code>end</code> / <code>duration</code></td><td>Bar end offset (absolute) or length.</td></tr>
+          <tr><td><code>color</code></td><td>Bar fill colour.</td></tr>
+          <tr><td><code>progress</code></td><td>0–1; draws a darker sub-bar.</td></tr>
+          <tr><td><code>dependsOn</code></td><td>Task indices to draw L-shaped arrows from.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="streaming">
+      <h2>Streaming output</h2>
+      <p>
+        <code>renderToStream()</code> returns a <code>ReadableStream&lt;Uint8Array&gt;</code>
+        that flushes each page incrementally, reducing peak memory for server-side rendering.
+      </p>
+      <pre data-copy><code>import { renderToStream } from 'pdf-report-engine';
+
+const stream = await renderToStream(report, { fonts: fontSources });
+
+// Node: pipe to a response
+stream.pipeTo(Writable.toWeb(response.body));
+
+// Or collect chunks manually
+const reader = stream.getReader();
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+  response.write(value);
+}</code></pre>
+      <p>
+        Internally this sets <code>bufferPages: false</code>, which tells pdfkit to flush each
+        page’s encoded stream as soon as the next page starts — the ideal mode for HTTP streaming.
+      </p>
+    </section>
+
     <section id="cli">
       <h2>The CLI</h2>
       <p>Convert authoring HTML files to PDF, or build the bundled demo report.</p>
@@ -944,6 +1110,11 @@ npm run demo</code></pre>
         <a href="getting-started.html#barcodes">Barcodes</a>
         <a href="getting-started.html#svg">SVG vector images</a>
         <a href="getting-started.html#flex">Flexbox layout</a>
+        <a href="getting-started.html#links">Hyperlinks &amp; links</a>
+        <a href="getting-started.html#watermark">Watermark</a>
+        <a href="getting-started.html#columns">Multi-column</a>
+        <a href="getting-started.html#gantt">Gantt chart</a>
+        <a href="getting-started.html#streaming">Streaming</a>
         <a href="getting-started.html#web-fonts">Web fonts &amp; CJK</a>
         <a href="getting-started.html#cli">Command line</a>
       </nav>

@@ -45,6 +45,9 @@ import type {
   FlexBlock,
   FlexItem,
   ReferenceLine,
+  ColumnBlock,
+  WatermarkSpec,
+  GanttTask,
 } from '../ir/schema.js';
 
 // --- tiny, forgiving HTML tokenizer/parser ---------------------------------
@@ -725,7 +728,7 @@ function numAttr(el: HElement, name: string): number | undefined {
 
 function chartKind(value: string | undefined, fallback: ChartKind = 'bar'): ChartKind {
   const v = (value ?? '').trim().toLowerCase();
-  const known: ChartKind[] = ['bar', 'line', 'area', 'pie', 'donut', 'combo', 'waterfall', 'scatter', 'bubble', 'radar', 'gauge', 'heatmap'];
+  const known: ChartKind[] = ['bar', 'line', 'area', 'pie', 'donut', 'combo', 'waterfall', 'scatter', 'bubble', 'radar', 'gauge', 'heatmap', 'gantt'];
   return (known as string[]).includes(v) ? (v as ChartKind) : fallback;
 }
 
@@ -818,6 +821,18 @@ function applyChartOptions(el: HElement, block: ChartBlock): void {
     if (Object.keys(hc).length > 0) block.heatmapColors = hc;
   }
 
+  // Gantt: unit, start, end, and tasks.
+  const ganttUnit = el.attrs['data-gantt-unit'];
+  if (ganttUnit === 'day' || ganttUnit === 'week' || ganttUnit === 'month') block.ganttUnit = ganttUnit;
+  const gStart = numAttr(el, 'data-gantt-start');
+  if (gStart !== undefined) block.ganttStart = gStart;
+  const gEnd = numAttr(el, 'data-gantt-end');
+  if (gEnd !== undefined) block.ganttEnd = gEnd;
+  const ganttTasks = el.attrs['data-gantt-tasks'];
+  if (ganttTasks) {
+    block.ganttTasks = parseGanttTasks(ganttTasks);
+  }
+
   // Reference / threshold lines: `data-reference-lines="50:max;80,color=#c00"`
   // semicolon-separated; each line is `value[:label][ key=val ...]`.
   const refs = el.attrs['data-reference-lines'];
@@ -880,6 +895,56 @@ function assignSeriesColumn(el: HElement, block: ChartBlock, attr: string, key: 
     const target = block.series[i];
     if (target) (target as unknown as Record<string, unknown>)[key] = group;
   }
+}
+
+/**
+ * Parse `data-gantt-tasks` into GanttTask[].
+ * Format: semicolons separate tasks; each task is `name:start:end[:color][:progress][:deps]`.
+ * If field 3 is a number 0–1 it is treated as progress (no colour given).
+ * Dependencies are comma-separated integer indices.
+ */
+function parseGanttTasks(raw: string): GanttTask[] {
+  return raw.split(';').map((s) => s.trim()).filter(Boolean).map((segment) => {
+    const parts = segment.split(':').map((p) => p.trim());
+    const name = parts[0] ?? '';
+    const start = Number(parts[1]) || 0;
+    const endOrDur = parts[2];
+    const task: GanttTask = { name, start };
+    if (endOrDur !== undefined) {
+      const val = Number(endOrDur);
+      if (Number.isFinite(val)) task.end = val;
+    }
+    // Fields 3–5: color, progress, deps (order depends on content)
+    let nextIdx = 3;
+    // Check field 3: color or progress
+    const field3 = parts[3];
+    if (field3 !== undefined && field3 !== '') {
+      const num3 = Number(field3);
+      if (Number.isFinite(num3) && num3 >= 0 && num3 <= 1 && !field3.startsWith('#')) {
+        task.progress = num3;
+      } else {
+        task.color = field3;
+      }
+      nextIdx = 4;
+    }
+    // Check remaining fields for progress and deps
+    if (task.progress === undefined && parts[nextIdx] !== undefined && parts[nextIdx] !== '') {
+      const p = Number(parts[nextIdx]);
+      if (Number.isFinite(p) && !parts[nextIdx]!.includes(',')) {
+        task.progress = Math.min(1, Math.max(0, p));
+        nextIdx++;
+      }
+    }
+    // Remaining field: deps (comma-separated integers)
+    if (parts[nextIdx] !== undefined && parts[nextIdx]!.includes(',')) {
+      task.dependsOn = parts[nextIdx]!.split(',').map((d) => Number(d.trim())).filter((n) => Number.isInteger(n) && n >= 0);
+    } else if (parts[nextIdx] !== undefined && parts[nextIdx] !== '' && !Number.isFinite(Number(parts[nextIdx]))) {
+      // Single integer dep
+      const d = Number(parts[nextIdx]);
+      if (Number.isInteger(d) && d >= 0) task.dependsOn = [d];
+    }
+    return task;
+  });
 }
 
 function chartFromElement(el: HElement, style: IrBox): ChartBlock {
@@ -1095,6 +1160,47 @@ function elToBlock(el: HElement, opts: HtmlOptions): Block[] {
   return blocks;
 }
 
+/** Detect `column-count` from inline style or `data-columns` attribute. */
+function detectColumnCount(el: HElement): number | undefined {
+  const attr = el.attrs['data-columns'];
+  if (attr !== undefined) {
+    const n = parseInt(attr, 10);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  const raw = el.attrs['style'];
+  if (raw) {
+    const m = /(?:^|;)\s*column-count\s*:\s*(\d+)/i.exec(raw);
+    if (m) {
+      const n = parseInt(m[1]!, 10);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+  }
+  return undefined;
+}
+
+/** Build a ColumnBlock from an element with detected column count. */
+function columnBlockFromElement(el: HElement, opts: HtmlOptions, style: IrBox, count: number): ColumnBlock {
+  const children: Block[] = [];
+  for (const child of el.children) {
+    if (child.type === 'text') {
+      if (/\S/.test(child.text)) children.push({ type: 'paragraph', content: textToContent(child.text.trim(), undefined) } as Block);
+      continue;
+    }
+    children.push(...elToBlock(child, opts));
+  }
+  const gapAttr = el.attrs['data-column-gap'] ?? /column-gap\s*:\s*([^;]+)/i.exec(el.attrs['style'] ?? '')?.[1]?.trim();
+  const ruleAttr = el.attrs['data-column-rule'];
+  const block: ColumnBlock = {
+    type: 'columns',
+    count,
+    ...(gapAttr ? { gap: gapAttr } : {}),
+    ...(ruleAttr && ruleAttr !== 'false' && ruleAttr !== 'none' ? { rule: ruleAttr === 'true' ? true : { color: ruleAttr } } : {}),
+    children,
+    ...(style as Partial<ColumnBlock>),
+  };
+  return block;
+}
+
 function elToBlockCore(el: HElement, opts: HtmlOptions): Block[] {
   // Non-visual head/stylesheet elements never become report content.
   if (el.tag === 'style' || el.tag === 'script' || el.tag === 'link' || el.tag === 'meta' || el.tag === 'title') return [];
@@ -1111,6 +1217,12 @@ function elToBlockCore(el: HElement, opts: HtmlOptions): Block[] {
   if (el.attrs['data-toc'] !== undefined) return [withId(tocFromElement(el, style))];
   if (el.attrs['data-barcode'] !== undefined) return [withId(barcodeFromElement(el, style))];
   if (el.attrs['data-chart'] !== undefined && el.tag !== 'table') return [withId(chartFromElement(el, style))];
+
+  // Multi-column detection: `data-columns` attr or `column-count` in inline style.
+  const colCount = detectColumnCount(el);
+  if (colCount !== undefined && colCount > 1) {
+    return [withId(columnBlockFromElement(el, opts, style, colCount))];
+  }
 
   const heading = /^h([1-6])$/.exec(el.tag);
   if (heading) {
@@ -1697,6 +1809,7 @@ export function htmlToReportDoc(html: string, opts: HtmlOptions = {}): ReportDoc
   const page = { ...htmlPage, ...pickDefined(opts.page) };
   const hasPage = Object.keys(page).length > 0;
   const fonts = collectFontRefs(tree);
+  const watermark = parseWatermark(html, tree, body);
 
   return {
     info: opts.info,
@@ -1706,5 +1819,38 @@ export function htmlToReportDoc(html: string, opts: HtmlOptions = {}): ReportDoc
     ...(Object.keys(bands).length ? { bands } : {}),
     body: blocks,
     ...(fonts.length ? { fonts } : {}),
+    ...(watermark ? { watermark } : {}),
   };
+}
+
+/** Extract watermark spec from `<meta name="watermark">` or `data-watermark` on body. */
+function parseWatermark(_html: string, tree: HElement, body: HElement): WatermarkSpec | undefined {
+  // Check <meta name="watermark" content="DRAFT">
+  const head = findFirst(tree, 'head');
+  const metas = head ? head.children.filter((c): c is HElement => c.type === 'element' && c.tag === 'meta') : [];
+  const wmMeta = metas.find((m) => m.attrs['name'] === 'watermark');
+  if (wmMeta?.attrs['content']) {
+    return buildWatermarkSpec(wmMeta.attrs['content'], wmMeta.attrs);
+  }
+  // Check data-watermark on <body>
+  const wmAttr = body.attrs['data-watermark'];
+  if (wmAttr) {
+    return buildWatermarkSpec(wmAttr, body.attrs);
+  }
+  return undefined;
+}
+
+function buildWatermarkSpec(text: string, attrs: Record<string, string | undefined>): WatermarkSpec {
+  const spec: WatermarkSpec = { text };
+  const rot = attrs['data-watermark-rotate'];
+  if (rot !== undefined) { const n = Number(rot); if (Number.isFinite(n)) spec.rotate = n; }
+  const fs = attrs['data-watermark-size'];
+  if (fs !== undefined) { const n = Number(fs); if (Number.isFinite(n)) spec.fontSize = n; }
+  const clr = attrs['data-watermark-color'];
+  if (clr) spec.color = clr;
+  const op = attrs['data-watermark-opacity'];
+  if (op !== undefined) { const n = Number(op); if (Number.isFinite(n)) spec.opacity = Math.min(1, Math.max(0, n)); }
+  const ff = attrs['data-watermark-font'];
+  if (ff) spec.fontFamily = ff;
+  return spec;
 }

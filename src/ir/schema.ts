@@ -219,7 +219,8 @@ export type ChartKind =
   | 'bubble'
   | 'radar'
   | 'gauge'
-  | 'heatmap';
+  | 'heatmap'
+  | 'gantt';
 
 export interface ChartSeries {
   /** Legend label. */
@@ -343,6 +344,30 @@ export interface ChartBlock extends BlockBase {
   heatmapLabels?: boolean;
   /** Heatmap colour ramp (default `#eef4ff` → `#1e3a8a`). */
   heatmapColors?: { from?: ColorInput; to?: ColorInput };
+  /** Gantt charts: task definitions (alternative to `series`). */
+  ganttTasks?: GanttTask[];
+  /** Gantt charts: time-axis minimum (day offset or ISO date). */
+  ganttStart?: number | string;
+  /** Gantt charts: time-axis maximum. */
+  ganttEnd?: number | string;
+  /** Gantt charts: tick interval (default `'week'`). */
+  ganttUnit?: 'day' | 'week' | 'month';
+}
+
+/** A single Gantt task bar. */
+export interface GanttTask {
+  name: string;
+  /** Start offset from `ganttStart` (in `ganttUnit` increments, or ISO date string). */
+  start: number | string;
+  /** Duration in `ganttUnit` increments (or ISO end-date string via `end`). */
+  duration?: number | string;
+  /** Alternative to `duration`: explicit end offset/date. */
+  end?: number | string;
+  color?: ColorInput;
+  /** Indices of tasks this depends on (draws dependency arrows). */
+  dependsOn?: number[];
+  /** Progress 0–1 (fills a darker portion within the task bar). */
+  progress?: number;
 }
 
 /** A horizontal reference / threshold line on a value axis. */
@@ -610,7 +635,20 @@ export interface FlexItem extends BlockBase {
   alignSelf?: 'auto' | 'flex-start' | 'center' | 'flex-end' | 'stretch';
 }
 
-export type Block = ParagraphBlock | HeadingBlock | TableBlock | SpacerBlock | PageBreakBlock | ImageBlock | SvgBlock | ChartBlock | TocBlock | BarcodeBlock | FlexBlock;
+/** A multi-column layout block: children flow into N equal-width columns. */
+export interface ColumnBlock extends BlockBase {
+  type: 'columns';
+  /** Number of columns (default 2). */
+  count?: number;
+  /** Gap between columns in pt or Length string (default 12). */
+  gap?: number | string;
+  /** Vertical rule between columns (default false). */
+  rule?: boolean | { color?: ColorInput; width?: number };
+  /** Child blocks distributed across columns. */
+  children: Block[];
+}
+
+export type Block = ParagraphBlock | HeadingBlock | TableBlock | SpacerBlock | PageBreakBlock | ImageBlock | SvgBlock | ChartBlock | TocBlock | BarcodeBlock | FlexBlock | ColumnBlock;
 
 export type BandType = 'pageHeader' | 'pageFooter' | 'title' | 'summary' | 'background';
 
@@ -632,6 +670,22 @@ export type FontReference =
   | { type: 'font-face'; css: string }
   /** A direct font file URL (TTF/OTF/TTC/WOFF2), labelled with its family. */
   | { type: 'url'; url: string; family: string; weight?: number; style?: 'normal' | 'italic'; postscriptName?: string };
+
+/** Declarative watermark specification for every page. */
+export interface WatermarkSpec {
+  /** The watermark text to render. */
+  text: string;
+  /** Rotation in degrees counter-clockwise (default -35, i.e. diagonal). */
+  rotate?: number;
+  /** Font size in pt (default 72). */
+  fontSize?: number;
+  /** Text colour (default `'#c0c0c0'`). */
+  color?: ColorInput;
+  /** Opacity 0–1 (default 0.18). */
+  opacity?: number;
+  /** Font family override. */
+  fontFamily?: string;
+}
 
 export interface ReportDoc {
   /** Optional free-form metadata; `title`/`author`/`subject`/`keywords` become PDF info. */
@@ -658,6 +712,8 @@ export interface ReportDoc {
    * when the body contains headings; set `false` to suppress it.
    */
   outline?: boolean;
+  /** Page watermark drawn as a rotated, semi-transparent text behind content. */
+  watermark?: WatermarkSpec;
 }
 
 /** Row descriptor after data expansion: either a concrete row or a band marker. */

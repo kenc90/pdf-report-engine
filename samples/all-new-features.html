@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>All New Features</title>
+  <meta name="watermark" content="SAMPLE" data-watermark-rotate="-30" data-watermark-size="70" data-watermark-color="#94a3b8" data-watermark-opacity="0.12" />
+  <style>
+    @page { size: a4; margin: 16mm 14mm; }
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #1e293b; }
+    h1 { color: #0f2f57; }
+    h2 { color: #1e40af; margin-top: 14pt; border-bottom: 0.6pt solid #c9d6e6; padding-bottom: 3pt; }
+    a { color: #2563eb; }
+    table { border-collapse: collapse; width: 100%; margin: 6pt 0; }
+    th, td { border: 0.5pt solid #94a3b8; padding: 4pt 6pt; text-align: left; }
+    th { background: #f1f5f9; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>All New Features — Combined Demo</h1>
+  <p>
+    This document showcases all <strong>six new features</strong> in one report:
+    <a href="#sec-links">hyperlinks</a>,
+    <a href="#sec-rich">rich text</a>,
+    <a href="#sec-wm">watermark</a>,
+    <a href="#sec-col">multi-column</a>,
+    <a href="#sec-gantt">gantt chart</a>, and
+    <a href="#sec-stream">streaming</a>.
+  </p>
+
+  <h2 id="sec-links">1. Hyperlinks &amp; Internal Links</h2>
+  <p>
+    External: visit the <a href="https://github.com/kenc90/pdf-report-engine">project repository</a>.<br/>
+    Internal: jump to <a href="#sec-gantt">the Gantt section</a> or back to the <a href="#sec-links">top</a>.<br/>
+    Links are fully clickable in any PDF viewer and use <code>doc.link()</code> / <code>doc.goTo()</code> internally.
+  </p>
+
+  <h2 id="sec-rich">2. Rich Inline Text</h2>
+  <p>
+    Combine <strong>bold</strong>, <em>italic</em>, <u>underline</u>,
+    <mark>highlight</mark>, <span style="color:#dc2626">red</span>,
+    <span style="font-size:14pt; color:#7c3aed">large purple</span>, and
+    <span style="text-decoration:line-through">strikethrough</span> in one paragraph.
+    Nest them: <strong>bold with <em>italic</em> inside</strong>.
+  </p>
+
+  <h2 id="sec-wm">3. Watermark</h2>
+  <p>
+    Notice the diagonal <strong>SAMPLE</strong> watermark behind every page — specified by
+    <code>&lt;meta name="watermark" content="SAMPLE"&gt;</code> in the head. It renders at
+    12% opacity, rotated -30°, in the background layer before all content.
+  </p>
+
+  <h2 id="sec-col">4. Multi-Column Layout</h2>
+  <div style="column-count: 2; column-gap: 12pt;">
+    <p>The engine can distribute child blocks across N equal-width columns using <code>column-count</code> CSS or <code>data-columns</code> attributes.</p>
+    <p>Content flows into the first column until it reaches the target height (total / count), then spills into the next column.</p>
+    <p>Vertical rules between columns are optional — set via <code>data-column-rule</code>.</p>
+    <p>The entire multi-column block is kept atomic: it never splits across pages, ensuring visual consistency.</p>
+  </div>
+
+  <div style="margin-top: 8pt;">
+    <div data-columns="3" data-column-gap="8pt" data-column-rule="#e2e8f0">
+      <p style="font-size:9pt">Three columns with a light rule between each boundary, ideal for comparison layouts or newsletter-style content.</p>
+      <p style="font-size:9pt">Each column receives equal width calculated from the available space minus inter-column gaps.</p>
+      <p style="font-size:9pt">This sample uses the <code>data-columns</code> attribute form rather than inline CSS <code>column-count</code>.</p>
+    </div>
+  </div>
+
+  <h2 id="sec-gantt">5. Gantt / Timeline Chart</h2>
+  <div data-chart="gantt"
+       data-title="Feature Development Timeline"
+       data-gantt-unit="week"
+       data-gantt-start="0"
+       data-gantt-end="10"
+       data-colors="#6366f1,#06b6d4,#10b981,#f59e0b,#ef4444"
+       data-gantt-tasks="Planning:0:1.5:0.9;IR Schema:1:3:#6366f1:1;Layout:2:5:#06b6d4:0.6:0,1;Rendering:4:8:#10b981:0.3:2;Docs:7:10:#f59e0b:0:3">
+  </div>
+
+  <h2 id="sec-stream">6. Streaming Output</h2>
+  <p>
+    The <code>renderToStream()</code> API returns a <code>ReadableStream&lt;Uint8Array&gt;</code>
+    that flushes each page incrementally (with <code>bufferPages: false</code>), reducing peak
+    memory for server-side rendering:
+  </p>
+  <table>
+    <tr><th style="width:30%">API</th><th>Output</th><th>Use case</th></tr>
+    <tr><td><code>renderToBuffer()</code></td><td>Complete <code>Buffer</code></td><td>One-shot generation</td></tr>
+    <tr><td><code>renderToStream()</code></td><td><code>ReadableStream</code></td><td>HTTP response streaming</td></tr>
+    <tr><td><code>createReport()</code></td><td>Live <code>PDFDocument</code></td><td>Manual pipe / custom write</td></tr>
+  </table>
+
+  <p style="margin-top:12pt; color:#6b7c93; font-size:8.5pt">
+    All six features are declarative: watermark via <code>&lt;meta&gt;</code>, links via <code>&lt;a&gt;</code>, rich text via inline elements, columns via CSS <code>column-count</code>, gantt via <code>data-chart="gantt"</code>, streaming via the <code>renderToStream()</code> API.
+  </p>
+</body>
+</html>

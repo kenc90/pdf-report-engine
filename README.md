@@ -34,10 +34,10 @@ glyph embedding all happen in-process via [`pdfkit`](https://pdfkit.org) +
 - **CSS stylesheet subset** — `<style>` rules with tag, class, id, descendant (` `) and
   child (`>`) selectors, resolved by CSS specificity; inline `style` still wins.
 - **Vector charts** — data-bound `bar`, `line`, `area`, `pie`, `donut`, `combo`, `waterfall`,
-  `scatter`, `bubble`, `radar`, `gauge` and `heatmap` charts with axes, grid lines, legends,
+  `scatter`, `bubble`, `radar`, `gauge`, `heatmap` and `gantt` charts with axes, grid lines, legends,
   stacked modes, 100% stacking, a secondary axis, horizontal **reference / threshold lines**,
-  high–low **range bars** and value labels. Every mark is a real PDF path/rectangle, so charts
-  stay crisp at any zoom.
+  high–low **range bars**, progress bars, dependency arrows and value labels. Every mark is a real
+  PDF path/rectangle, so charts stay crisp at any zoom.
 - **SVG vector images** — inline `<svg>`, `data:image/svg+xml`, `.svg` files and remote SVG URLs
   render as real PDF paths (not rasterised). Supports `path` (all commands incl. arcs),
   `rect`/`circle`/`ellipse`/`line`/`polyline`/`polygon`, nested `g` groups with `transform`, and
@@ -45,6 +45,9 @@ glyph embedding all happen in-process via [`pdfkit`](https://pdfkit.org) +
 - **Flexbox layout** — a `display: flex` container lays out any blocks along a row or column with
   `flex-direction`, `flex-wrap`, `justify-content`, `align-items` / `align-self`, `gap` and per-item
   `flex-grow` / `flex-shrink` / `flex-basis`, as a single atomic fragment.
+- **Multi-column layout** — a `columns` block (or CSS `column-count: N` in HTML) distributes its
+  children across N equal-width sub-columns with an optional vertical rule between them, balanced
+  by height and kept atomic so pagination can push the whole cluster to a new page.
 - **Rich table cells** — a cell can hold a stack of blocks (images, QR/barcodes, charts, nested
   tables, paragraphs), laid out inside the padded cell. Rows grow to fit and stay atomic, so
   pagination is unchanged.
@@ -54,6 +57,14 @@ glyph embedding all happen in-process via [`pdfkit`](https://pdfkit.org) +
 - **Table of contents, PDF bookmarks and hyperlinks** — a `toc` block with dot leaders
   and *real* page numbers (fixed-point pagination), a nested PDF outline generated from
   headings, external `http(s)` links and internal `#anchor` destinations.
+- **Rich inline text** — `<strong>`, `<em>`, `<u>`/`<ins>`, `<mark>`, `<span style="…">` and
+  per-span colour / weight / background overrides flow inside a paragraph or table cell while
+  the surrounding runs keep the block's base style.
+- **Page watermarks** — a `watermark` field on `ReportDoc` (or `data-watermark="DRAFT"` on
+  `<body>`, or `<meta name="watermark" content="…">`) paints a rotated, translucent text behind
+  every page. Rotation, size, colour, opacity and font family are configurable; the fragment is
+  generated in the pagination pass and drawn by the writer's rotation transform around the
+  page centre.
 - **QR / Code 128 / EAN-13** barcode blocks — dependency-free encoders, emitted as
   merged vector rectangles with optional human-readable captions.
 - **`@page` control from HTML** — a `<style>@page { size: A4 landscape; margin: 15mm }</style>`
@@ -114,6 +125,8 @@ authoring (IR or HTML)  ->  ReportDoc IR  ->  layout  ->  pagination  ->  pdfkit
 The main functions are:
 
 - `renderToBuffer(report, options?) → Promise<Buffer>` — one-shot: IR in, PDF bytes out.
+- `renderToStream(report, options?) → Promise<ReadableStream<Uint8Array>>` — same pipeline, but
+  pages flush incrementally (`bufferPages: false`); ideal for HTTP streaming / worker responses.
 - `createReport(report, options?) → { doc, pages, registry }` — gives you the live `pdfkit`
   `doc` (to pipe/stream yourself) and the paginated `pages` model.
 
@@ -405,7 +418,7 @@ const pdf = await renderToBuffer(report, { fonts: await readFontFiles([
   leaf binds that node's text to an expression instead of its literal content.
 - **Declarative chart / TOC / barcode blocks:** a `div` (or `table`) carrying a
   `data-chart` attribute becomes a `ChartBlock`:
-  `data-chart="bar|line|area|pie|donut|combo|waterfall"`, `data-title`, `data-categories="Q1,Q2"`,
+  `data-chart="bar|line|area|pie|donut|combo|waterfall|scatter|bubble|radar|gauge|heatmap|gantt"`, `data-title`, `data-categories="Q1,Q2"`,
   `data-series="Actual:1,2;Plan:3,4"` (or `data-values` for a single series),
   `data-colors`, `data-stacked` (`true` or `100%`), `data-show-values`,
   `data-legend="none|top|bottom|right"`,
@@ -418,6 +431,14 @@ const pdf = await renderToBuffer(report, { fonts: await readFontFiles([
   waterfall palette. A `<table data-chart="line">` reads its header
   row as series names and its first column as categories, so an authored table can be
   shown as a chart without a second data source.
+  For **Gantt** timelines (`data-chart="gantt"`) add `data-gantt-unit="day|week|month"`,
+  `data-gantt-start`, `data-gantt-end` and `data-gantt-tasks="name:start:end[:color][:progress][:deps];…"`
+  — `deps` is a comma-separated list of zero-based task indices to draw L-shaped arrows from.
+  A **watermark** is declared on the whole report: `<body data-watermark="DRAFT" data-watermark-rotate="-35"
+  data-watermark-size="72" data-watermark-color="#c0c0c0" data-watermark-opacity="0.18">`, or equivalently
+  `<meta name="watermark" content="DRAFT">` in the `<head>`.
+  **Multi-column** layout uses standard CSS: `<div style="column-count:3; column-gap:14pt">` (with an
+  optional vertical rule via `data-columns-rule` or the `rule` IR field).
   A `div data-toc` becomes a TOC (`data-title`, `data-level`/`data-max-level`,
   `data-leaders`, `data-page-numbers`, `data-indent`, `data-gap`), and a
   `div data-barcode="qr|code128|ean13"` becomes a barcode (`data-value`, `data-bind`,
@@ -565,6 +586,18 @@ The `samples/` folder demonstrates the supported subset:
   number), serif body text, and label/value section tables. It renders **out of the box** — the
   CLI auto-detects Times New Roman (lining figures, so digits align with capitals) and, via
   per-glyph fallback, a CJK face for the Chinese name — with no `-f` flags required.
+- `links.html` — **hyperlinks**: external `http(s)` links, internal `#anchor` jumps and a
+  generated TOC whose rows are all clickable destinations.
+- `rich-text.html` — **rich inline text**: `<strong>`, `<em>`, `<u>`, `<ins>`, `<mark>` and
+  `<span style="color:…">` inside paragraphs and table cells.
+- `watermark.html` — **page watermarks**: `<body data-watermark="CONFIDENTIAL">` (with rotation,
+  size, colour and opacity overrides) behind every page of a multi-page report.
+- `multi-column.html` — **multi-column layout**: 2- and 3-column sections declared via inline
+  `column-count` CSS (mapped to the `columns` IR block).
+- `gantt.html` — a **Gantt timeline** with task bars, progress fills and dependency arrows
+  driven by a single `data-gantt-tasks` attribute.
+- `all-new-features.html` — **every new feature combined**: hyperlinks, rich text, watermark,
+  multi-column layout, Gantt chart and streaming output (via `renderToStream`).
 
 ## Fonts
 
@@ -762,6 +795,7 @@ From the package root (`pdf-report-engine`):
 | --- | --- |
 | `createReport(report, options?)` | Build the `pdfkit` doc + paginated `pages`; returns `{ doc, pages, registry }`. |
 | `renderToBuffer(report, options?)` | `createReport` + collect to a `Buffer`. |
+| `renderToStream(report, options?)` | `createReport` wrapped as a `ReadableStream<Uint8Array>` with `bufferPages: false`, so pages flush as they're produced. |
 | `RenderOptions` | `{ fonts?: FontSource[], now?: () => Date, baseStyle?: Partial<StyleProps>, images?: ImageResolveOptions, resolveFonts?: FontResolveOptions, bufferPages?: boolean }`. |
 | `setImageFileReader(reader)` | Install the synchronous reader for path-based image/SVG sources (the Node CLI calls it once). |
 | `setImagePathAccess('allow' \| 'deny')` | Forbid reading image/SVG sources from the host filesystem. Default `'allow'`. |
@@ -771,7 +805,7 @@ From the package root (`pdf-report-engine`):
 | `FontRegistry` | Lower-level face registration / measurement. |
 | `resolvePage`, `toPt`, `expandBox`, `MM_TO_PT`, `CM_TO_PT`, `IN_TO_PT`, `PX_TO_PT` | Page-size & length helpers. |
 | `paginate` | Run the pagination engine directly. |
-| IR types | `ReportDoc`, `Block`, `TableBlock`, `ParagraphBlock`, `HeadingBlock`, `SpacerBlock`, `PageBreakBlock`, `ImageBlock`, `ChartBlock`, `ChartKind`, `ChartSeries`, `ValueAxisOptions`, `TocBlock`, `BarcodeBlock`, `BarcodeSymbology`, `BandContent`, `BandType`, `StyleProps`, `BoxProps`, `Content`, `ContentSpan`, `ColumnNode`, `RowNode`, `CellNode`, `GroupNode`, `DataSource`, `Expr`. |
+| IR types | `ReportDoc`, `Block`, `TableBlock`, `ParagraphBlock`, `HeadingBlock`, `SpacerBlock`, `PageBreakBlock`, `ImageBlock`, `ChartBlock`, `ChartKind`, `ChartSeries`, `ValueAxisOptions`, `ColumnBlock`, `FlexBlock`, `FlexItem`, `GanttTask`, `WatermarkSpec`, `TocBlock`, `BarcodeBlock`, `BarcodeSymbology`, `BandContent`, `BandType`, `StyleProps`, `BoxProps`, `Content`, `ContentSpan`, `ColumnNode`, `RowNode`, `CellNode`, `GroupNode`, `DataSource`, `Expr`. |
 
 `RenderOptions.now` is an injectable clock (for deterministic `now()` in expressions and
 PDF timestamps) — useful in tests.

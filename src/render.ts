@@ -113,6 +113,7 @@ export function createReport(report: ReportDoc, options: RenderOptions = {}): Re
       bands: report.bands,
       scope,
       baseStyle,
+      watermark: report.watermark,
     });
     const entries = collectTocEntries(pages);
     if (sameEntries(ctx.tocEntries, entries)) break;
@@ -163,6 +164,37 @@ export async function renderToBuffer(report: ReportDoc, options: RenderOptions =
     doc.on('data', (c: Uint8Array) => chunks.push(c));
     doc.on('end', () => resolve(concatChunks(chunks)));
     doc.on('error', reject);
+  });
+}
+
+/**
+ * Render to a `ReadableStream<Uint8Array>` for incremental delivery.
+ *
+ * Forces `bufferPages: false` so pdfkit flushes each page as the next one starts,
+ * reducing peak memory. Ideal for server-side response streaming.
+ */
+export async function renderToStream(
+  report: ReportDoc,
+  options: RenderOptions = {},
+): Promise<ReadableStream<Uint8Array>> {
+  const resolved = await resolveRemoteImages(report, options.images);
+  let effective = options;
+  if (report.fonts?.length) {
+    const remoteFonts = await resolveRemoteFonts(resolved, options.resolveFonts);
+    if (remoteFonts.length) effective = { ...options, fonts: [...(options.fonts ?? []), ...remoteFonts] };
+  }
+  const { doc } = createReport(resolved, { ...effective, bufferPages: false });
+  doc.end();
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      doc.on('data', (chunk: Uint8Array) => controller.enqueue(chunk));
+      doc.on('end', () => controller.close());
+      doc.on('error', (err: Error) => controller.error(err));
+    },
+    cancel() {
+      // pdfkit document is a Node Readable; abort it when the consumer cancels.
+      (doc as unknown as { destroy?: () => void }).destroy?.();
+    },
   });
 }
 

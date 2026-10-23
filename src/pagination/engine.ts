@@ -17,13 +17,14 @@
  * absolute (x, y) the writer must translate them to. The engine never touches
  * pdfkit.
  */
-import type { Block, BandContent, ReportDoc } from '../ir/schema.js';
+import type { Block, BandContent, ReportDoc, WatermarkSpec } from '../ir/schema.js';
 import type { ExprContext } from '../expr/eval.js';
 import type { ResolvedPage, Box } from '../core/page.js';
 import type { ResolvedStyle } from '../text/style.js';
 import type { LayoutContext } from '../layout/context.js';
 import { layoutBlock } from '../layout/block.js';
-import type { Fragment, OutlineEntry } from '../layout/flow.js';
+import type { Fragment, DrawCommand, OutlineEntry } from '../layout/flow.js';
+import type { PositionedRun } from '../text/typeset.js';
 
 export interface PlacedFragment {
   fragment: Fragment;
@@ -73,6 +74,7 @@ export interface PaginateInput {
   bands: ReportDoc['bands'];
   scope: ExprContext;
   baseStyle?: ResolvedStyle;
+  watermark?: WatermarkSpec;
 }
 
 function fragSpan(f: Fragment): number {
@@ -104,7 +106,7 @@ function layoutBand(band: BandContent | undefined, ctx: LayoutContext, opts: { c
 }
 
 export function paginate(input: PaginateInput): Page[] {
-  const { ctx, page, contentWidth, body, bands, scope, baseStyle } = input;
+  const { ctx, page, contentWidth, body, bands, scope, baseStyle, watermark } = input;
   const inherited = baseStyle ?? ctx.baseStyle;
   const opts = { contentWidth, scope, inherited };
 
@@ -279,6 +281,12 @@ export function paginate(input: PaginateInput): Page[] {
     // Background band first: it sits behind the header, body and footer.
     p.background = placeBand(layoutBand(bands?.background, ctx, po), contentLeft, page.margin.top);
 
+    // Watermark: a rotated, semi-transparent text centered on every page.
+    if (watermark) {
+      const wmFrag = buildWatermarkFragment(watermark, page, ctx);
+      p.background.push({ fragment: wmFrag, x: 0, y: 0 });
+    }
+
     p.header = placeBand(layoutBand(bands?.pageHeader, ctx, po), contentLeft, page.margin.top);
 
     const footerTop = page.height - page.margin.bottom - footerH;
@@ -347,4 +355,33 @@ function buildRuns(fragments: Fragment[]): number[][] {
   }
   if (run.length) runs.push(run);
   return runs;
+}
+
+/** Build a page-spanning watermark fragment with rotated, translucent text. */
+function buildWatermarkFragment(spec: WatermarkSpec, page: ResolvedPage, ctx: LayoutContext): Fragment {
+  const fontSize = spec.fontSize ?? 72;
+  const color = spec.color ?? '#c0c0c0';
+  const opacity = spec.opacity ?? 0.18;
+  const rotate = spec.rotate ?? -35;
+  const family = spec.fontFamily ?? ctx.baseStyle.fontStack ?? ctx.baseStyle.handle.family;
+  const handle = ctx.registry.resolve(family, 400, 'normal');
+  const textWidth = handle.widthOf(spec.text, fontSize);
+  const style: ResolvedStyle = { ...ctx.baseStyle, handle, fontSize, color, opacity };
+  const run: PositionedRun = { text: spec.text, style, x: 0, width: textWidth };
+  const cmd: DrawCommand = {
+    op: 'text',
+    x: page.width / 2 - textWidth / 2,
+    baselineY: page.height / 2 + (handle.ascender / handle.unitsPerEm) * fontSize * 0.35,
+    runs: [run],
+    gapWidth: 0,
+    decorations: [],
+  };
+  return {
+    height: page.height,
+    before: 0,
+    after: 0,
+    commands: [cmd],
+    rotate,
+    opacity,
+  };
 }

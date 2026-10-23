@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Rich Inline Text</title>
+  <style>
+    @page { size: a4; margin: 18mm 16mm; }
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; color: #1e293b; }
+    h1 { color: #0f2f57; }
+    h2 { color: #1e40af; margin-top: 14pt; }
+    table { border-collapse: collapse; width: 100%; margin-top: 8pt; }
+    th, td { border: 0.5pt solid #94a3b8; padding: 5pt 7pt; }
+    th { background: #f1f5f9; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>Rich Inline Text</h1>
+  <p>This document demonstrates inline text formatting within a PDF report.</p>
+
+  <h2>Bold, Italic, Underline</h2>
+  <p>
+    A paragraph with <strong>bold text</strong>, <em>italic text</em>,
+    <u>underlined text</u>, and <ins>inserted text (also underlined)</ins>.
+    Combine them: <strong><em>bold italic</em></strong> or
+    <strong><u>bold underlined</u></strong>.
+  </p>
+
+  <h2>Highlighted Text</h2>
+  <p>
+    Use the <mark>mark element</mark> to highlight important phrases,
+    like <mark style="background-color:#fef08a">this yellow highlight</mark>.
+  </p>
+
+  <h2>Inline Color and Font Size</h2>
+  <p>
+    Text can be <span style="color: #dc2626">red</span>,
+    <span style="color: #16a34a">green</span>,
+    <span style="color: #0f2f57; font-weight: bold">navy and bold</span>,
+    or <span style="font-size: 16pt; color: #7c3aed; font-weight: bold">large purple</span>.
+  </p>
+
+  <h2>Strikethrough</h2>
+  <p>
+    The old price was <span style="text-decoration: line-through">$99.00</span>
+    but now it is <strong>$49.00</strong>!
+  </p>
+
+  <h2>Rich Text in a Table</h2>
+  <table>
+    <thead><tr><th>Product</th><th>Status</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Widget A</strong></td>
+        <td><span style="color: #16a34a; font-weight: bold">Active</span></td>
+        <td>Best <em>selling</em> item — <mark>restock soon</mark></td>
+      </tr>
+      <tr>
+        <td><strong>Widget B</strong></td>
+        <td><span style="color: #dc2626">Discontinued</span></td>
+        <td><span style="text-decoration: line-through">Was $200</span> → Clearance</td>
+      </tr>
+      <tr>
+        <td><strong><em>Gadget C</em></strong></td>
+        <td><u>Under Review</u></td>
+        <td><span style="font-size:9pt; color:#6b7c93">Small muted note</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Nested Formatting</h2>
+  <p>
+    This is <strong>bold containing <em>italics</em> and
+    <span style="color:#dc2626">red</span> inside</strong>,
+    plus <em>italic containing <span style="text-decoration: line-through">strikethrough</span></em>.
+  </p>
+</body>
+</html>

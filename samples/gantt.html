@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Gantt Chart — Project Timeline</title>
+  <style>
+    @page { size: a4; margin: 16mm 14mm; }
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #1e293b; }
+    h1 { color: #0f2f57; margin-bottom: 2pt; }
+    h2 { color: #1e40af; margin-top: 16pt; }
+    .muted { color: #6b7c93; font-size: 8.5pt; }
+  </style>
+</head>
+<body>
+  <h1>Project Timeline (Gantt Chart)</h1>
+  <p class="muted">A vector Gantt chart drawn entirely by the report engine — no canvas, no external charting library.</p>
+
+  <h2>Simple 5-Phase Project</h2>
+  <div data-chart="gantt"
+       data-title="Sprint Timeline"
+       data-gantt-unit="day"
+       data-gantt-start="0"
+       data-gantt-end="20"
+       data-gantt-tasks="Design:0:4;Backend:3:10;Frontend:6:14;Integration:12:17;Testing:15:20">
+  </div>
+
+  <h2>With Dependencies and Progress</h2>
+  <div data-chart="gantt"
+       data-title="Q3 Product Launch"
+       data-gantt-unit="week"
+       data-gantt-start="0"
+       data-gantt-end="12"
+       data-colors="#6366f1,#06b6d4,#10b981,#f59e0b,#ef4444,#8b5cf6"
+       data-gantt-tasks="Research:0:2:0.9;Design:1:4:#6366f1:0.7;Development:3:9:#06b6d4:0.4:0,1;QA:7:11:#10b981:0.1:2;Deployment:10:12:#f59e0b:0:3;Marketing:2:10:#ef4444:0.6">
+  </div>
+
+  <h2>Compact Daily Schedule</h2>
+  <div data-chart="gantt"
+       data-title="Today's Tasks"
+       data-gantt-unit="day"
+       data-gantt-start="1"
+       data-gantt-end="8"
+       data-gantt-tasks="Standup:1:2:#06b6d4:1;Code Review:2:4:#8b5cf6:0.5;Feature Dev:3:7:#10b981:0.3:1;Bug Fix:5:6:#ef4444:1;Docs:6:8:#f59e0b:0">
+  </div>
+
+  <p class="muted" style="margin-top: 14pt">
+    Task format: <code>name:start:end[:color][:progress][:dependsOn]</code>. Progress bars render as a darker overlay within each task bar. Dependency arrows connect the predecessor's end to the successor's start.
+  </p>
+</body>
+</html>

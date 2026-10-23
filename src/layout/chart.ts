@@ -8,12 +8,12 @@
  * Data can arrive as literal arrays, CSV strings, or bindings evaluated against
  * the report scope — the same three shapes every other block accepts.
  */
-import type { ChartBlock, ChartSeries, Expr, ValueAxisOptions } from '../ir/schema.js';
+import type { ChartBlock, ChartSeries, Expr, ValueAxisOptions, GanttTask } from '../ir/schema.js';
 import type { ResolvedStyle } from '../text/style.js';
 import { typeset } from '../text/typeset.js';
 import { resolveContent, type LayoutContext } from './context.js';
 import type { BlockLayoutOptions } from './block.js';
-import { resolveBox } from './box.js';
+import { resolveBox, type EdgeInsets } from './box.js';
 import type { DrawCommand, Fragment, PolyPoint } from './flow.js';
 import { toRGB, type RGB } from '../core/color.js';
 import { toPt } from '../core/units.js';
@@ -73,6 +73,11 @@ export function layoutChart(
   const { margin, padding } = resolveBox(block);
   const left = margin.left + padding.left;
   const width = Math.max(24, opts.contentWidth - margin.left - margin.right - padding.left - padding.right);
+
+  // Gantt charts use a completely different data model; dispatch early.
+  if (block.kind === 'gantt') {
+    return layoutGantt(block, ctx, opts, inherited, style, left, width, margin);
+  }
 
   // Labels are one notch smaller than body text so the plot keeps the room.
   const labelStyle = ctx.style({ fontSize: Math.max(5.5, style.fontSize - 2) }, style);
@@ -1179,4 +1184,151 @@ function clipText(text: string, style: ResolvedStyle, maxWidth: number): string 
     else hi = mid - 1;
   }
   return lo > 0 ? text.slice(0, lo) + '\u2026' : '';
+}
+
+// --- Gantt chart layout -------------------------------------------------------
+
+function layoutGantt(
+  block: ChartBlock,
+  ctx: LayoutContext,
+  opts: BlockLayoutOptions,
+  inherited: ResolvedStyle,
+  style: ResolvedStyle,
+  left: number,
+  width: number,
+  margin: EdgeInsets,
+): Fragment[] {
+  const tasks = block.ganttTasks ?? [];
+  if (tasks.length === 0) {
+    return [{ height: 0, before: margin.top, after: margin.bottom, commands: [], avoidSplit: true }];
+  }
+
+  const labelStyle = ctx.style({ fontSize: Math.max(5.5, style.fontSize - 2) }, style);
+  const units = labelStyle.handle.unitsPerEm || 1000;
+  const ascent = (labelStyle.handle.ascender / units) * labelStyle.fontSize;
+  const descent = (Math.abs(labelStyle.handle.descender) / units) * labelStyle.fontSize;
+  const rowH = Math.max(14, ascent + descent + 6);
+  const nameW = Math.min(width * 0.25, 120); // left gutter for task names
+  const plotLeft = left + nameW + 4;
+  const plotW = Math.max(20, width - nameW - 8);
+
+  // Determine time range.
+  const start = typeof block.ganttStart === 'number' ? block.ganttStart : 0;
+  let end = typeof block.ganttEnd === 'number' ? block.ganttEnd : UNBOUNDED;
+  if (end === UNBOUNDED) {
+    for (const t of tasks) {
+      const s = typeof t.start === 'number' ? t.start : 0;
+      const dur = typeof t.duration === 'number' ? t.duration : (typeof t.end === 'number' ? t.end - s : s);
+      end = Math.max(end, s + dur);
+    }
+    if (end === start) end = start + 1;
+  }
+  const timeRange = end - start;
+
+  // Determine unit and ticks.
+  const ganttUnit = block.ganttUnit ?? 'week';
+  const tickInterval = ganttUnit === 'day' ? 1 : ganttUnit === 'week' ? 7 : 30;
+  const ticks: number[] = [];
+  for (let t = start; t <= end; t += tickInterval) ticks.push(t);
+
+  const commands: DrawCommand[] = [];
+  const headerH = rowH; // time axis header row
+  const totalH = headerH + tasks.length * rowH;
+
+  // Title
+  let titleH = 0;
+  if (block.title !== undefined) {
+    const titleStyle = ctx.style({ fontWeight: 700, fontSize: style.fontSize + 1 }, style);
+    const titleResult = typeset(resolveContent(block.title, ctx, titleStyle, opts.scope), width);
+    for (const line of titleResult.lines) {
+      commands.push({ op: 'text', x: left, baselineY: titleH + line.ascent, runs: line.runs, gapWidth: 0, decorations: [] });
+      titleH += line.height;
+    }
+    if (titleH > 0) titleH += LABEL_GAP;
+  }
+
+  const baseY = titleH;
+
+  // Time axis ticks and grid lines.
+  for (const tick of ticks) {
+    const x = plotLeft + ((tick - start) / timeRange) * plotW;
+    // Grid line
+    commands.push({ op: 'line', x1: x, y1: baseY + headerH, x2: x, y2: baseY + totalH, color: GRID, lineWidth: 0.4 });
+    // Tick label
+    const lbl = formatGanttTick(tick, ganttUnit, start);
+    const tw = measure(lbl, labelStyle);
+    commands.push({ op: 'text', x: x - tw / 2, baselineY: baseY + headerH - 4, runs: [{ text: lbl, style: labelStyle, x: 0, width: tw }], gapWidth: 0, decorations: [] });
+  }
+
+  // Task rows.
+  const defaultColors = block.colors ?? DEFAULT_PALETTE;
+  for (let i = 0; i < tasks.length; i++) {
+    const task = tasks[i]!;
+    const rowY = baseY + headerH + i * rowH;
+    const tStart = typeof task.start === 'number' ? task.start : 0;
+    const tEnd = typeof task.end === 'number' ? task.end
+      : typeof task.duration === 'number' ? tStart + task.duration
+      : tStart;
+    const barX = plotLeft + ((tStart - start) / timeRange) * plotW;
+    const barW = Math.max(2, ((tEnd - tStart) / timeRange) * plotW);
+    const barH = rowH - 6;
+    const barY = rowY + 3;
+
+    // Task name (right-aligned in gutter)
+    const nameTxt = clipText(task.name, labelStyle, nameW);
+    const nameWm = measure(nameTxt, labelStyle);
+    commands.push({ op: 'text', x: left + nameW - nameWm, baselineY: rowY + rowH / 2 + ascent / 2 - 2, runs: [{ text: nameTxt, style: labelStyle, x: 0, width: nameWm }], gapWidth: 0, decorations: [] });
+
+    // Bar background (row hover line)
+    commands.push({ op: 'line', x1: plotLeft, y1: rowY + rowH, x2: plotLeft + plotW, y2: rowY + rowH, color: GRID, lineWidth: 0.3 });
+
+    // Task bar
+    const barColor = task.color ? toRGB(task.color) : palette(defaultColors, i);
+    commands.push({ op: 'fillRect', x: barX, y: barY, w: barW, h: barH, color: barColor });
+
+    // Progress fill (darker sub-bar)
+    if (task.progress !== undefined && task.progress > 0) {
+      const progW = barW * Math.min(1, task.progress);
+      const darker: RGB = [barColor[0] * 0.6, barColor[1] * 0.6, barColor[2] * 0.6];
+      commands.push({ op: 'fillRect', x: barX, y: barY, w: progW, h: barH, color: darker });
+    }
+
+    // Dependency arrows
+    if (task.dependsOn) {
+      for (const dep of task.dependsOn) {
+        if (dep < 0 || dep >= tasks.length) continue;
+        const depTask = tasks[dep];
+        if (!depTask) continue;
+        const depStart = typeof depTask.start === 'number' ? depTask.start : 0;
+        const depEnd = typeof depTask.end === 'number' ? depTask.end
+          : typeof depTask.duration === 'number' ? depStart + depTask.duration
+          : depStart;
+        const fromX = plotLeft + ((depEnd - start) / timeRange) * plotW;
+        const fromY = baseY + headerH + dep * rowH + rowH / 2;
+        const toX = barX;
+        const toY = barY + barH / 2;
+        // Simple L-shaped arrow: horizontal → vertical
+        const midX = fromX + 4;
+        commands.push({
+          op: 'poly',
+          points: [[fromX, fromY], [midX, fromY], [midX, toY], [toX, toY]] as PolyPoint[],
+          stroke: { color: AXIS, lineWidth: 0.8 },
+          close: false,
+        });
+      }
+    }
+  }
+
+  const fragHeight = titleH + totalH;
+  return [{ height: fragHeight, before: margin.top, after: margin.bottom, commands, avoidSplit: true }];
+}
+
+function formatGanttTick(value: number, unit: 'day' | 'week' | 'month', start: number): string {
+  if (unit === 'day') return String(Math.round(value));
+  if (unit === 'week') {
+    const weeks = Math.round((value - start) / 7) + 1;
+    return `W${weeks}`;
+  }
+  const months = Math.round((value - start) / 30) + 1;
+  return `M${months}`;
 }

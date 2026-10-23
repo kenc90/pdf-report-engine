@@ -83,7 +83,9 @@ const DEMO_DATA = {
 // links), an embedded image, a data-bound table with conditional formatting and
 // colour-scale heatmaps, rich block cells (image / QR / sparkline / nested table),
 // merged cells, a diagonal corner-header two-way (cross-tab) table, QR/Code 128/EAN-13
-// barcodes, a page break, and base-14 fallback.
+// barcodes, a page break, and base-14 fallback; plus the six new features: hyperlinks,
+// rich inline text, a rotated page watermark, multi-column layout, a Gantt timeline chart,
+// and streaming output (see renderToStream in the API docs).
 const DEFAULT_HTML = `<!-- ══ Web fonts straight from the HTML: the engine collects the charset from
      the IR, passes it as text= to Google's CSS API, fetches only the needed glyphs (tiny subset),
      and embeds them. In Node a bot UA yields TTF directly; in a browser WOFF2 is decoded. ══ -->
@@ -98,7 +100,7 @@ const DEFAULT_HTML = `<!-- ══ Web fonts straight from the HTML: the engine c
   mark { background-color: #ffe08a; }          /* tag selector */
 </style>
 
-<body style="font-family:Inter; font-size:10pt; color:#24303f">
+<body data-watermark="SAMPLE" data-watermark-rotate="-35" data-watermark-size="72" data-watermark-color="#c0c0c0" data-watermark-opacity="0.18" style="font-family:Inter; font-size:10pt; color:#24303f">
 
 <!-- ══ Page bands: repeated on every page; {PAGE}/{TOTAL} resolve per page. ══ -->
 <header data-band="pageHeader" style="font-size:8pt; color:#94a3b8; letter-spacing:2pt; text-transform:uppercase; border-bottom:1pt solid #e2e8f0; padding-bottom:3pt">Northwind Group &middot; Quarterly Report</header>
@@ -210,6 +212,29 @@ const DEFAULT_HTML = `<!-- ══ Web fonts straight from the HTML: the engine c
 <div data-chart="heatmap" data-title="Weekly activity by shift" data-categories="Mon,Tue,Wed,Thu,Fri,Sat"
      data-series="Morning:3,5,8,4,2,6; Afternoon:6,7,4,9,5,3; Evening:2,3,5,7,8,4"
      data-heatmap-colors="from=#eef4ff;to=#1e3a8a" style="height:150pt; margin-top:10pt"></div>
+
+<!-- ══ Gantt timeline: task bars on a time axis, L-shaped dependency arrows, progress fills. ══ -->
+<h2 id="gantt" class="section-title">Gantt timeline</h2>
+<p style="font-size:8.5pt; color:#94a3b8">A <code>data-chart="gantt"</code> block plots project tasks with dependencies and progress. Format: <code>name:start:end[:color][:progress][:deps]</code>.</p>
+<div data-chart="gantt" data-title="Product launch plan (weeks)" data-gantt-unit="week"
+     data-gantt-start="0" data-gantt-end="14"
+     data-gantt-tasks="Discovery:0:2:#0f2f57:1;Design:2:5:#7c3aed:0.6;Backend:4:9:#1b7f4b:0.35:1;Frontend:5:10:#e08a1e:0.4:1;Integration:9:12:#06b6d4:0.1:2,3;UAT:11:13:#b91c1c:0:5;Launch:13:14:#0f2f57:0:4,5,6"
+     style="height:220pt; margin-top:10pt"></div>
+
+<!-- ══ Multi-column layout: column-count splits children into N equal-width columns with
+     optional rules between them. ══ -->
+<h2 id="columns" class="section-title">Multi-column layout</h2>
+<p style="font-size:8.5pt; color:#94a3b8">A plain <code>&lt;div style="column-count:2"&gt;</code> becomes a <code>ColumnBlock</code> — the same IR node the JS API uses.</p>
+<div style="column-count:2; column-gap:16pt; border-left:0; margin-top:8pt">
+  <h3 style="font-size:11pt; color:#0f2f57; margin:0 0 4pt 0">Why columns?</h3>
+  <p style="font-size:9pt; line-height:1.5; margin:0 0 6pt 0">Reports often need narrow measure text — think newspaper columns, methodology notes paired with headline findings, or side-by-side commentary.</p>
+  <p style="font-size:9pt; line-height:1.5; margin:0">The engine distributes fragments across N equal-width sub-columns by height, keeping the block atomic so pagination can push the whole thing to a new page.</p>
+</div>
+<div style="column-count:3; column-gap:10pt; margin-top:12pt">
+  <p style="font-size:8.5pt; margin:0"><strong>Q1</strong><br>Revenue up 18.4% YoY, driven by platform renewals.</p>
+  <p style="font-size:8.5pt; margin:0"><strong>Q2</strong><br>Analytics ARR crossed $18M with 24% net retention.</p>
+  <p style="font-size:8.5pt; margin:0"><strong>Q3</strong><br>Services margin expanded after the delivery-tooling push.</p>
+</div>
 
 <!-- ══ SVG vector images: inline <svg> drawn as real PDF paths, no rasterisation. ══ -->
 <h2 id="vectors" class="section-title">SVG &amp; flexbox</h2>

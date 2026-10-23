@@ -38,6 +38,7 @@ import { layoutToc } from './toc.js';
 import { layoutBarcode } from './barcode.js';
 import { layoutSvg } from './svg.js';
 import { layoutFlex } from './flex.js';
+import { layoutColumns } from './column.js';
 
 export interface BlockLayoutOptions {
   /** Horizontal origin of the content area within the page (usually 0 here). */
@@ -73,6 +74,9 @@ export function layoutBlock(block: Block, ctx: LayoutContext, opts: BlockLayoutO
       break;
     case 'flex':
       frags = layoutFlex(effective, ctx, opts, inherited);
+      break;
+    case 'columns':
+      frags = layoutColumns(effective, ctx, opts, inherited);
       break;
     case 'pageBreak':
       frags = [{ height: 0, before: 0, after: 0, commands: [], isPageBreak: true, breakBefore: 'page' }];

@@ -179,6 +179,22 @@
           <p>Text widths are measured through the exact code path pdfkit paints with, so wrapped
           lines never overflow their box.</p>
         </div>
+        <div class="card">
+          <h4>Page watermarks</h4>
+          <p>Declarative <code>watermark</code> field on <code>ReportDoc</code> or <code>&lt;meta name="watermark"&gt;</code> renders rotated, translucent text behind every page.</p>
+        </div>
+        <div class="card">
+          <h4>Multi-column layout</h4>
+          <p>CSS <code>column-count</code> or <code>data-columns</code> distributes blocks into N equal-width columns with optional vertical rules between them.</p>
+        </div>
+        <div class="card">
+          <h4>Gantt / timeline chart</h4>
+          <p>A <code>data-chart="gantt"</code> element draws a project timeline: task bars, progress overlays, dependency arrows, and time-axis ticks.</p>
+        </div>
+        <div class="card">
+          <h4>Streaming output</h4>
+          <p><code>renderToStream()</code> returns a <code>ReadableStream&lt;Uint8Array&gt;</code> with incremental page flushing — ideal for HTTP response streaming.</p>
+        </div>
       </div>
       <p class="note" style="margin-top:16px">
         See them together: <a href="examples.html#ex-tour"><code>samples/dashboard.html</code></a>
@@ -199,6 +215,7 @@
       <pre data-copy data-lang="text"><code>authoring (IR or HTML)  →  ReportDoc IR  →  layout  →  pagination  →  pdfkit writer  →  PDF bytes</code></pre>
       <ul>
         <li><a href="api.html"><code>renderToBuffer(report, options?)</code></a> — one-shot: IR in, PDF bytes out.</li>
+        <li><a href="api.html"><code>renderToStream(report, options?)</code></a> — returns a <code>ReadableStream</code> for incremental delivery.</li>
         <li><a href="api.html"><code>createReport(report, options?)</code></a> — the live pdfkit doc plus the paginated <code>pages</code> model, so you can stream yourself.</li>
       </ul>
     </section>
