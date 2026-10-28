@@ -140,6 +140,12 @@ export interface Fragment {
   opacity?: number;
   /** Rotation in degrees counter-clockwise, applied around the fragment center. */
   rotate?: number;
+  /**
+   * The fragment's laid-out width, used as the horizontal pivot when `rotate`
+   * is set (rotation centre = `x + width / 2`). Falls back to the page width
+   * when absent, which is what the full-page watermark relies on.
+   */
+  width?: number;
 }
 
 /** Box geometry a fragment is painted into; used by borders and backgrounds. */

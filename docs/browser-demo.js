@@ -104,10 +104,11 @@ const DEFAULT_HTML = `<!-- ══ Web fonts straight from the HTML: the engine c
   /* Absolute positioning & z-index: position:absolute/fixed lift an element out of the flow and
      place it at page coordinates (top/left in pt|mm|%, origin = page top-left). z-index < 0 paints
      behind the body text, >= 0 in front. 'absolute' targets one page (data-page, default 1);
-     'fixed' repeats on every page. These overlays take no flow space. */
+     'fixed' repeats on every page. rotate (degrees, about the block's own centre) is set either with
+     CSS transform: rotate() or the data-rotate attribute. These overlays take no flow space. */
   .pos-wash  { position:absolute; left:146mm; top:278mm; width:56mm; height:15mm; background:#fff2cc; z-index:-1; }
   .pos-stamp { position:absolute; left:149mm; top:279mm; width:50mm; text-align:center;
-               border:2pt solid #b45309; color:#b45309; background:#ffffffd9;
+               transform:rotate(-12deg); border:2pt solid #b45309; color:#b45309; background:#ffffffd9;
                padding:2pt 0; font-weight:700; font-size:10pt; letter-spacing:2pt; z-index:5; }
   .pos-tab   { position:fixed; left:8mm; top:278mm; width:70mm; text-align:left;
                background:#0f2f57; color:#ffffff; font-size:7pt; letter-spacing:1pt; padding:2pt 5pt; z-index:2; }
@@ -140,10 +141,11 @@ const DEFAULT_HTML = `<!-- ══ Web fonts straight from the HTML: the engine c
   </table>
 </section>
 
-<!-- ══ Absolute positioning & z-index: a tinted wash painted BEHIND the body (z-index:-1), an
-     APPROVED stamp in FRONT on page 1 only (z-index:5), and a fixed badge that repeats in the
-     bottom margin of every page. All three are lifted out of the flow — no space is reserved. ══ -->
-<div class="pos-wash"></div>
+<!-- ══ Absolute positioning & z-index: a tinted wash painted BEHIND the body (z-index:-1, tilted
+     via the data-rotate attribute), an APPROVED stamp in FRONT on page 1 only (z-index:5, tilted via
+     CSS transform: rotate), and a fixed badge that repeats in the bottom margin of every page. All
+     three are lifted out of the flow — no space is reserved. ══ -->
+<div class="pos-wash" data-rotate="-12"></div>
 <div class="pos-stamp">APPROVED</div>
 <div class="pos-tab">pdf-report-engine &middot; pure JS</div>
 

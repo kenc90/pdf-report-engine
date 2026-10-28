@@ -319,6 +319,13 @@ function applyDecl(prop: string, value: string, set: (k: string, v: unknown) => 
       if (Number.isFinite(n)) set('zIndex', n);
       return;
     }
+    case 'transform': {
+      // Only `rotate(<deg>)` is honoured; other transform functions
+      // (scale/translate/matrix/...) are not modelled and are ignored.
+      const m = /rotate\(\s*(-?(?:\d+\.?\d*|\.\d+))\s*(?:deg)?\s*\)/i.exec(value);
+      if (m) set('rotate', parseFloat(m[1]!));
+      return;
+    }
     case 'min-height':
       set('minHeight', value);
       return;
@@ -768,6 +775,13 @@ function elementStyle(el: HElement, opts: HtmlOptions): IrBox {
       const n = Number(dp);
       if (Number.isFinite(n) && n >= 1) box.page = Math.round(n);
     }
+  }
+  // Rotation escape hatch: `data-rotate="<deg>"` rotates the block about its own
+  // centre (degrees counter-clockwise). Works on any block, positioned or not, and
+  // is equivalent to CSS `transform: rotate()` — the attribute wins if both appear.
+  if (el.attrs['data-rotate'] !== undefined) {
+    const r = Number(el.attrs['data-rotate']!.trim());
+    if (Number.isFinite(r)) box.rotate = r;
   }
   return box;
 }

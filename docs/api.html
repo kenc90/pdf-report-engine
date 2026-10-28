@@ -870,7 +870,7 @@ formatNumber(Infinity, '#,##0.00')                // ∞</code></pre>
           <tr><td><code>borderRadius</code></td><td>paragraph/heading background fill, raster <code>image</code></td><td>One <code>Length</code> or <code>[tl, tr, br, bl]</code> (CSS order, points). Rounds the <em>background fill</em> and clips an image to rounded corners; a straight <code>border</code> line is never curved. Over-large corners scale down proportionally. On a box that wraps to several lines only the outer first/last line's corners round.</td></tr>
           <tr><td><code>boxShadow</code></td><td>paragraph/heading background fill, raster <code>image</code></td><td><code>{ offsetX?, offsetY?, blur?, color?, opacity? }</code>. Drawn behind the box as stacked translucent silhouettes (blur is approximate). <code>inset</code> and a <code>spread</code> radius are not modelled — an <code>inset: true</code> shadow is ignored. Default opacity 0.28.</td></tr>
           <tr><td><code>backgroundImage</code></td><td>paragraph/heading background fill</td><td>A two-stop <code>{ direction?, from, to }</code> linear gradient painted <em>instead of</em> <code>backgroundColor</code>. <code>direction</code> is <code>'to top'|'to bottom'|'to left'|'to right'</code> or an angle snapped to the nearest cardinal (default <code>'to bottom'</code>); corner keywords resolve to their vertical axis.</td></tr>
-          <tr><td><code>position</code>, <code>left</code>, <code>top</code>, <code>zIndex</code>, <code>page</code></td><td>top-level body/band blocks</td><td><code>'absolute'</code>/<code>'fixed'</code> take the block out of the vertical flow and pin it at page-space <code>left</code>/<code>top</code> (origin = the page's top-left corner; a <code>%</code> resolves against the page width/height). <code>'fixed'</code> (or <code>page: 'all'</code>) repeats on every page; <code>'absolute'</code> lands on <code>page</code> (1-based, default 1). <code>width</code> sets its layout width, else it fills to the page's right edge. <code>zIndex</code> orders overlays (<code>&lt;0</code> behind the body, <code>&gt;=0</code> in front; ties keep document order). <code>'static'</code>/<code>'relative'</code> and elements nested in a cell/flex item stay in normal flow.</td></tr>
+          <tr><td><code>position</code>, <code>left</code>, <code>top</code>, <code>zIndex</code>, <code>page</code>, <code>rotate</code></td><td>top-level body/band blocks</td><td><code>'absolute'</code>/<code>'fixed'</code> take the block out of the vertical flow and pin it at page-space <code>left</code>/<code>top</code> (origin = the page's top-left corner; a <code>%</code> resolves against the page width/height). <code>'fixed'</code> (or <code>page: 'all'</code>) repeats on every page; <code>'absolute'</code> lands on <code>page</code> (1-based, default 1). <code>width</code> sets its layout width, else it fills to the page's right edge. <code>zIndex</code> orders overlays (<code>&lt;0</code> behind the body, <code>&gt;=0</code> in front; ties keep document order). <code>rotate</code> turns the block by degrees counter-clockwise about its own centre (the block is kept atomic, so it will not split across a page; works in flow too). <code>'static'</code>/<code>'relative'</code> and elements nested in a cell/flex item stay in normal flow.</td></tr>
         </tbody>
       </table>
 
@@ -915,7 +915,7 @@ formatNumber(Infinity, '#,##0.00')                // ∞</code></pre>
               <code>min-height</code>, <code>vertical-align</code> (lifted onto
               <code>CellNode</code>), <code>margin</code>/<code>padding</code> shorthand and sides,
               <code>border</code>, <code>border-top</code>, <code>border-bottom</code>,
-              <code>position</code> (<code>absolute</code>/<code>fixed</code>) with <code>left</code>/<code>top</code> and <code>z-index</code> (out-of-flow overlays),
+              <code>position</code> (<code>absolute</code>/<code>fixed</code>) with <code>left</code>/<code>top</code> and <code>z-index</code> (out-of-flow overlays), <code>transform: rotate(&lt;deg&gt;)</code> (and the <code>data-rotate</code> attribute) to turn a block about its centre,
               <code>break-before</code>/<code>page-break-before</code>,
               <code>break-after</code>/<code>page-break-after</code>,
               <code>break-inside</code>/<code>page-break-inside</code>
@@ -930,7 +930,9 @@ formatNumber(Infinity, '#,##0.00')                // ∞</code></pre>
               <code>text-indent</code>, <code>word-spacing</code>, <code>border-spacing</code>,
               <code>float</code>, <code>position: relative</code>/<code>static</code> and
               <code>right</code>/<code>bottom</code> offsets (only <code>absolute</code>/<code>fixed</code> with
-              <code>left</code>/<code>top</code> are modelled), and grid properties — unknown
+              <code>left</code>/<code>top</code> are modelled), other <code>transform</code> functions
+              (<code>scale</code>/<code>translate</code>/<code>matrix</code> — only <code>rotate()</code> is
+              read), and grid properties — unknown
               properties are skipped silently, so a report never fails on CSS it cannot use
             </td>
           </tr>

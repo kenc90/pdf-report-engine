@@ -124,6 +124,14 @@ export interface BoxProps extends StyleProps {
    * `'fixed'`, which is placed on every page.
    */
   page?: number | 'all';
+  /**
+   * Rotation in degrees counter-clockwise, applied around the block's own
+   * centre (works with `position: 'absolute'`/`'fixed'` for stamps and corner
+   * labels). The block is kept atomic (it will not split across a page), so a
+   * multi-line block turns as one unit. Maps from CSS `transform: rotate(<deg>)`
+   * or the `data-rotate` attribute.
+   */
+  rotate?: number;
 }
 
 /** A CSS-like outer drop shadow. All lengths are `Length` (number = pt). */

@@ -15,10 +15,11 @@
     body { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; color: #1e293b; }
     h1 { color: #0f2f57; }
     .stamp {
-      position: absolute; left: 66%; top: 30%; width: 120pt;
-      text-align: center; font-size: 20pt; font-weight: bold; letter-spacing: 1pt;
+      position: absolute; left: 62%; top: 30%; width: 160pt;
+      text-align: center; font-size: 18pt; font-weight: bold; letter-spacing: 1pt;
       color: #b91c1c; background: #fee2e2; border: 2pt solid #b91c1c;
       padding: 8pt; border-radius: 6pt; z-index: 5;
+      transform: rotate(-12deg);   /* degrees CCW about the block's own centre */
     }
     .corner {
       position: fixed; left: 82%; top: 4%; width: 90pt; text-align: right;
@@ -41,7 +42,7 @@
     This box is absolutely positioned with <code>z-index: -1</code>, so it is drawn
     <em>before</em> the flowing body — text and tables paint on top of it.</p>
 
-  <!-- An approval stamp pinned to page 1 only. -->
+  <!-- An approval stamp pinned to page 1 only, rotated via CSS transform. -->
   <div class="stamp" data-page="1">APPROVED</div>
 
   <!-- A corner tag repeated on every page (position: fixed). -->
@@ -49,6 +50,10 @@
 
   <!-- A running footer stamp, resolved per page. -->
   <div class="running">Page {PAGE} of {TOTAL} · positioned with <code>position: fixed</code></div>
+
+  <!-- A short in-flow line rotated with the data-rotate attribute (rotation works on
+       any single-line block, not just positioned ones). -->
+  <div style="color:#0f2f57; font-weight:700; font-size:13pt; letter-spacing:1pt" data-rotate="-6">DRAFT COPY — NOT FOR DISTRIBUTION</div>
 
   <h1>Absolute Positioning &amp; z-index</h1>
   <p>

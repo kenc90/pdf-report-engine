@@ -168,6 +168,81 @@ describe('HTML adapter positioning', () => {
   });
 });
 
+describe('rotation (transform: rotate / data-rotate)', () => {
+  it('stamps rotate onto a positioned overlay fragment and sets the pivot width', () => {
+    const pages = run([
+      { type: 'paragraph', content: 'STAMP', position: 'absolute', left: 40, top: 25, width: 60, rotate: -15 } as Block,
+    ]);
+    const stamp = pages[0]!.absolute[0]!;
+    expect(stamp.fragment.rotate).toBe(-15);
+    // Pivot width is the block's laid-out width, so rotation is about the block centre.
+    expect(stamp.fragment.width).toBe(60);
+  });
+
+  it('rotates a normal in-flow block about the content-area centre', () => {
+    const pages = run([{ type: 'paragraph', content: 'Tilt', rotate: 8 } as Block]);
+    const frag = pages[0]!.body[0]!.fragment;
+    expect(frag.rotate).toBe(8);
+    expect(frag.width).toBe(resolved.content.width);
+  });
+
+  it('leaves rotate undefined on ordinary blocks', () => {
+    const pages = run([{ type: 'paragraph', content: 'Plain' } as Block]);
+    expect(pages[0]!.body[0]!.fragment.rotate).toBeUndefined();
+  });
+
+  it('merges a multi-line rotated block into one fragment (no fanning)', () => {
+    // ~40 words wraps to several lines at content width 180 / fontSize 10.
+    const long = ('word '.repeat(40)).trim();
+    const pages = run([{ type: 'paragraph', content: long, rotate: 8 } as Block]);
+    const body = pages[0]!.body;
+    // All lines collapse into a single atomic fragment that carries the rotation.
+    expect(body).toHaveLength(1);
+    const frag = body[0]!.fragment;
+    expect(frag.rotate).toBe(8);
+    expect(frag.avoidSplit).toBe(true);
+    // More than one text command (line) now lives in the one fragment.
+    const textCmds = frag.commands.filter((c) => c.op === 'text');
+    expect(textCmds.length).toBeGreaterThan(1);
+    // The stacked lines keep distinct baselines (offset, not overlapping).
+    const baselines = textCmds.map((c) => (c as { baselineY: number }).baselineY);
+    expect(new Set(baselines).size).toBe(baselines.length);
+  });
+
+  it('maps CSS transform: rotate(<deg>) through the adapter', () => {
+    const report = htmlToReportDoc('<div style="position: absolute; transform: rotate(-15deg)">S</div>');
+    const b = report.body!.find((x) => x.rotate !== undefined)!;
+    expect(b).toBeDefined();
+    expect(b.rotate).toBe(-15);
+  });
+
+  it('maps data-rotate and lets the attribute win over transform', () => {
+    const attr = htmlToReportDoc('<div data-rotate="20">S</div>');
+    expect(attr.body!.find((x) => x.rotate === 20)).toBeDefined();
+    const both = htmlToReportDoc('<div style="transform: rotate(5deg)" data-rotate="20">S</div>');
+    expect(both.body!.find((x) => x.rotate === 20)).toBeDefined();
+    expect(both.body!.some((x) => x.rotate === 5)).toBe(false);
+  });
+
+  it('ignores non-rotate transform functions', () => {
+    const report = htmlToReportDoc('<div style="transform: scale(2) translate(3px)">S</div>');
+    expect(report.body!.some((x) => x.rotate !== undefined)).toBe(false);
+  });
+
+  it('renders a rotated absolute stamp to a valid PDF', async () => {
+    const report: ReportDoc = {
+      page: { size: [200, 100], margin: 10 },
+      body: [
+        { type: 'paragraph', content: 'Flowing body text' },
+        { type: 'paragraph', content: 'APPROVED', position: 'absolute', left: 40, top: 25, width: 100, rotate: -20, fontSize: 12 },
+      ],
+    };
+    const bytes = await renderToBuffer(report);
+    expect(bytes.subarray(0, 5).toString()).toBe('%PDF-');
+    expect(bytes.length).toBeGreaterThan(200);
+  });
+});
+
 describe('end-to-end render', () => {
   it('produces a non-empty PDF with an absolute block present', async () => {
     const report: ReportDoc = {

@@ -1075,10 +1075,13 @@ const pdf = await renderToBuffer(report);</code></pre>
   width: 120,             // layout width; omit to use the space left of `left`
   zIndex: 5,              // &gt;= 0 draws above the body; &lt; 0 draws behind it
   page: 1,                // which page; or 'all' (repeat), default 1
+  rotate: -12,            // degrees counter-clockwise about the block's centre
 }</code></pre>
       <pre data-copy><code>&lt;!-- HTML --&gt;
 &lt;div style="position: absolute; left: 70%; top: 12%; z-index: 5" data-page="1"&gt;APPROVED&lt;/div&gt;
-&lt;div style="position: fixed; top: 0; left: 40%"&gt;Page {PAGE} of {TOTAL}&lt;/div&gt;</code></pre>
+&lt;div style="position: fixed; top: 0; left: 40%"&gt;Page {PAGE} of {TOTAL}&lt;/div&gt;
+&lt;!-- Rotation: CSS transform, or the data-rotate attribute (either works). --&gt;
+&lt;div style="position: absolute; left: 70%; top: 40%; transform: rotate(-12deg)"&gt;URGENT&lt;/div&gt;</code></pre>
       <table>
         <thead><tr><th>Property</th><th>IR field</th><th>Notes</th></tr></thead>
         <tbody>
@@ -1087,6 +1090,7 @@ const pdf = await renderToBuffer(report);</code></pre>
           <tr><td><code>width</code></td><td><code>width</code></td><td>The block's layout width. When omitted it takes the remaining page width to the right of <code>left</code>, so a long paragraph still wraps.</td></tr>
           <tr><td><code>z-index</code></td><td><code>zIndex</code></td><td>Order among positioned blocks. Negative paints behind the body flow, <code>0</code>+ in front; ties keep document order. Default 0.</td></tr>
           <tr><td><code>data-page</code></td><td><code>page</code></td><td>1-based page number for an <code>absolute</code> block, or <code>all</code> to repeat. Ignored by <code>fixed</code>.</td></tr>
+          <tr><td><code>transform: rotate(&lt;deg&gt;)</code> / <code>data-rotate</code></td><td><code>rotate</code></td><td>Turn the block by degrees counter-clockwise about its own centre. Works on any block (in flow or positioned); the block is kept atomic so a multi-line label turns as one unit rather than fanning. Other <code>transform</code> functions are ignored; <code>data-rotate</code> wins over <code>transform</code> if both are present.</td></tr>
         </tbody>
       </table>
       <div class="note">

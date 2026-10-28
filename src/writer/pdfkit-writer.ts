@@ -52,7 +52,7 @@ function drawFragment(doc: PDFDocument, { fragment, x, y }: PlacedFragment, page
   if (faded || rotated) {
     doc.save();
     if (rotated) {
-      const cx = x + pageW / 2;
+      const cx = x + (fragment.width ?? pageW) / 2;
       const cy = y + fragment.height / 2;
       // pdfkit's rotate() takes degrees directly (not radians).
       doc.rotate(fragment.rotate!, { origin: [cx, cy] });

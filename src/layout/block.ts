@@ -26,7 +26,7 @@ import { resolveContent, type LayoutContext } from './context.js';
 import { typeset, type Line } from '../text/typeset.js';
 import type { ResolvedStyle } from '../text/style.js';
 import { resolveBox, resolveBorders, resolveRadius, resolveShadow, resolveGradient, borderRGB, borderDash, type EdgeInsets } from './box.js';
-import type { Fragment, DrawCommand, OutlineEntry, Radius, ResolvedGradient, ResolvedShadow } from './flow.js';
+import type { Fragment, DrawCommand, OutlineEntry, Radius, ResolvedGradient, ResolvedShadow, PolyPoint } from './flow.js';
 import { applyConditions, isVisible } from './condition.js';
 // `block <-> table` is a genuine cycle (a table lays out cell paragraphs via this
 // module, and this module dispatches table blocks to the table layout). Both sides
@@ -106,7 +106,80 @@ export function layoutBlock(block: Block, ctx: LayoutContext, opts: BlockLayoutO
   // Any block with an `id` defines a named destination at its first fragment,
   // which is what `#id` links resolve against.
   if (effective.id && frags.length && !frags[0]!.anchor) frags[0]!.anchor = effective.id;
+  // Rotation: a block is laid out as one fragment per line, so rotating each
+  // fragment about its own centre would fan the lines apart. Instead collapse the
+  // whole block into a single atomic fragment (commands re-stacked on the local
+  // y axis) and rotate that about the block's centre. Set the pivot `width` to the
+  // block's laid-out width so the writer turns around the block, not the page.
+  if (effective.rotate !== undefined && effective.rotate !== 0) {
+    frags = [mergeForRotation(frags, effective.rotate, opts.contentWidth)];
+  }
   return frags;
+}
+
+/**
+ * Merge a block's fragments into one so a `rotate` turns the whole block as a
+ * unit. Each fragment's draw commands are shifted down by the running height;
+ * the first/last fragments contribute the leading/trailing spacing and any
+ * anchor/outline metadata.
+ */
+function mergeForRotation(frags: Fragment[], rotate: number, contentWidth: number): Fragment {
+  if (frags.length === 0) {
+    return { height: 0, before: 0, after: 0, commands: [], rotate, width: contentWidth, avoidSplit: true };
+  }
+  if (frags.length === 1) {
+    const only = { ...frags[0]! };
+    only.rotate = rotate;
+    if (only.width === undefined) only.width = contentWidth;
+    only.avoidSplit = true;
+    return only;
+  }
+  const commands: DrawCommand[] = [];
+  let height = 0;
+  for (const f of frags) {
+    for (const cmd of f.commands) commands.push(shiftCommandY(cmd, height));
+    height += f.height;
+  }
+  const first = frags[0]!;
+  const last = frags[frags.length - 1]!;
+  return {
+    height,
+    before: first.before,
+    after: last.after,
+    commands,
+    breakBefore: first.breakBefore,
+    breakAfter: last.breakAfter,
+    keepWithNext: last.keepWithNext,
+    anchor: first.anchor,
+    outline: first.outline,
+    avoidSplit: true,
+    rotate,
+    width: contentWidth,
+  };
+}
+
+/** Return a copy of `cmd` with all vertical coordinates offset by `dy`. */
+function shiftCommandY(cmd: DrawCommand, dy: number): DrawCommand {
+  if (dy === 0) return cmd;
+  const shiftPoints = (pts: PolyPoint[]): PolyPoint[] => pts.map((p) => [p[0], p[1] + dy] as PolyPoint);
+  switch (cmd.op) {
+    case 'fillRect':
+    case 'strokeRect':
+    case 'image':
+      return { ...cmd, y: cmd.y + dy };
+    case 'line':
+      return { ...cmd, y1: cmd.y1 + dy, y2: cmd.y2 + dy };
+    case 'underline':
+      return { ...cmd, y1: cmd.y1 + dy };
+    case 'text':
+      return { ...cmd, baselineY: cmd.baselineY + dy };
+    case 'poly':
+      return { ...cmd, points: shiftPoints(cmd.points) };
+    case 'path':
+      return { ...cmd, subpaths: cmd.subpaths.map((sp) => ({ ...sp, points: shiftPoints(sp.points) })) };
+    default:
+      return cmd;
+  }
 }
 
 const HEADING_SCALE = [2, 1.6, 1.4, 1.2, 1.1, 1];
