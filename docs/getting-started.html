@@ -964,8 +964,9 @@ const pdf = await renderToBuffer(report);</code></pre>
       </table>
       <div class="note">
         The container is atomic: if the whole row will not fit below, it moves whole to the next
-        page. Keep rows short. <code>position: absolute</code> / <code>float</code> are not part
-        of the flow and are ignored; use a nested <code>flex</code> for side-by-side overlays.
+        page. Keep rows short. <code>position: absolute</code> / <code>fixed</code> pull a block out
+        of flow (see <a href="#positioning">Absolute positioning</a>); <code>float</code> is not
+        supported — use a nested <code>flex</code> for side-by-side layouts.
       </div>
     </section>
 
@@ -1052,6 +1053,50 @@ const pdf = await renderToBuffer(report);</code></pre>
   ],
 }</code></pre>
       <p>The <code>ColumnBlock</code> is kept atomic (never splits across pages). Vertical rules are optional lines drawn at column boundaries.</p>
+    </section>
+
+    <section id="positioning">
+      <h2>Absolute positioning &amp; z-index</h2>
+      <p>
+        Any top-level block (or a block inside a band) can leave the vertical flow and be pinned at
+        exact page coordinates with <code>position: 'absolute'</code> or <code>'fixed'</code> plus
+        <code>left</code> / <code>top</code>. It then <strong>overlays</strong> the page instead of
+        pushing content down — useful for corner logos, approval stamps, free-form badges and
+        decorative boxes. Out-of-flow blocks are placed in their own paint pass ordered by
+        <code>zIndex</code>.
+      </p>
+      <pre data-copy><code>// IR
+{
+  type: 'paragraph',
+  content: 'APPROVED',
+  position: 'absolute',
+  left: '70%',            // 70% of the page width
+  top: '12%',             // 12% of the page height
+  width: 120,             // layout width; omit to use the space left of `left`
+  zIndex: 5,              // &gt;= 0 draws above the body; &lt; 0 draws behind it
+  page: 1,                // which page; or 'all' (repeat), default 1
+}</code></pre>
+      <pre data-copy><code>&lt;!-- HTML --&gt;
+&lt;div style="position: absolute; left: 70%; top: 12%; z-index: 5" data-page="1"&gt;APPROVED&lt;/div&gt;
+&lt;div style="position: fixed; top: 0; left: 40%"&gt;Page {PAGE} of {TOTAL}&lt;/div&gt;</code></pre>
+      <table>
+        <thead><tr><th>Property</th><th>IR field</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><code>position</code></td><td><code>position: 'absolute' | 'fixed'</code></td><td><code>'fixed'</code> repeats on every page; <code>'absolute'</code> sits on one page (<code>page</code>). <code>'static'</code>/<code>'relative'</code> stay in normal flow.</td></tr>
+          <tr><td><code>left</code> / <code>top</code></td><td><code>left</code> / <code>top</code></td><td>Page-space distance from the page's <strong>top-left corner</strong>. Any Length, or a <code>%</code> of the page width (left) / height (top). Default 0.</td></tr>
+          <tr><td><code>width</code></td><td><code>width</code></td><td>The block's layout width. When omitted it takes the remaining page width to the right of <code>left</code>, so a long paragraph still wraps.</td></tr>
+          <tr><td><code>z-index</code></td><td><code>zIndex</code></td><td>Order among positioned blocks. Negative paints behind the body flow, <code>0</code>+ in front; ties keep document order. Default 0.</td></tr>
+          <tr><td><code>data-page</code></td><td><code>page</code></td><td>1-based page number for an <code>absolute</code> block, or <code>all</code> to repeat. Ignored by <code>fixed</code>.</td></tr>
+        </tbody>
+      </table>
+      <div class="note">
+        Coordinates are absolute to the page, not relative to a parent box (there is no containing-box
+        model). Positioning applies to top-level body/band blocks — not to elements nested inside a
+        table cell or flex item. In HTML, put <em>inline</em> content in a positioned element so it
+        becomes a single overlay block; several block children would each become their own overlay and
+        stack at the same <code>top</code>. Running tokens (<code>{PAGE}</code>/<code>{TOTAL}</code>)
+        resolve per page, so a <code>fixed</code> footer stamp shows the right number on every page.
+      </div>
     </section>
 
     <section id="streaming">
@@ -1210,6 +1255,7 @@ npm run demo</code></pre>
         <a href="getting-started.html#links">Hyperlinks &amp; links</a>
         <a href="getting-started.html#watermark">Watermark</a>
         <a href="getting-started.html#columns">Multi-column</a>
+        <a href="getting-started.html#positioning">Absolute positioning</a>
         <a href="getting-started.html#gantt">Gantt chart</a>
         <a href="getting-started.html#streaming">Streaming</a>
         <a href="getting-started.html#box-polish">CSS box polish</a>

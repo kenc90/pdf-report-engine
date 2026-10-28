@@ -34,10 +34,15 @@ export function writePage(doc: PDFDocument, page: Page, options: WritePageOption
   // document's current page — both APIs bind to `doc.page` at call time.
   registerAnchors(doc, page);
   if (options.outline !== false) addBookmarks(doc, page);
+  // Out-of-flow blocks split into a behind-body (`z < 0`) and an in-front-of-body
+  // (`z >= 0`) pass; both ascending by `z` so overlapping stamps stack correctly.
+  const abs = [...page.absolute].sort((a, b) => (a.z ?? 0) - (b.z ?? 0));
   for (const pf of page.background) drawFragment(doc, pf, page.width, page.height);
+  for (const pf of abs) if ((pf.z ?? 0) < 0) drawFragment(doc, pf, page.width, page.height);
   for (const pf of page.header) drawFragment(doc, pf, page.width, page.height);
   for (const pf of page.body) drawFragment(doc, pf, page.width, page.height);
   for (const pf of page.footer) drawFragment(doc, pf, page.width, page.height);
+  for (const pf of abs) if ((pf.z ?? 0) >= 0) drawFragment(doc, pf, page.width, page.height);
   for (const pf of page.foreground) drawFragment(doc, pf, page.width, page.height);
 }
 

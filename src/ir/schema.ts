@@ -100,6 +100,30 @@ export interface BoxProps extends StyleProps {
    * block's background box. Direction defaults to `'to bottom'`.
    */
   backgroundImage?: LinearGradient;
+  // --- out-of-flow positioning -------------------------------------------
+  /**
+   * Take the block out of the vertical flow and pin it at absolute page
+   * coordinates. `'absolute'` sits on one page (see `page`); `'fixed'` repeats
+   * on every page. Neither advances the body cursor, so the block overlays
+   * rather than pushes content. `'static'`/`'relative'` are treated as normal
+   * flow. Valid on a top-level `body` block (or a band's block), not nested
+   * inside a table cell or flex item.
+   */
+  position?: 'absolute' | 'fixed' | 'static' | 'relative';
+  /** X of the block's top-left corner in page space (Length; `%` of page width). */
+  left?: Length;
+  /** Y of the block's top-left corner in page space (Length; `%` of page height). */
+  top?: Length;
+  /**
+   * Paint order among positioned blocks. Higher draws on top; a negative value
+   * draws *behind* the body flow. Default 0. Ties keep document order.
+   */
+  zIndex?: number;
+  /**
+   * Which page an `'absolute'` block lands on (1-based). Default 1. Ignored by
+   * `'fixed'`, which is placed on every page.
+   */
+  page?: number | 'all';
 }
 
 /** A CSS-like outer drop shadow. All lengths are `Length` (number = pt). */

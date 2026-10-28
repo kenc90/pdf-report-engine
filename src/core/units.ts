@@ -37,6 +37,21 @@ export function toPt(value: Length | undefined, fallback = 0): number {
   }
 }
 
+/**
+ * Resolve a `Length` against a reference dimension so a percentage (`'50%'`) can
+ * be turned into points. A bare number is already points; any other unit goes
+ * through {@link toPt}. Undefined falls back to `fallback`. Used for absolute
+ * `left`/`top`, which resolve against the page width/height rather than a
+ * containing content box.
+ */
+export function resolveLen(value: Length | undefined, ref: number, fallback = 0): number {
+  if (value === undefined || value === null) return fallback;
+  if (typeof value === 'number') return value;
+  const pct = /^\s*(-?(?:\d+\.?\d*|\.\d+))\s*%\s*$/.exec(value);
+  if (pct) return (parseFloat(pct[1]!) / 100) * ref;
+  return toPt(value, fallback);
+}
+
 /** Resolve one-or-four valued shorthand (CSS box model order: top right bottom left). */
 export function expandBox<T>(
   value: T | [T] | [T, T] | [T, T, T] | [T, T, T, T] | undefined,

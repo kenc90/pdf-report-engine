@@ -65,6 +65,11 @@ glyph embedding all happen in-process via [`pdfkit`](https://pdfkit.org) +
   every page. Rotation, size, colour, opacity and font family are configurable; the fragment is
   generated in the pagination pass and drawn by the writer's rotation transform around the
   page centre.
+- **Absolute positioning & z-index** — any top-level block with `position: 'absolute' | 'fixed'`
+  and `left` / `top` (page-space, `%` allowed) leaves the flow and pins to exact page coordinates
+  for stamps, corner logos, free badges and decorative panels. `zIndex` orders overlays (negative
+  paints behind the body, `0`+ in front); `fixed` repeats on every page and `page`/`data-page` scopes
+  an `absolute` block to one page or all. Running tokens resolve per page.
 - **QR / Code 128 / EAN-13** barcode blocks — dependency-free encoders, emitted as
   merged vector rectangles with optional human-readable captions.
 - **`@page` control from HTML** — a `<style>@page { size: A4 landscape; margin: 15mm }</style>`
@@ -605,6 +610,8 @@ The `samples/` folder demonstrates the supported subset:
   size, colour and opacity overrides) behind every page of a multi-page report.
 - `multi-column.html` — **multi-column layout**: 2- and 3-column sections declared via inline
   `column-count` CSS (mapped to the `columns` IR block).
+- `positioning.html` — **absolute positioning & z-index**: a page-1 approval stamp, fixed corner tag
+  and running `{PAGE}` footer, and a `z-index: -1` panel painted behind the body.
 - `gantt.html` — a **Gantt timeline** with task bars, progress fills and dependency arrows
   driven by a single `data-gantt-tasks` attribute.
 - `all-new-features.html` — **every new feature combined**: hyperlinks, rich text, watermark,

@@ -86,7 +86,8 @@ const DEMO_DATA = {
 // barcodes, a page break, and base-14 fallback; plus the six new features: hyperlinks,
 // rich inline text, a rotated page watermark (rendered as non-selectable vector outlines
 // on the foreground layer), multi-column layout, a Gantt timeline chart,
-// and streaming output (see renderToStream in the API docs).
+// absolute positioning with z-index (a page-1 stamp, a behind-body wash, and a fixed
+// per-page badge), and streaming output (see renderToStream in the API docs).
 const DEFAULT_HTML = `<!-- ══ Web fonts straight from the HTML: the engine collects the charset from
      the IR, passes it as text= to Google's CSS API, fetches only the needed glyphs (tiny subset),
      and embeds them. In Node a bot UA yields TTF directly; in a browser WOFF2 is decoded. ══ -->
@@ -99,6 +100,17 @@ const DEFAULT_HTML = `<!-- ══ Web fonts straight from the HTML: the engine c
   #ledger { color: #1b4d3e; }                 /* id beats class */
   .callout { background-color: #fff7e6; padding: 6pt; }
   mark { background-color: #ffe08a; }          /* tag selector */
+
+  /* Absolute positioning & z-index: position:absolute/fixed lift an element out of the flow and
+     place it at page coordinates (top/left in pt|mm|%, origin = page top-left). z-index < 0 paints
+     behind the body text, >= 0 in front. 'absolute' targets one page (data-page, default 1);
+     'fixed' repeats on every page. These overlays take no flow space. */
+  .pos-wash  { position:absolute; left:146mm; top:278mm; width:56mm; height:15mm; background:#fff2cc; z-index:-1; }
+  .pos-stamp { position:absolute; left:149mm; top:279mm; width:50mm; text-align:center;
+               border:2pt solid #b45309; color:#b45309; background:#ffffffd9;
+               padding:2pt 0; font-weight:700; font-size:10pt; letter-spacing:2pt; z-index:5; }
+  .pos-tab   { position:fixed; left:8mm; top:278mm; width:70mm; text-align:left;
+               background:#0f2f57; color:#ffffff; font-size:7pt; letter-spacing:1pt; padding:2pt 5pt; z-index:2; }
 </style>
 
 <body data-watermark="SAMPLE" data-watermark-rotate="-35" data-watermark-size="72" data-watermark-color="#c0c0c0" data-watermark-opacity="0.22" data-watermark-layer="foreground" style="font-family:Inter; font-size:10pt; color:#24303f">
@@ -127,6 +139,13 @@ const DEFAULT_HTML = `<!-- ══ Web fonts straight from the HTML: the engine c
     <tr><td style="background:#e08a1e; height:4pt"></td></tr>
   </table>
 </section>
+
+<!-- ══ Absolute positioning & z-index: a tinted wash painted BEHIND the body (z-index:-1), an
+     APPROVED stamp in FRONT on page 1 only (z-index:5), and a fixed badge that repeats in the
+     bottom margin of every page. All three are lifted out of the flow — no space is reserved. ══ -->
+<div class="pos-wash"></div>
+<div class="pos-stamp">APPROVED</div>
+<div class="pos-tab">pdf-report-engine &middot; pure JS</div>
 
 <!-- ══ Generated TOC: dot leaders, real page numbers and clickable rows. Headings
      carry ids so every row has a destination. ══ -->

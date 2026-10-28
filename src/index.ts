@@ -69,7 +69,7 @@ export type {
 } from './ir/schema.js';
 
 export { resolvePage, type ResolvedPage, type PageSpec } from './core/page.js';
-export { toPt, expandBox, MM_TO_PT, CM_TO_PT, IN_TO_PT, PX_TO_PT, type Length } from './core/units.js';
+export { toPt, resolveLen, expandBox, MM_TO_PT, CM_TO_PT, IN_TO_PT, PX_TO_PT, type Length } from './core/units.js';
 
 export { paginate, type Page, type PlacedFragment, type PaginateInput } from './pagination/engine.js';
 export type { Fragment, DrawCommand } from './layout/flow.js';

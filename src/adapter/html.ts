@@ -302,6 +302,23 @@ function applyDecl(prop: string, value: string, set: (k: string, v: unknown) => 
     case 'height':
       set('height', value);
       return;
+    // --- out-of-flow positioning -----------------------------------------
+    case 'position':
+      // Only `absolute`/`fixed` pull a block out of flow; `static`/`relative`
+      // stay in the vertical flow (no containing-box model is implemented).
+      if (value === 'absolute' || value === 'fixed') set('position', value);
+      return;
+    case 'left':
+      set('left', value);
+      return;
+    case 'top':
+      set('top', value);
+      return;
+    case 'z-index': {
+      const n = Number(value);
+      if (Number.isFinite(n)) set('zIndex', n);
+      return;
+    }
     case 'min-height':
       set('minHeight', value);
       return;
@@ -741,7 +758,18 @@ function elementStyle(el: HElement, opts: HtmlOptions): IrBox {
   // Cascade order: stylesheet rules (already sorted by specificity) < the
   // programmatic class map < inline `style`.
   const matched = opts._selectorStyles?.get(el);
-  return cssToIr(el.attrs['style'] ?? '', matched ? [matched, ...classStyles] : classStyles);
+  const box = cssToIr(el.attrs['style'] ?? '', matched ? [matched, ...classStyles] : classStyles);
+  // A positioned block's target page comes from `data-page` (a 1-based number or
+  // `all`); it only applies to `position: absolute`/`fixed` elements.
+  if (box.position && el.attrs['data-page'] !== undefined) {
+    const dp = el.attrs['data-page']!.trim();
+    if (dp === 'all') box.page = 'all';
+    else {
+      const n = Number(dp);
+      if (Number.isFinite(n) && n >= 1) box.page = Math.round(n);
+    }
+  }
+  return box;
 }
 
 /** Merge two IR box props; `over` wins on defined keys. */

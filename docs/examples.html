@@ -747,7 +747,7 @@ const pdf = await renderToBuffer(report);</code></pre>
         <code>auto</code>), <code>gap</code>/<code>row-gap</code>/<code>column-gap</code>,
         and per-item <code>flex-grow</code>/<code>flex-shrink</code>/<code>flex-basis</code>
         or the <code>flex: g s b</code> shorthand. <code>position: absolute</code> /
-        <code>float</code> are not part of the flow and are ignored.
+        <code>fixed</code> work as page overlays (see <a href="getting-started.html#positioning">Absolute positioning</a>), but inside a flex container they are ignored; <code>float</code> is unsupported.
       </p>
     </section>
 

@@ -20,6 +20,7 @@
 import type { Block, BandContent, ReportDoc, WatermarkSpec } from '../ir/schema.js';
 import type { ExprContext } from '../expr/eval.js';
 import type { ResolvedPage, Box } from '../core/page.js';
+import { resolveLen } from '../core/units.js';
 import type { ResolvedStyle } from '../text/style.js';
 import type { LayoutContext } from '../layout/context.js';
 import { layoutBlock } from '../layout/block.js';
@@ -31,6 +32,8 @@ export interface PlacedFragment {
   fragment: Fragment;
   x: number;
   y: number;
+  /** Paint order for a positioned overlay (`absolute`/`fixed`). Undefined for flow content. */
+  z?: number;
 }
 
 /** A named destination anchored to a y position in page space. */
@@ -63,6 +66,12 @@ export interface Page {
   background: PlacedFragment[];
   /** Painted on top of body/header/footer (foreground watermark). */
   foreground: PlacedFragment[];
+  /**
+   * Out-of-flow positioned blocks (`position: 'absolute' | 'fixed'`), each
+   * carrying a `z`. The writer paints `z < 0` behind the body and `z >= 0` in
+   * front of it, ordered ascending by `z` (ties keep document order).
+   */
+  absolute: PlacedFragment[];
   /** Named destinations defined on this page. */
   anchors: PageAnchor[];
   /** Heading entries in document order, with resolved page numbers. */
@@ -112,6 +121,9 @@ export function paginate(input: PaginateInput): Page[] {
   const { ctx, page, contentWidth, body, bands, scope, baseStyle, watermark } = input;
   const inherited = baseStyle ?? ctx.baseStyle;
   const opts = { contentWidth, scope, inherited };
+  // Out-of-flow blocks (`position: absolute/fixed`) are pulled out of the body
+  // before the cursor flows anything, so they overlay rather than displace.
+  const flowBody = body.filter((b) => b.position !== 'absolute' && b.position !== 'fixed');
 
   // --- Pass A: measure fixed bands with a placeholder page scope ----------
   const placeholderScope: ExprContext = { ...scope, $page: { number: 1, total: 1 } };
@@ -126,7 +138,12 @@ export function paginate(input: PaginateInput): Page[] {
   const titleH = titleMeasured.reduce((s, f) => s + fragSpan(f), 0);
   const summaryH = summaryMeasured.reduce((s, f) => s + fragSpan(f), 0);
 
-  const bodyFragments = layoutBlocks(body, ctx, opts);
+  const bodyFragments = layoutBlocks(flowBody, ctx, opts);
+  // Positioned blocks are laid out per page in Pass C (with the real `$page`
+  // scope, so `{PAGE}`/`{TOTAL}` resolve) and never consume body flow space.
+  const positioned = body.filter(
+    (b) => b.position === 'absolute' || b.position === 'fixed',
+  );
 
   // --- Pass B: flow body fragments into pages ------------------------------
   const contentLeft = page.content.x;
@@ -162,6 +179,7 @@ export function paginate(input: PaginateInput): Page[] {
       footer: [],
       background: [],
       foreground: [],
+      absolute: [],
       anchors: [],
       outline: [],
     };
@@ -251,6 +269,7 @@ export function paginate(input: PaginateInput): Page[] {
       footer: [],
       background: [],
       foreground: [],
+      absolute: [],
       anchors: [],
       outline: [],
     };
@@ -311,6 +330,10 @@ export function paginate(input: PaginateInput): Page[] {
       }
     }
 
+    // Out-of-flow positioned blocks (`position: absolute/fixed`) that target
+    // this page. Laid out with the real page scope so running tokens resolve.
+    for (const b of positioned) placePositionedBlock(b, p, i, ctx, page, po);
+
     // Collect named destinations and outline entries in document order.
     for (const pf of p.body) {
       const f = pf.fragment;
@@ -334,6 +357,39 @@ function resetEpochFor(pages: Page[], index: number): number {
     if (firstBody?.fragment.resetPageNumber) offset = i;
   }
   return offset;
+}
+
+/**
+ * Lay out and place one out-of-flow block onto page `p` if it targets it.
+ * `'fixed'` matches every page; `'absolute'` matches the 1-based `page` (default
+ * 1) or `'all'`. Coordinates are page-space from the top-left corner; `left`/
+ * `top` resolve `%` against the page width/height. Fragments are stacked from
+ * `top` exactly like a band, so a multi-line absolute paragraph keeps flowing
+ * downward from its anchor while occupying no body space.
+ */
+function placePositionedBlock(
+  b: Block,
+  p: Page,
+  pageIndex: number,
+  ctx: LayoutContext,
+  page: ResolvedPage,
+  po: { contentWidth: number; scope: ExprContext; inherited?: ResolvedStyle },
+): void {
+  const target = b.position === 'fixed' ? 'all' : b.page;
+  if (target !== 'all') {
+    const n = typeof target === 'number' ? Math.round(target) : 1;
+    if (pageIndex + 1 !== n) return;
+  }
+  const leftPt = resolveLen(b.left, page.width, 0);
+  const widthPt = Math.max(1, b.width !== undefined ? resolveLen(b.width, page.width, 0) : page.width - leftPt);
+  const frags = layoutBlock(b, ctx, { contentWidth: widthPt, scope: po.scope, inherited: po.inherited });
+  const z = b.zIndex ?? 0;
+  let y = resolveLen(b.top, page.height, 0);
+  for (const f of frags) {
+    y += f.before;
+    p.absolute.push({ fragment: f, x: leftPt, y, z });
+    y += f.height + f.after;
+  }
 }
 
 function placeBand(frags: Fragment[], x: number, top: number): PlacedFragment[] {
