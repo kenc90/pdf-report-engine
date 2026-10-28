@@ -1058,9 +1058,12 @@ const pdf = await renderToBuffer(report);</code></pre>
     <section id="positioning">
       <h2>Absolute positioning &amp; z-index</h2>
       <p>
-        Any top-level block (or a block inside a band) can leave the vertical flow and be pinned at
-        exact page coordinates with <code>position: 'absolute'</code> or <code>'fixed'</code> plus
-        <code>left</code> / <code>top</code>. It then <strong>overlays</strong> the page instead of
+        Pin a block at exact page coordinates, stack it above or below the body with
+        <code>z-index</code>, and turn it with <code>rotate</code> (CSS
+        <code>transform: rotate()</code> or the <code>data-rotate</code> attribute) — all outside the
+        normal flow. Any top-level block (or a block inside a band) can leave the vertical flow and be
+        pinned at exact page coordinates with <code>position: 'absolute'</code> or <code>'fixed'</code>
+        plus <code>left</code> / <code>top</code>. It then <strong>overlays</strong> the page instead of
         pushing content down — useful for corner logos, approval stamps, free-form badges and
         decorative boxes. Out-of-flow blocks are placed in their own paint pass ordered by
         <code>zIndex</code>.
