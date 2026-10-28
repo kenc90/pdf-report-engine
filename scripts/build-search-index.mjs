@@ -115,11 +115,12 @@ function snippet(body, from, to) {
   return text.length > SNIPPET_CHARS ? text.slice(0, SNIPPET_CHARS).trimEnd() + '…' : text;
 }
 
+/** Page chip for search results: the title minus its " · pdf-report-engine" suffix. */
 function pageLabel(file, html) {
   const m = /<title>([\s\S]*?)<\/title>/i.exec(html);
   if (!m) return file;
   const t = textOf(m[1]);
-  return t.split(/[—|]/)[0].trim() || file;
+  return t.split(/[—|·]/)[0].trim() || file;
 }
 
 function build() {

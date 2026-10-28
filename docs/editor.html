@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Report editor · pdf-report-engine</title>
+  <meta name="description" content="Standalone visual editor for pdf-report-engine: insert report blocks from a palette, edit the element under the caret in a properties panel, and render a real vector PDF entirely in the browser." />
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('pre-theme');
+        if (t !== 'light' && t !== 'dark') {
+          t = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/styles.css" />
+  <style>
+    /* ---- standalone app: fills the viewport, no docs-site chrome ---- */
+    html, body { height: 100%; }
+    body { overflow: hidden; }
+    main {
+      max-width: none; margin: 0; padding: 10px 12px 12px;
+      height: 100%; display: flex; flex-direction: column; gap: 10px; box-sizing: border-box;
+    }
+    /* docs styles.css gives `section` a 40px bottom margin — not wanted here */
+    main > section { margin-bottom: 0; min-height: 0; }
+    #workbench { flex: 1 1 auto; display: flex; }
+    /* site.js adds the docs site's floating scroll-to-top button on every page */
+    .to-top { display: none !important; }
+    .sr-only {
+      position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+      overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0;
+    }
+    .appbar {
+      flex: 0 0 auto;
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+      background: var(--brand); color: var(--on-brand);
+      border-bottom: 3px solid var(--accent);
+      margin: -10px -12px 0; padding: 8px 14px;
+    }
+    /* keep the bar's own order on narrow screens (the docs header restyles
+       `.brand` / `.theme-toggle` with `order` + `margin-left:auto` below 720px) */
+    .appbar .brand, .appbar .app-name, .appbar .theme-toggle { order: 0; margin-left: 0; }
+    .appbar .brand { font-size: 1rem; }
+    .appbar .app-name { font-weight: 600; font-size: .84rem; color: var(--nav-text); }
+    /* pushed to the far right; keep it left-to-right last even after the reset above */
+    .appbar .appbar-right { order: 0; margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+    /* ---- three-pane workbench: palette · source/preview · properties ---- */
+    .wb {
+      display: flex; flex-direction: column; gap: 12px;
+      flex: 1 1 auto; min-height: 0; width: 100%;
+    }
+    .wb-grid { display: grid; grid-template-columns: 236px minmax(0, 1fr) 320px; gap: 12px; flex: 1 1 auto; min-height: 0; }
+    .pane { border: 1px solid var(--line); border-radius: 10px; background: var(--card); overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
+    .pane-title {
+      flex: 0 0 auto; padding: 9px 12px; font: 700 12px/1.4 inherit; letter-spacing: .4px;
+      text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--line); background: var(--th-bg);
+    }
+    .pane-body { flex: 1 1 auto; min-height: 0; overflow: auto; }
+
+    /* palette */
+    #palette-search {
+      width: calc(100% - 24px); margin: 10px 12px 2px; padding: 7px 10px; font-size: 12.5px;
+      border: 1px solid var(--line); border-radius: 8px; background: var(--page-bg); color: var(--ink);
+    }
+    #palette-search:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+    .pgroup { margin: 14px 12px 4px; font: 700 10.5px/1.4 inherit; letter-spacing: 1.2px; text-transform: uppercase; color: var(--heading); }
+    .pitem {
+      display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+      width: calc(100% - 24px); margin: 3px 12px; padding: 7px 10px; text-align: left;
+      border: 1px solid var(--line); border-radius: 8px; background: var(--page-bg); color: var(--ink);
+      font: 500 12.5px/1.35 inherit; cursor: pointer;
+    }
+    .pitem:hover { background: var(--toc-hover); border-color: var(--accent); }
+    .pitem-name { flex: 1 1 auto; }
+    .pitem-tag { font: 400 11px/1.35 ui-monospace, Menlo, Consolas, monospace; color: var(--muted); flex: 0 0 auto; }
+    .pempty { margin: 16px 12px; font-size: 12px; color: var(--muted); }
+
+    /* center: tabs + panels (same visual language as the browser demo) */
+    .tabs { display: flex; gap: 4px; background: var(--th-bg); padding: 6px 8px 0; border-bottom: 1px solid var(--line); flex: 0 0 auto; }
+    .tab {
+      border: 1px solid transparent; border-bottom: none; background: transparent;
+      padding: 8px 16px; border-radius: 8px 8px 0 0; cursor: pointer;
+      font: 600 13px/1 inherit; color: var(--muted);
+    }
+    .tab:hover { color: var(--ink); background: var(--toc-hover); }
+    .tab.active { background: var(--card); color: var(--heading); border-color: var(--line); position: relative; top: 1px; }
+    .tab .badge { margin-left: 8px; background: var(--btn-bg); color: var(--btn-ink); border-radius: 999px; padding: 1px 7px; font-size: 11px; font-weight: 700; }
+    .panel { display: none; min-height: 0; flex: 1 1 auto; }
+    .panel.active { display: flex; flex-direction: column; }
+    #preview { width: 100%; height: 100%; border: 0; background: var(--page-bg); flex: 1 1 auto; }
+
+    /* editor: line-number gutter + colourised overlay under a transparent textarea.
+       The shell is a flex column so `.editor-stack` (flex:1) gets a definite height,
+       which is what lets `#editor { height: 100% }` resolve and fill the pane. */
+    .editor-shell { position: relative; padding-left: 54px; background: var(--code-bg); flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+    .editor-gutter, .editor-highlight, #editor {
+      font: 13px/20px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: normal; word-spacing: normal; text-transform: none; tab-size: 2;
+      white-space: pre; box-sizing: border-box;
+    }
+    .editor-gutter {
+      position: absolute; left: 0; top: 0; bottom: 0; width: 54px; margin: 0;
+      padding: 14px 10px 14px 0; text-align: right; overflow: hidden;
+      user-select: none; color: var(--gutter-ink); border-right: 1px solid var(--gutter-line);
+    }
+    .editor-stack { position: relative; flex: 1 1 auto; min-height: 0; }
+    .editor-highlight {
+      position: absolute; inset: 0; margin: 0; padding: 14px; overflow: hidden;
+      pointer-events: none; color: var(--on-code);
+    }
+    .editor-highlight code { font: inherit; padding: 0; background: none; }
+    #editor {
+      position: relative; z-index: 1; display: block; width: 100%; height: 100%; min-height: 0;
+      padding: 14px; border: 0; overflow: auto; resize: none; background: transparent;
+      color: transparent; -webkit-text-fill-color: transparent; caret-color: var(--accent);
+    }
+    #editor:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+    #editor::selection { background: rgba(251, 191, 36, .28); }
+    #editor { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .22) transparent; }
+    #editor::-webkit-scrollbar { width: 8px; height: 8px; }
+    #editor::-webkit-scrollbar-track { background: transparent; }
+    #editor::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .22); border-radius: 8px; }
+    #editor::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, .34); }
+    #editor::-webkit-scrollbar-corner { background: transparent; }
+    .tok-comment { color: var(--tok-comment); font-style: italic; }
+    .tok-meta { color: var(--tok-meta); }
+    .tok-tag { color: var(--tok-tag); }
+    .tok-attr { color: var(--tok-attr); }
+    .tok-string { color: var(--tok-string); }
+    .tok-entity { color: var(--tok-entity); }
+    .tok-punct { color: var(--tok-punct); }
+
+    /* toolbar under the center pane */
+    .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; border-top: 1px solid var(--line); flex: 0 0 auto; background: var(--card); }
+    .toolbar .spacer { flex: 1 1 auto; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; font-family: inherit; font-weight: 700; line-height: 1; padding: 8px 14px; font-size: 12.5px; border-radius: 8px; cursor: pointer; text-decoration: none; border: 1.5px solid var(--btn-line); background: var(--btn-bg); color: var(--btn-ink); }
+    .btn.ghost { background: var(--page-bg); color: var(--heading); border: 1.5px solid var(--line); }
+    .btn.ghost:hover { background: var(--toc-hover); }
+    #status { font-size: 12px; color: var(--ink); margin: 0; padding: 0 10px 6px; min-height: 18px; flex: 1 1 220px; }
+    #status.error { color: #b4232a; }
+
+    /* properties panel */
+    #props { padding: 10px 12px 24px; font-size: 12.5px; }
+    .props-hint { color: var(--muted); font-size: 12px; line-height: 1.7; margin: 8px 2px; }
+    .crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; font-size: 11.5px; margin-bottom: 8px; }
+    .crumb { border: 0; background: none; padding: 2px 5px; border-radius: 5px; cursor: pointer; font: 500 11.5px/1.4 ui-monospace, Menlo, Consolas, monospace; color: var(--link); }
+    .crumb:hover { background: var(--toc-hover); }
+    .crumb.active { color: var(--heading); font-weight: 700; background: var(--th-bg); }
+    .props-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+    .props-head strong { font: 700 14px/1.3 ui-monospace, Menlo, Consolas, monospace; color: var(--heading); }
+    .props-actions { display: flex; gap: 4px; }
+    #props details { border: 1px solid var(--line); border-radius: 8px; margin: 0 0 10px; background: var(--page-bg); }
+    #props summary { cursor: pointer; padding: 7px 10px; font-weight: 700; font-size: 11.5px; letter-spacing: .6px; text-transform: uppercase; color: var(--muted); user-select: none; }
+    #props details > div { padding: 2px 10px 10px; border-top: 1px solid var(--line); }
+    .prow { display: grid; grid-template-columns: 108px minmax(0, 1fr) auto; align-items: center; gap: 6px; padding: 3px 0; }
+    .prow label { color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .prow input[type="text"], .prow textarea, .prow select {
+      width: 100%; min-width: 0; padding: 4px 7px; font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace;
+      border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--ink);
+    }
+    .prow textarea { resize: vertical; }
+    .prow input:focus, .prow textarea:focus, .prow select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+    .prow input[type="color"] { width: 30px; height: 24px; padding: 1px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); cursor: pointer; }
+    .prow .mini, .props-actions .mini, .addattr .mini {
+      border: 1px solid var(--line); background: var(--card); color: var(--muted); border-radius: 6px;
+      padding: 3px 7px; font: 700 11px/1.3 inherit; cursor: pointer; white-space: nowrap;
+    }
+    .prow .mini:hover, .props-actions .mini:hover { background: var(--toc-hover); color: var(--heading); }
+    .check { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink); }
+    .not-set { font-style: italic; color: var(--muted); font-size: 11.5px; }
+    .addattr { display: flex; gap: 6px; padding-top: 8px; border-top: 1px dashed var(--line); margin-top: 6px; }
+    .addattr input { flex: 1 1 auto; }
+
+    @media (max-width: 1080px) {
+      .wb-grid { grid-template-columns: 200px minmax(0, 1fr) 280px; }
+    }
+    @media (max-width: 860px) {
+      /* stacked: let the page scroll instead of clipping to the viewport */
+      main { overflow: auto; }
+      #workbench { flex: 0 0 auto; }
+      .wb { min-height: 0; }
+      .wb-grid { grid-template-columns: 1fr; grid-auto-rows: minmax(300px, auto); }
+      .pane#left, .pane#right { max-height: 340px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <!-- app bar: identity + theme toggle, in place of the docs site header -->
+    <header class="appbar">
+      <span class="brand">pdf-report-engine<span class="dot">.</span><span class="vtag" data-version title="Engine version"></span></span>
+      <span class="app-name">Report editor</span>
+      <span class="appbar-right">
+        <button class="theme-toggle" type="button" aria-label="Toggle light or dark theme" title="Toggle light / dark theme">
+          <svg class="i-moon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          <svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+        </button>
+      </span>
+    </header>
+
+    <section id="workbench">
+      <h1 class="sr-only">Report editor</h1>
+      <div class="wb">
+        <div class="wb-grid">
+        <!-- left: block palette -->
+        <div class="pane" id="left">
+          <div class="pane-title">Blocks</div>
+          <input id="palette-search" type="search" placeholder="Filter blocks…" aria-label="Filter blocks" />
+          <div class="pane-body" id="palette-groups"></div>
+        </div>
+
+        <!-- center: source editor + PDF preview tabs -->
+        <div class="pane" id="center">
+          <div class="tabs" role="tablist" aria-label="Editor and preview">
+            <button class="tab active" id="tab-source" role="tab" aria-selected="true" aria-controls="panel-source" type="button">HTML source</button>
+            <button class="tab" id="tab-preview" role="tab" aria-selected="false" aria-controls="panel-preview" type="button">PDF preview <span class="badge" id="pagecount" hidden></span></button>
+          </div>
+          <div class="panel active" id="panel-source" role="tabpanel" aria-labelledby="tab-source">
+            <div class="editor-shell">
+              <div class="editor-gutter" id="gutter" aria-hidden="true"></div>
+              <div class="editor-stack">
+                <pre class="editor-highlight" id="highlight" aria-hidden="true"><code></code></pre>
+                <textarea id="editor" spellcheck="false" wrap="off" autocapitalize="off" autocomplete="off" autocorrect="off" aria-label="HTML report source"></textarea>
+              </div>
+            </div>
+            <div class="toolbar">
+              <button class="btn" id="generate" type="button">Generate PDF</button>
+              <a class="btn ghost" id="download" hidden download="report.pdf">Download</a>
+              <button class="btn ghost" id="undo" type="button" title="Undo the last palette or panel action (Ctrl+Z when outside the editor)">Undo</button>
+              <button class="btn ghost" id="new" type="button" title="Clear the editor to a blank document (undoable)">New</button>
+              <button class="btn ghost" id="reset" type="button" title="Load the starter example document (undoable)">Reset</button>
+              <span class="spacer"></span>
+              <p id="status" role="status"></p>
+            </div>
+          </div>
+          <div class="panel" id="panel-preview" role="tabpanel" aria-labelledby="tab-preview">
+            <iframe id="preview" title="Generated PDF preview"></iframe>
+          </div>
+        </div>
+
+        <!-- right: properties of the caret element -->
+        <div class="pane" id="right">
+          <div class="pane-title">Properties</div>
+          <div class="pane-body"><div id="props"></div></div>
+        </div>
+        </div><!-- /wb-grid -->
+      </div>
+    </section>
+  </main>
+
+  <script src="assets/site.js"></script>
+  <script type="module" src="editor.js"></script>
+</body>
+</html>
