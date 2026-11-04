@@ -15,6 +15,12 @@ glyph embedding all happen in-process via [`pdfkit`](https://pdfkit.org) +
 > **Documentation site:** <https://kenc90.github.io/pdf-report-engine/> ·
 > **Source:** <https://github.com/kenc90/pdf-report-engine>
 
+> **AI agents / LLMs:** before writing report code, read the machine-friendly
+> reference shipped in this package — [`llms.txt`](./llms.txt) (compact) and
+> [`llms-full.txt`](./llms-full.txt) (exhaustive). They capture the `ReportDoc` shape,
+> the IR `block` union, the expression grammar and the HTML `data-*` attributes, so you
+> don't have to scan the source.
+
 ## Features
 
 - **Vector, text-selectable output** — fonts are embedded as `/Type0` → `/CIDFontType2`

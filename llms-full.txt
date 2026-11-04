@@ -1,0 +1,479 @@
+# pdf-report-engine — full reference (for AI agents)
+
+Exhaustive field-level companion to [`llms.txt`](./llms.txt). Read `llms.txt` first
+for the mental model; use this file when you need every option for a specific block,
+table, chart, font or encryption setting. All content is derived from the shipped
+TypeScript declarations (`dist/index.d.ts` and re-exported `dist/ir/schema.d.ts`).
+
+- ESM-only, Node ≥ 18. `import { ... } from 'pdf-report-engine'`.
+- Geometry: a `Length` is a `number` (points) or a unit string (`'12pt'`, `'5mm'`,
+  `'1in'`, `'24px'`, `'50%'`). pt = 1/72 in; mm/cm/in/px are converted for you.
+- Colors (`ColorInput`): `'#rgb'`, `'#rrggbb'`, `'#rrggbbaa'`, `'rgb()'`/`'rgba()'`,
+  `'hsl()'`/`'hsla()'`, a `number`, or a named CSS colour.
+
+---
+
+## 1. Public API (from `pdf-report-engine`)
+
+### Render entry points
+- `renderToBuffer(report: ReportDoc, options?: RenderOptions): Promise<Buffer>`
+  Async one-shot. Resolves remote `http(s)` images and `report.fonts`
+  (Google-Fonts links, `@font-face`, font URLs) into embedded faces, then returns the
+  full PDF. **Default choice.**
+- `renderToStream(report: ReportDoc, options?: RenderOptions): Promise<ReadableStream<Uint8Array>>`
+  Async; same resolution as `renderToBuffer` but emits bytes incrementally and forces
+  `bufferPages: false` (lower peak memory, ideal for server responses).
+- `createReport(report: ReportDoc, options?: RenderOptions): { doc, pages, registry }`
+  **Synchronous, offline.** Returns the live `pdfkit` `doc` (call `doc.end()` and pipe
+  it), the paginated `pages: Page[]`, and the `FontRegistry`. Does **not** fetch remote
+  images/fonts — pass local `options.fonts` and file/`data:`/byte image `src` only.
+
+### `RenderOptions`
+```jsonc
+{
+  "fonts": [ /* FontSource[]: { family, weight?, style?, buffers: Uint8Array[] } — required for createReport */ ],
+  "now": () => new Date(),          // injectable clock for now() (deterministic tests)
+  "baseStyle": { /* Partial<StyleProps> */ }, // overrides report.style before inheritance
+  "bufferPages": true,              // false = flush each page (renderToStream sets this)
+  "images": {                       // how http(s) image src is resolved (async renders)
+    "resolveImage": async (url) => Uint8Array,  // custom loader (proxy/auth/cache)
+    "allowedHosts": ["cdn.example.com"],        // optional allowlist
+    "timeoutMs": 10000,
+    "onError": "throw" | "skip"                 // default skip
+  },
+  "resolveFonts": { /* FontResolveOptions: same idea for report.fonts */ }
+}
+```
+
+### Adapters and lower-level exports
+- `htmlToReportDoc(html: string, options?: HtmlOptions): ReportDoc` — HTML subset → IR.
+  `HtmlOptions = { style?: Partial<StyleProps>, data?: Record<string, unknown>, baseDir?: string }`
+  (`baseDir` lets relative `<img src>` resolve).
+- `parseHtml(html): HNode[]` — the forgiving tokenizer (rarely needed directly).
+- `resolveRemoteImages(report, opts?)`, `resolveRemoteFonts(report, opts?)`,
+  `parseFontFace(css)`, `collectCharset(doc|html)` — pre-pass helpers.
+- `readFontFiles(...)`, `FontRegistry`, `setImageFileReader`, `setImagePathAccess`,
+  `imagePathAccessEnabled` — font/image host hooks.
+- Units: `toPt`, `resolveLen`, `expandBox`, `MM_TO_PT`, `CM_TO_PT`, `IN_TO_PT`, `PX_TO_PT`.
+- Page: `resolvePage(spec)`. Pagination: `paginate(input)`.
+- Types exported: `ReportDoc, Block, ParagraphBlock, HeadingBlock, TableBlock,
+  SpacerBlock, PageBreakBlock, ImageBlock, SvgBlock, FlexBlock, FlexItem, ColumnBlock,
+  ChartBlock, ChartKind, ChartSeries, GanttTask, ReferenceLine, ValueAxisOptions,
+  TocBlock, BarcodeBlock, BarcodeSymbology, BandContent, BandType, StyleProps,
+  BoxProps, Content, ContentSpan, ColumnNode, RowNode, CellNode, GroupNode,
+  DataSource, Expr, FontReference, WatermarkSpec, EncryptionSpec, PdfPermissions,
+  BoxShadow, LinearGradient, RenderOptions, RenderResult`.
+
+---
+
+## 2. `ReportDoc` (root)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `info` | `{ title?, author?, subject?, keywords?, creator?, producer? }` | `title` may be an `Expr`; written to PDF metadata. |
+| `page` | `PageSpec` | see §3. |
+| `style` | `Partial<StyleProps>` | base style inherited down the whole tree. |
+| `data` | `Record<string, unknown>` | arrays/objects read by expressions (`$data`) and table `dataSource`. |
+| `variables` | `Record<string, unknown>` | extra symbols available as `$vars.<name>` in any expression. |
+| `bands` | `Partial<Record<BandType, BandContent>>` | see §4. |
+| `body` | `Block[]` | flowing content. |
+| `fonts` | `FontReference[]` | declarative remote fonts (resolved by the async renders). |
+| `outline` | `boolean` | PDF bookmarks from headings; auto-on when headings exist, `false` suppresses. |
+| `watermark` | `WatermarkSpec` | see §10. |
+| `encrypt` | `EncryptionSpec` | see §11. |
+
+---
+
+## 3. `PageSpec`
+
+```jsonc
+{ "size": "a4", "orientation": "portrait" | "landscape", "margin": 56 }
+```
+- **`size`**: `'a3'|'a4'|'a5'|'b4'|'b5'|'letter'|'legal'|'tabloid'|'executive'`, a
+  `[Length, Length]` tuple, `{ width, height }` (pt), or `'8.5in x 11in'` style string.
+  Default `'a4'`.
+- **`margin`**: a single `Length`, or CSS-shorthand arrays of 1–4 `Length`s
+  (`[v,h]`, `[t,h,b]`, `[t,r,b,l]`). Default `20mm`.
+- `orientation` swaps width/height so the page is landscape/portrait regardless of size.
+
+---
+
+## 4. Bands (Jasper-style regions)
+
+`BandType = 'pageHeader' | 'pageFooter' | 'title' | 'summary' | 'background'`
+
+`BandContent = { blocks?: Block[], text?: Content, style?: Partial<StyleProps>, height?: number }`
+- `title` renders once at the very start; `summary` once at the end; `pageHeader`/
+  `pageFooter` repeat on every page; `background` sits behind every page.
+- `height` fixes the band height; omit it and the band is measured from its blocks.
+- **Running tokens** `{PAGE}` and `{TOTAL}` and `$page.number`/`$page.total`
+  resolve **only inside bands** (not in `body`). `resetPageNumber` on a group restarts
+  the counter at a group boundary.
+
+---
+
+## 5. Content model
+
+`Content = string | number | ContentSpan | Array<string | number | ContentSpan>`
+
+`ContentSpan = { text?: Content, bind?: string | Expr, format?: string,
+style?: Partial<StyleProps>, children?: Content, link?: string }`
+- `bind` → an expression result (see §6). `format` → a number/date pattern applied to
+  the bound value. `style` → per-run overrides (bold/colour/etc.) inside a paragraph.
+- `link` → an absolute URL (`https:`, `mailto:`, `tel:`) or an internal `#anchor`
+  (matches a block/heading whose `id` — the IR `id` or an HTML element's `id` — equals
+  the anchor). Emits a real PDF link.
+
+`Expr = { expr: string, scope?: 'row'|'group'|'report'|'page', type? }`. In JS you can
+usually pass the bare string wherever `string | Expr` is accepted.
+
+---
+
+## 6. Expression grammar (full)
+
+Evaluated in a `Proxy`-whitelisted sandbox — **no raw `eval` of globals**.
+
+**Scope variables**
+| Token | Meaning |
+| --- | --- |
+| `$data` / `$report` | the report `data` object |
+| `$vars` | the report `variables` map |
+| `$row.<col>` | current table row; bound columns (`columns[].key`) are also unprefixable |
+| `$item` | current `data-each="item in ..."` iteration value |
+| `$value` | current cell value (in cells / `<td data-bind>`), or a computed aggregate |
+| `$index` | 0-based row index within the current group |
+| `$group.<colKey>_<fn>` | aggregate over the current group: `_sum _avg _count _min _max`; plus `$group.<key>` = group key value, `$group.rowCount` = row count |
+| `$page.number` / `$page.total` | running page numbers (bands only) |
+
+**Functions** (also available: standard JS `Math`, `Date`, `JSON`, `Number`, `String`)
+- Aggregates: `sum`, `avg`, `min`, `max`, `count`, `rows`, `rowCount`, `groupCount`.
+- Position: `isFirst`, `isFirstRow`, `isLast`, `isLastRow`.
+- Logic: `cond(test, thenValue, elseValue)` (lazy — only the taken branch evaluates).
+- Formatting: `format(value, pattern)`, `money(v, symbol?, digits?)` (default `$`, 2),
+  `percent(v, digits?)` (`v*100` + `%`), `number(v, pattern?)`.
+  - Date pattern letters: `yy yyyy M MM MMM d dd HH hh mm ss a`.
+  - Number pattern: `0 . , % $ ( ) - + ; E * # ¤` and `'literal'`.
+- Text: `lower`, `upper`, `trim`, `concat`, `length`, `abs`, `round`, `floor`, `ceil`.
+- Time: `now()`, `date(...)`.
+
+---
+
+## 7. Blocks — full per-kind reference
+
+Common to every block (`BlockBase extends BoxProps extends StyleProps`):
+`id`, `visible?: boolean | Expr`, `styleWhen?: StyleCondition[]`, plus all
+`StyleProps` (§8) and `BoxProps` (§9) fields.
+
+### `paragraph`
+`{ type: 'paragraph', content: Content }`
+
+### `heading`
+`{ type: 'heading', content, level?: 1..6, outline?: { level?, numbering?: 'append'|'none' } | false }`
+Headings feed the PDF outline and any `toc` block.
+
+### `spacer`
+`{ type: 'spacer', size?: number }` — vertical gap (pt).
+
+### `pageBreak`
+`{ type: 'pageBreak' }` — starts the next page. Never breaks at the top of a page, so
+consecutive breaks cannot blank a page. (`always` is accepted and ignored.)
+
+### `image` (raster)
+`{ type: 'image', src: string | Uint8Array, intrinsic?: {width,height}, alt? }`
+`src` = filesystem path, `data:` URI, or raw bytes; passed to pdfkit unchanged.
+Sizing: explicit `width`/`height` honoured exactly; one given → the other follows the
+intrinsic aspect ratio (probed from the file header, no pdfkit in layout); neither →
+intrinsic px size at 96 dpi, capped to the content width. PNG/JPEG/GIF/BMP.
+
+### `svg` (vector)
+`{ type: 'svg', src, intrinsic?, alt? }` — inline `<svg>`, `data:image/svg+xml`, a
+`.svg` path, or a remote SVG URL (fetched by the async pre-pass). Drawn as real PDF
+paths (crisp at any zoom). Subset: `path` (all commands incl. arcs), `rect`, `circle`,
+`ellipse`, `line`, `polyline`, `polygon`, nested `g` with `transform`, and
+fill/stroke incl. `fill-rule` (even-odd holes), opacity, dash arrays. Text, gradients,
+filters, clip/mask are **not** modelled (a gradient fill falls back to solid).
+
+### `chart`
+```jsonc
+{
+  "type": "chart", "kind": "bar",
+  "title": "Revenue", "categories": ["Q1","Q2","Q3"],  // or CSV string or binding
+  "series": [ { "name": "2025", "values": [12,18,9], "color": "#1a3d6d", "type": "bar", "axis": "left" } ],
+  "stacked": false | true | "100%",
+  "legend": "none" | "top" | "bottom" | "right",
+  "colors": ["#..."],            // palette when a series has no color
+  "showValues": true,            // value labels above bars/points
+  "valueAxis": { "min","max","ticks","format","labels","gridLines" },
+  "rightAxis": { /* ValueAxisOptions, combo secondary axis */ },
+  "referenceLines": [ { "value": 100, "label": "Target", "color","axis","dash" } ],
+  "range": true,                 // bar charts: draw high–low range bars (series.low/high)
+  "totals": [0, 3],              // waterfall: category indices drawn as running-total bars
+  "waterfallColors": { "increase","decrease","total" },
+  "innerRadius": 0.55,           // donut hole fraction
+  "plotHeight": 160,             // pt
+  "gaugeValue": ..., "gaugeMax": 100,
+  "heatmapLabels": true, "heatmapColors": { "from","to" },
+  "ganttTasks": [ { "name","start","duration"|"end","color","dependsOn":[0],"progress":0.5 } ],
+  "ganttStart","ganttEnd","ganttUnit": "day"|"week"|"month"
+}
+```
+`ChartKind = 'bar'|'line'|'area'|'pie'|'donut'|'combo'|'waterfall'|'scatter'|'bubble'|
+'radar'|'gauge'|'heatmap'|'gantt'` (any other value falls back to `bar`).
+`ChartSeries.values` accepts a number array, a CSV string `'12,18,9'`, or a binding
+(`'$data.revenue'`). Pie/donut read slices from `series[0].values` labelled by
+`categories`; every other kind maps one value per category per series. `combo` mixes
+per-series `type` (`bar`/`line`/`area`) and `axis` (`left`/`right`). Scatter/bubble use
+`xValues`/`rValues`; range bars use `low`/`high`.
+
+### `toc`
+`{ type: 'toc', title?, maxLevel?: 3, leaders?: true, indent?: 12,
+pageNumbers?: true, gap?: 4 }` — generated from heading blocks. The renderer runs a
+bounded fixed-point loop (≤4 passes) so real page numbers stabilise.
+
+### `barcode`
+`{ type: 'barcode', symbology: 'qr'|'code128'|'ean13', value: Content,
+moduleSize?, errorCorrection?: 'L'|'M'|'Q'|'H' (QR, default M), quietZone?: 4 (QR),
+showText?: true (1D), color? }` — dependency-free encoders, emitted as merged vector
+rectangles. `ean13` takes 12 digits (checksum appended) or 13 (checksum validated).
+
+### `flex`
+```jsonc
+{ "type": "flex", "direction": "row"|"column", "wrap": false,
+  "justify": "flex-start"|"center"|"flex-end"|"space-between"|"space-around"|"space-evenly",
+  "alignItems": "flex-start"|"center"|"flex-end"|"stretch",
+  "gap": 8, "rowGap": , "columnGap": ,
+  "children": [ { "block": { /* any Block */ }, "grow":1, "shrink":1, "basis": "auto", "alignSelf": "center" } ] }
+```
+Laid out as a **single atomic fragment** (never splits across pages). `display: flex`
+in HTML maps here.
+
+### `columns`
+`{ type: 'columns', count?: 2, gap?: 12, rule?: boolean | {color,width}, children: Block[] }`
+Distributes children across N equal-width sub-columns, balanced by height and kept
+atomic. CSS `column-count: N` in HTML maps here.
+
+### `table`
+```jsonc
+{
+  "type": "table",
+  "columns": [ { "key","width","grow","minWidth","align","style","colorScale" } ],
+  "headerRows": [ /* RowNode kind:'header' */ ],   // repeat on every page (repeatHeader)
+  "footerRows": [ /* RowNode */ ],
+  "staticRows": [ /* RowNode with their own cell styling */ ],
+  "dataSource": [ {..}, {..} ] | { "bind": "$data.rows" } | { "each": "row", "of": "$data.rows" },
+  "detail": { "cells": [ { "bind": "amount", "format": "#,##0.00" } ] },  // template per row
+  "groups": [ { "by": "$row.region", "header","footer","headerStyle","footerStyle",
+                "pageBreak","resetPageNumber" } ],
+  "repeatHeader": true,        // false opts the per-page header repetition out
+  "striped": true | { "color": "#f2f2f2" },
+  "showGrid": true | BorderShorthand,
+  "rowStyle": { /* Partial<StyleProps> */ } | ((row, index) => Partial<StyleProps>)
+}
+```
+- **`ColumnNode`**: `width` (pt `Length`; a % is NOT resolved against the table),
+  `grow` (weight to share leftover width), `minWidth` (default = widest unbreakable
+  word), `align`, `style` (body-cell default), `colorScale` (column heatmap), `key`
+  (binds `columns[].key` → row field, and makes `$row.<key>` unprefixable).
+- **`RowNode`**: `cells: CellNode[]`, `kind?`
+  (`'header'|'detail'|'groupHeader'|'groupFooter'|'subtotal'|'grandTotal'`),
+  `visible?` (per-row filter — falsy drops the row), `styleWhen?`, `breakInside?`,
+  `keepWithNext?`, `minHeight?`. A row is already one atomic fragment.
+- **`CellNode`**: `content?` (`Content`) **or** `blocks?: Block[]` (rich cell: images,
+  barcodes, charts, nested tables, paragraphs — `content` wins if both), `colSpan?`,
+  `rowSpan?`, `align` (incl. `'justify'`), `verticalAlign`, `style?`, `border?`,
+  `padding*?`, `backgroundColor?`, `visible?`, `styleWhen?`, `colorScale?`,
+  `diagonal?: DiagonalHeader` (split corner header: `{top,bottom,dir:'tl'|'tr',line}`),
+  `format?`.
+- **`GroupNode.footer`** may be an **array** (multiple blocks) — e.g. a subtotal line.
+- Deprecated-and-ignored: `subtotal` (cell), `groupStyle`, `widows`/`orphans`,
+  `subtotalToken`, `showRowSeparators` (use `showGrid`), `group.headerRepeat`/`label`.
+
+---
+
+## 8. `StyleProps` (inherited)
+
+`fontFamily: string | string[]` (an array = per-glyph fallback stack, first family that
+contains the glyph wins) · `fontSize` · `fontWeight: number | 'normal' | 'bold'` ·
+`fontStyle: 'normal'|'italic'|'oblique'` · `color` · `backgroundColor` · `opacity`
+(0..1) · `lineHeight: number | 'normal'` · `letterSpacing` · `align: 'left'|'center'|
+'right'|'justify'` · `verticalAlign: 'top'|'middle'|'bottom'` · `textDecoration:
+('underline'|'line-through')[]` · `features: Record<string, boolean>` (OpenType, e.g.
+`{ tnum: true }`) · `fontVariant: 'normal'|'small-caps'|'tabular-nums'` · `whiteSpace:
+'normal'|'nowrap'|'pre-wrap'` · `textTransform: 'none'|'uppercase'|'lowercase'|'capitalize'`.
+
+## 9. `BoxProps` (adds non-inherited box/pagination fields)
+
+All of `StyleProps` plus: `width`/`height`/`minHeight` (`number | string`),
+`margin{Top,Right,Bottom,Left}`, `padding{Top,Right,Bottom,Left}`,
+`border`/`border{Top,Right,Bottom,Left}: BorderShorthand`
+(`ColorInput` | `[width, color]` | `[width, style, color]`; `BorderStyle =
+'solid'|'dashed'|'dotted'|'double'|'none'`),
+`breakBefore`/`breakAfter: 'auto'|'page'|'avoid'` (only `'page'` is honoured for
+before/after; `'avoid'` there is ignored), `breakInside: 'auto'|'avoid'`,
+`keepWithNext?: boolean`, `borderRadius` (rounds the **fill** only; a straight border is
+never curved; CSS shorthand tuple order), `boxShadow?: BoxShadow`
+(`{offsetX,offsetY,blur,color,opacity,inset}` — `inset` and `spread` are dropped),
+`backgroundImage?: LinearGradient` (`{direction,from,to}` two-stop; direction snaps to
+4 axes; painted **instead of** `backgroundColor`),
+and out-of-flow: `position: 'absolute'|'fixed'|'static'|'relative'`, `left`/`top`
+(`Length`, % of page dim), `zIndex?` (negative = behind body), `page?: number|'all'`
+(for `absolute`; `fixed` repeats every page), `rotate?: number` (degrees CCW about the
+block centre; kept atomic). Valid on top-level `body`/band blocks, not inside a table
+cell or flex item.
+
+---
+
+## 10. `WatermarkSpec`
+
+`{ text: string, rotate?: number (default -35), fontSize?: number (default 72),
+color? (default '#c0c0c0'), opacity? (default 0.18), fontFamily?,
+layer?: 'background'|'foreground' (default background) }`
+Drawn on every page as rotated, semi-transparent **vector outlines** (non-selectable).
+HTML: `data-watermark="DRAFT"` on `<body>` (with `data-watermark-rotate` etc.) or
+`<meta name="watermark" content="…">`.
+
+## 11. `EncryptionSpec`
+
+`{ userPassword?, ownerPassword?, permissions?: PdfPermissions }` — RC4 128-bit via
+pdfkit. At least one password is required or the doc stays unencrypted (byte-identical
+to before). `permissions: { printing, modifying, copying, annotating, fillingForms,
+contentAccessibility, documentAssembly }` — each `true` grants the capability. A
+permissions-only spec with no password is ignored (pdfkit only installs the handler
+when a password is present).
+
+## 12. `FontReference` (declarative remote fonts)
+
+```jsonc
+[
+  { "type": "google",    "url": "https://fonts.googleapis.com/css2?family=..." },
+  { "type": "font-face", "css": "@font-face { font-family:'X'; src:url('https://.../x.woff2'); }" },
+  { "type": "url", "url": "https://.../font.otf", "family": "X", "weight": 400, "style": "normal", "postscriptName": "X-Regular" }
+]
+```
+Resolved to embedded faces by `renderToBuffer`/`renderToStream` (a failed remote font is
+skipped, not fatal). For **CJK/Unicode coverage** you don't name a font per block —
+the engine does per-glyph fallback across all registered faces and subsets each font to
+the characters actually used. With `createReport` (offline) instead pre-resolve with
+`resolveRemoteFonts(...)` and pass the result into `options.fonts`, or use
+`readFontFiles`.
+
+---
+
+## 13. HTML adapter — full mapping
+
+`htmlToReportDoc(html, { style?, data?, baseDir? })`. Supported markup:
+- **Block tags:** `h1..h6` (→ heading), `p` (paragraph), `div/section/article/
+  header/footer/main` (container), `ul/ol/li` (list), `table`, `hr` (rule), `img`,
+  inline `<svg>`, `blockquote`.
+- **Inline tags:** `b/strong` (bold), `i/em` (italic), `u/ins` (underline), `span`,
+  `font`, `a` (→ `link`), `mark` (highlight), `br` (U+2028 line separator).
+- **CSS:** flat subset of inline `style`; a `<style>`/linked stylesheet with class rules
+  (`.toc { outline: true }`, `table { width: 100% }`) is honoured. `display: flex` →
+  flex block; `column-count` → columns block; `transform: rotate(Ndeg)` → `rotate`.
+- **Page:** `<meta name="pdf-page" content="size=a4; margin=48; orientation=landscape">`
+  or `@page { size: A4 landscape; margin: 15mm }` (a JS `report.page` still wins).
+- **Fonts:** `<link href="fonts.googleapis.com/…">` and `@import` → `report.fonts`.
+- **Data attributes** (the hallucination-prone area — these are the exact names; there is
+  **no `data-col`/`data-label`/`data-field`/`data-expr`/`data-anchor`**):
+  `data-band` (→ band region), `data-each="item in $data.list"` / `data-bind="$data.list"`
+  on `<table>` (→ dataSource; the `<tbody>` first `<tr>` is the row template and each cell's
+  `data-bind="<field>"` names the column `key`), `data-format` (pattern on a bound leaf/cell),
+  `data-if="<expr>"` (visibility / per-row filter), `data-when="<expr>"` +
+  `data-when-style="<css>"` (conditional style), `data-color-scale="min=;max=;from=;to=;text="`
+  (numeric heatmap), `data-diagonal` (+ `data-diagonal-top`/`-bottom`/`-line` split header),
+  `data-striped` / `data-striped-color` (table striping), `data-watermark` +
+  `data-watermark-rotate`/`-color`/`-size`/`-opacity`/`-font`/`-layer`, `data-page`
+  (target page for an `absolute`/`fixed` block), `data-rotate="<deg>"`.
+  **Row grouping / group subtotals are JS-IR only — no HTML attribute enables them.**
+  Internal `#` links resolve against an element's standard **`id`** attribute.
+- **Special blocks are attribute-triggered** on any element (not `type=`):
+  - **Barcode:** `data-barcode="qr|code128|ean13"` + `data-value` (or `data-bind`), with
+    `data-error-correction`, `data-module-size`, `data-quiet-zone`, `data-show-text`, `data-color`.
+  - **Chart:** `data-chart="<kind>"` (or `data-kind`) on an element or a `<table>`; data via
+    `data-categories`, `data-series` / `data-name`+`data-values`+`data-color`; options:
+    `data-title`, `data-colors` (palette), `data-stacked`, `data-legend`, `data-show-values`,
+    `data-min`/`data-max`/`data-ticks`/`data-value-format`/`data-x-format`, `data-axis-labels`,
+    `data-category-labels`, `data-grid`/`data-grid-lines`, `data-reference-lines`, `data-range`,
+    combo `data-series-types`/`data-series-axes` (+ right-axis `data-right-*`), scatter/bubble/range
+    `data-series-x`/`data-series-r`/`data-series-low`/`data-series-high`, `data-totals`/
+    `data-waterfall-colors` (waterfall), `data-inner-radius`/`data-plot-height`, gauge
+    `data-gauge-value`/`data-gauge-max`, heatmap `data-heatmap-labels`/`data-heatmap-colors`,
+    gantt `data-gantt-tasks`/`data-gantt-start`/`data-gantt-end`/`data-gantt-unit`.
+  - **TOC:** an element with `data-toc` (+ `data-title`, `data-max-level`, `data-leaders`,
+    `data-indent`, `data-page-numbers`, `data-gap`). A `.toc { outline: true }` CSS rule
+    only adds heading section-numbering; the block itself needs `data-toc`.
+  - **Multi-column:** `data-columns="N"` (+ `data-column-gap`, `data-column-rule`) or CSS `column-count`.
+
+## 14. Conditional formatting
+
+- **`styleWhen: StyleCondition[]`** on blocks, rows and cells:
+  `{ when: string | Expr, style?: Partial<BoxProps> }`. Rules apply in array order, last
+  match wins; evaluated in the current scope (`$row`, `$group`, `$index`, `$page`).
+- **`colorScale: ColorScale`** on a cell or column: `{ min?, max?, from? ('#eef4ff'),
+  to? ('#1e3a8a'), text? (default true → white on dark fills) }`. When `min`/`max` are
+  omitted the range is computed per column from the table's data rows (one declaration
+  shades a whole column).
+- **`visible: boolean | Expr`** hides a block/row/cell (a hidden cell keeps its grid slot).
+
+## 15. CLI (offline, auto-detected CJK fonts via fontconfig)
+
+```bash
+npx pdf-report-engine-html report.html out.pdf --data report.data.json
+# or after npm install:
+node node_modules/pdf-report-engine/dist/cli/html-to-pdf.js report.html out.pdf -d report.data.json
+```
+Prints `wrote N pages`. For arbitrary Unicode/online images use the JS API instead.
+
+## 16. Recipes (copy-paste)
+
+### Grouped data table with subtotals + running pages
+See `examples/02-data-table.mjs`. Key shape:
+```js
+data: { rows },
+variables: { grandTotal: rows.reduce((s, r) => s + r.amount, 0) },
+bands: {
+  pageFooter: { height: 20, style: { fontSize: 8 },
+    blocks: [{ type: 'paragraph', align: 'right',
+      content: ['Page ', { bind: '$page.number' }, ' of ', { bind: '$page.total' }] }] },
+  summary: { text: [{ bind: "concat('Grand total: ', money($vars.grandTotal))" }] },
+},
+body: [{ type: 'table', repeatHeader: true, dataSource: { bind: '$data.rows' },
+  columns: [{ key: 'region', grow: 1 }, { key: 'amount', width: 110, align: 'right' }],
+  groups: [{ by: '$row.region',
+    footer: [{ bind: "concat('Subtotal — ', money($group.amount_sum))" }] }],
+  detail: { cells: [{ bind: 'region' }, { bind: 'amount', format: '#,##0.00' }] } }]
+```
+
+### Online images (with a custom loader)
+```js
+await renderToBuffer(report, {
+  images: { resolveImage: async (url) => myFetch(url), timeoutMs: 10_000, onError: 'throw' },
+});
+// report.body: [{ type: 'image', src: 'https://cdn.example.com/chart.png', width: 180 }]
+```
+
+### Fonts for CJK / arbitrary Unicode (offline)
+```js
+import { createReport, resolveRemoteFonts } from 'pdf-report-engine';
+const fonts = await resolveRemoteFonts(report);            // from report.fonts refs
+const { doc } = createReport(report, { fonts });
+doc.end(); doc.pipe(fs.createWriteStream('out.pdf'));
+// Then per-glyph fallback + auto-subsetting handles CJK with no font-family per block.
+```
+
+### Streaming to an HTTP response
+```js
+const stream = await renderToStream(report, { images: { allowedHosts: ['cdn.example.com'] } });
+return new Response(stream, { headers: { 'content-type': 'application/pdf' } });
+```
+
+### TOC + bookmarks + links
+```js
+body: [
+  { type: 'toc', title: 'Contents', maxLevel: 3 },
+  { type: 'pageBreak' },
+  { type: 'heading', level: 1, content: 'Introduction', id: 'intro' },
+  // …more headings…
+]
+// outline is automatic; internal links use { link: '#intro' } (matching a block id).
+```
