@@ -76,15 +76,34 @@ export function parseHtml(src) {
       i = stop;
       continue;
     }
-    const m = /^<(\/?)([A-Za-z][-.:\w]*)([\s\S]*?)(\/?)>/.exec(src.slice(lt));
-    if (!m) { // a stray `<` or an unterminated tag (mid-typing) — keep as text;
-      // the `<` plus the leftover chars re-serialize verbatim, so the model
-      // round-trips half-typed markup without rewriting it
+    // A tag's attribute area may legally contain `>` inside a quoted value
+    // (e.g. data-if="$row.amount > 0"), so find the tag's real closing `>` by
+    // scanning while tracking quote state — never stop at a `>` that is quoted.
+    const head = /^<(\/?)([A-Za-z][-.:\w]*)/.exec(src.slice(lt));
+    if (!head) { // a stray `<` — keep as text so half-typed markup round-trips
       pushText('<');
       i = lt + 1;
       continue;
     }
-    const [full, closing, nameRaw, attrSrc, selfClose] = m;
+    const closing = head[1];
+    const nameRaw = head[2];
+    let attrEnd = -1;
+    let quote = '';
+    for (let k = lt + head[0].length; k < src.length; k += 1) {
+      const c = src[k];
+      if (quote) { if (c === quote) quote = ''; }
+      else if (c === '"' || c === "'") quote = c;
+      else if (c === '>') { attrEnd = k; break; }
+    }
+    if (attrEnd === -1) { // unterminated tag (mid-typing) — keep the `<` as text
+      pushText('<');
+      i = lt + 1;
+      continue;
+    }
+    const full = src.slice(lt, attrEnd + 1);
+    const inner = src.slice(lt + head[0].length, attrEnd);
+    const selfClose = inner.endsWith('/') ? '/' : '';
+    const attrSrc = selfClose ? inner.slice(0, -1) : inner;
     const name = nameRaw.toLowerCase();
     if (closing) {
       for (let k = stack.length - 1; k > 0; k -= 1) {
