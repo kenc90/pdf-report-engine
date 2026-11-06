@@ -127,6 +127,16 @@
     #editor::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .22); border-radius: 8px; }
     #editor::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, .34); }
     #editor::-webkit-scrollbar-corner { background: transparent; }
+    /* Transparent scrollbar background everywhere on the editor (panes, palette,
+       properties, AI chat). The `#editor` id rules above are more specific, so the
+       code area keeps its own thumb. Unqualified `*` / pseudo selectors have lower
+       specificity, so they only fill in the elements that had default bars. */
+    * { scrollbar-width: thin; scrollbar-color: rgba(148, 163, 184, .45) transparent; }
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, .45); border-radius: 8px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, .65); }
+    ::-webkit-scrollbar-corner { background: transparent; }
     .tok-comment { color: var(--tok-comment); font-style: italic; }
     .tok-meta { color: var(--tok-meta); }
     .tok-tag { color: var(--tok-tag); }
