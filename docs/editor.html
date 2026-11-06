@@ -113,7 +113,11 @@
       position: absolute; inset: 0; margin: 0; padding: 14px; overflow: hidden;
       pointer-events: none; color: var(--on-code);
     }
-    .editor-highlight code { font: inherit; padding: 0; background: none; }
+    .editor-highlight code { font: inherit; padding: 0; background: none; display: block; will-change: transform; }
+    /* The gutter numbers are translated (not scrolled) to stay locked to the
+       textarea; the inner block must be a block for `transform` to apply and
+       must inherit the monospace metrics + right alignment from `#gutter`. */
+    #gutter .gutter-inner { display: block; white-space: pre; text-align: right; will-change: transform; }
     #editor {
       position: relative; z-index: 1; display: block; width: 100%; height: 100%; min-height: 0;
       padding: 14px; border: 0; overflow: auto; resize: none; background: transparent;

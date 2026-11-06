@@ -18,6 +18,12 @@ import { initAiAssist } from './editor-ai.js';
 const $ = (id) => document.getElementById(id);
 const editor = $('editor');
 const gutter = $('gutter');
+// The gutter numbers live in an inner block we translate (instead of scrolling
+// the outer element) so they stay pixel-locked to the textarea even when a
+// classic horizontal scrollbar shrinks the textarea's clientHeight — see syncScroll.
+const gutterInner = document.createElement('div');
+gutterInner.className = 'gutter-inner';
+gutter.replaceChildren(gutterInner);
 const highlightEl = $('highlight');
 const highlightCode = highlightEl.querySelector('code');
 const paletteEl = $('palette-groups');
@@ -77,15 +83,22 @@ function clampCaretToSelection() {
 function refreshChrome() {
   highlightCode.innerHTML = highlightHtml(editor.value);
   const lines = editor.value.split('\n').length;
-  gutter.textContent = Array.from({ length: lines }, (_, n) => n + 1).join('\n');
+  gutterInner.textContent = Array.from({ length: lines }, (_, n) => n + 1).join('\n');
   syncScroll();
   try { localStorage.setItem(STORAGE_KEY, editor.value); } catch { /* ignore */ }
 }
 
+// Translate the overlay content by the exact textarea scroll offset instead of
+// assigning scrollTop. Assigning scrollTop is clamped to each element's own
+// max-scroll, and the overlay (overflow:hidden) has a taller clientHeight than
+// the textarea when a classic horizontal scrollbar is present — so it used to
+// lag near the bottom and the caret sat between lines. A transform is not
+// clamped, so the overlay stays pixel-locked to the caret at any scroll depth.
 function syncScroll() {
-  highlightEl.scrollTop = editor.scrollTop;
-  highlightEl.scrollLeft = editor.scrollLeft;
-  gutter.scrollTop = editor.scrollTop;
+  const top = editor.scrollTop;
+  const left = editor.scrollLeft;
+  highlightCode.style.transform = `translate(${-left}px, ${-top}px)`;
+  gutterInner.style.transform = `translateY(${-top}px)`;
 }
 
 function pushUndo() {
