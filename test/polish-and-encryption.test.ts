@@ -147,3 +147,43 @@ describe('renders stay valid', () => {
     expect(buf.subarray(0, 5).toString('latin1')).toBe('%PDF-');
   });
 });
+
+describe('block border respects padding (CSS box model)', () => {
+  // Regression: a top/bottom border on a padded text block used to be drawn at
+  // the content top (fragment-local y=0), so with `padding-top` the line struck
+  // through the first line of text instead of sitting above the padding gap.
+  it('draws a top border above the padding, not through the first line', () => {
+    const doc: ReportDoc = {
+      body: [{
+        type: 'paragraph',
+        content: 'Cycle summary figures',
+        borderTop: [2, 'solid', '#0f2f57'],
+        paddingTop: 8,
+      } as ParagraphBlock],
+    };
+    const frag = createReport(doc).pages[0]!.body[0]!.fragment;
+    const lines = frag.commands.filter((c) => c.op === 'line');
+    expect(lines).toHaveLength(1); // only border-top is set
+    const top = lines[0];
+    expect(top?.op).toBe('line');
+    if (top?.op === 'line') {
+      // y = -paddingTop + borderWidth/2 = -8 + 1 = -7 (above the content top,
+      // inside the reserved `before = margin.top + padding.top` space).
+      expect(top.y1).toBeCloseTo(-7, 5);
+      expect(top.y2).toBeCloseTo(-7, 5);
+    }
+    const text = frag.commands.find((c) => c.op === 'text');
+    expect(text && text.op === 'text' && text.baselineY).toBeGreaterThan(0);
+    if (top?.op === 'line' && text?.op === 'text') {
+      // the border clears the first line by at least the padding.
+      expect(text.baselineY - top.y1).toBeGreaterThanOrEqual(8);
+    }
+  });
+
+  it('parses border-top + padding-top through the HTML adapter', () => {
+    const doc = htmlToReportDoc('<p style="border-top: 2pt solid #0f2f57; padding-top: 8pt">x</p>');
+    const b = doc.body![0] as ParagraphBlock;
+    expect(b.borderTop).toBeDefined();
+    expect(b.paddingTop).toBeCloseTo(8, 5);
+  });
+});

@@ -330,7 +330,16 @@ export function fragmentsFromLines(lines: Line[], p: FragParams): Fragment[] {
       decorations: [],
     });
 
-    drawBorders(commands, p.borders, boxX, 0, boxW, height, i === first, i === last, p.borderMode === 'cell');
+    // CSS box model order is margin | border | padding | content. The per-line
+    // fragment reserves `before = margin.top + padding.top` above the first line
+    // (and the matching `after` below the last), so the padding lives OUTSIDE the
+    // fragment. A top/bottom border must therefore be drawn at the OUTER edge of
+    // that reserved padding — shifted up by padding.top / down by padding.bottom —
+    // not at the content top (y=0), or it strikes through the first/last line.
+    const cell = p.borderMode === 'cell';
+    const yTop = cell || i !== first ? 0 : -p.padding.top;
+    const yBot = cell || i !== last ? height : height + p.padding.bottom;
+    drawBorders(commands, p.borders, boxX, yTop, boxW, yBot - yTop, i === first, i === last, cell);
 
     frags.push({
       height,
