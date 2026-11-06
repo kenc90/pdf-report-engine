@@ -374,6 +374,126 @@ function saveConfig(cfg, apiKey) {
  * @param {(html: string) => void} hooks.applyGenerated - replace the editor doc
  * @param {(msg: string, isError?: boolean) => void} hooks.status - app status line
  */
+/**
+ * Minimal, XSS-safe Markdown → HTML for assistant replies. Everything is
+ * HTML-escaped first, then a constrained set of block constructs (headings,
+ * fenced code, blockquotes, ordered/unordered lists with nesting, GFM pipe
+ * tables, horizontal rules, paragraphs) and inline spans (code, bold, italic,
+ * strikethrough, links) are applied. Only tags we emit ourselves reach the DOM.
+ */
+function escHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function mdInline(text) {
+  let s = escHtml(text);
+  s = s.replace(/`([^`]+)`/g, (_m, c) => `<code>${c}</code>`);
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/__([^_]+)__/g, '<strong>$1</strong>');
+  s = s.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>').replace(/(^|[^_\w])_([^_\n]+)_/g, '$1<em>$2</em>');
+  s = s.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+  s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, t, u) => {
+    const safe = /^(https?:|mailto:|#|\/)/i.test(u) ? u : '#';
+    return `<a href="${safe}" target="_blank" rel="noopener noreferrer">${t}</a>`;
+  });
+  return s;
+}
+function mdSplitRow(r) {
+  return r.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map((c) => c.trim());
+}
+function mdParseList(lines, start) {
+  const itemRe = /^(\s*)([-*+]|\d+\.)\s+(.*)$/;
+  const first = itemRe.exec(lines[start]);
+  const baseIndent = first[1].length;
+  const ordered = /\d/.test(first[2]);
+  const tag = ordered ? 'ol' : 'ul';
+  let html = `<${tag}>`;
+  let i = start;
+  while (i < lines.length) {
+    if (/^\s*$/.test(lines[i])) {
+      let j = i + 1;
+      while (j < lines.length && /^\s*$/.test(lines[j])) j += 1;
+      const nm = j < lines.length ? itemRe.exec(lines[j]) : null;
+      if (nm && nm[1].length >= baseIndent && /\d/.test(nm[2]) === ordered) { i = j; continue; }
+      break;
+    }
+    const m = itemRe.exec(lines[i]);
+    if (!m) break;
+    const indent = m[1].length;
+    if (indent < baseIndent) break;
+    if (indent > baseIndent) {
+      const sub = mdParseList(lines, i);
+      html = html.replace(/<\/li>$/, '') + sub.html + '</li>';
+      i = sub.next;
+      continue;
+    }
+    if (/\d/.test(m[2]) !== ordered) break; // marker type changed → a new list
+    html += `<li>${mdInline(m[3])}</li>`;
+    i += 1;
+  }
+  html += `</${tag}>`;
+  return { html, next: i };
+}
+function renderMarkdown(src) {
+  const lines = String(src).replace(/\r\n?/g, '\n').split('\n');
+  const isBlank = (l) => /^\s*$/.test(l);
+  const tableSep = (l) => /^\s*\|?\s*:?-{1,}:?\s*(\|\s*:?-+:?\s*)+\|?\s*$/.test(l);
+  let out = '';
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    let m = /^```(\w*)\s*$/.exec(line);
+    if (m) {
+      let code = '';
+      i += 1;
+      while (i < lines.length && !/^```\s*$/.test(lines[i])) { code += lines[i] + '\n'; i += 1; }
+      i += 1;
+      out += `<pre><code>${escHtml(code.replace(/\n$/, ''))}</code></pre>`;
+      continue;
+    }
+    m = /^(#{1,6})\s+(.*)$/.exec(line);
+    if (m) { const lvl = m[1].length; out += `<h${lvl}>${mdInline(m[2].trim())}</h${lvl}>`; i += 1; continue; }
+    if (/^\s*([-*_])\s*(\1\s*){2,}$/.test(line)) { out += '<hr>'; i += 1; continue; }
+    if (/^\s*>\s?/.test(line)) {
+      let buf = '';
+      while (i < lines.length && /^\s*>\s?/.test(lines[i])) { buf += lines[i].replace(/^\s*>\s?/, '') + '\n'; i += 1; }
+      out += `<blockquote>${renderMarkdown(buf)}</blockquote>`;
+      continue;
+    }
+    if (line.includes('|') && i + 1 < lines.length && tableSep(lines[i + 1])) {
+      const header = mdSplitRow(line);
+      const aligns = mdSplitRow(lines[i + 1]).map((c) => {
+        const l = c.startsWith(':'), r = c.endsWith(':');
+        return l && r ? 'center' : r ? 'right' : l ? 'left' : '';
+      });
+      i += 2;
+      const rows = [];
+      while (i < lines.length && lines[i].includes('|') && !isBlank(lines[i])) { rows.push(mdSplitRow(lines[i])); i += 1; }
+      const cellAttr = (ci) => (aligns[ci] ? ` style="text-align:${aligns[ci]}"` : '');
+      let t = '<table><thead><tr>';
+      header.forEach((h, ci) => { t += `<th${cellAttr(ci)}>${mdInline(h)}</th>`; });
+      t += '</tr></thead><tbody>';
+      rows.forEach((r) => {
+        t += '<tr>';
+        header.forEach((_h, ci) => { t += `<td${cellAttr(ci)}>${mdInline(r[ci] || '')}</td>`; });
+        t += '</tr>';
+      });
+      t += '</tbody></table>';
+      out += t;
+      continue;
+    }
+    if (/^\s*([-*+]|\d+\.)\s+/.test(line)) { const res = mdParseList(lines, i); out += res.html; i = res.next; continue; }
+    if (isBlank(line)) { i += 1; continue; }
+    const buf = [];
+    while (i < lines.length && !isBlank(lines[i])
+      && !/^(#{1,6}\s|```|\s*>|\s*([-*+]|\d+\.)\s)/.test(lines[i])
+      && !(lines[i].includes('|') && i + 1 < lines.length && tableSep(lines[i + 1]))) {
+      buf.push(lines[i]); i += 1;
+    }
+    if (!buf.length) { buf.push(lines[i]); i += 1; }
+    out += `<p>${mdInline(buf.join('\n'))}</p>`;
+  }
+  return out;
+}
+
 export function initAiAssist({ getEditorValue, applyGenerated, status }) {
   const $ = (id) => document.getElementById(id);
   const grid = document.querySelector('.wb-grid');
@@ -394,6 +514,8 @@ export function initAiAssist({ getEditorValue, applyGenerated, status }) {
   const sendBtn = $('ai-send');
   const contextEl = $('ai-context');
   const attachEl = $('ai-attachments');
+  const attachBtn = $('ai-attach-btn');
+  const attachInput = $('ai-attach-input');
 
   const cfg = loadConfig();
   let secret = cfg.apiKey || ''; // in-memory key (survives only this session unless remembered)
@@ -526,6 +648,15 @@ export function initAiAssist({ getEditorValue, applyGenerated, status }) {
     if (e.dataTransfer && e.dataTransfer.files) addFiles(Array.from(e.dataTransfer.files));
   });
 
+  // Attach button: open a file picker and feed the choice through the same path.
+  if (attachBtn && attachInput) {
+    attachBtn.addEventListener('click', () => attachInput.click());
+    attachInput.addEventListener('change', () => {
+      if (attachInput.files && attachInput.files.length) addFiles(Array.from(attachInput.files));
+      attachInput.value = ''; // allow re-picking the same file
+    });
+  }
+
   // ---- live "thinking" box ----
   /** A transient bubble showing phase, an elapsed timer, a Stop button, and any streamed reasoning. */
   function createThinkingBox() {
@@ -608,9 +739,13 @@ export function initAiAssist({ getEditorValue, applyGenerated, status }) {
   /** Turn a streaming bubble (holding the raw reply) into a finalized assistant message. */
   function finalizeAssistant(bubble, raw, reasoningText, secs) {
     bubble.hidden = false;
+    bubble.textContent = ''; // drop the streamed raw text before rendering
     const html = extractHtml(raw);
     const prose = String(raw || '').replace(/```(?:html)?[\s\S]*?```/i, '').trim();
-    bubble.textContent = prose || 'Here is the updated report.';
+    const md = document.createElement('div');
+    md.className = 'md';
+    md.innerHTML = renderMarkdown(prose || 'Here is the updated report.');
+    bubble.appendChild(md);
     if (reasoningText && reasoningText.trim()) bubble.appendChild(buildReasoningDetails(reasoningText.trim(), secs));
     if (html) buildDocPanel(bubble, html);
     messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -622,6 +757,11 @@ export function initAiAssist({ getEditorValue, applyGenerated, status }) {
     chat.hidden = !open;
     chat.classList.toggle('open', open);
     grid.classList.toggle('ai-open', open);
+    const aiBtn = $('ai-btn');
+    if (aiBtn) {
+      aiBtn.classList.toggle('active', open);
+      aiBtn.setAttribute('aria-expanded', String(open));
+    }
     if (open) {
       // Reveal settings on first use if no key is present.
       if (!currentPreset().needsKey || secret || keyEl.value.trim()) settingsEl.hidden = true;
