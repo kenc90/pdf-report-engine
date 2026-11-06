@@ -79,6 +79,12 @@ export function createReport(report: ReportDoc, options: RenderOptions = {}): Re
 
   const registry = new FontRegistry();
   if (options.fonts?.length) registry.registerAll(doc, options.fonts);
+  // Fill in the fourteen standard PDF fonts for whatever the caller did not
+  // embed. Done after `registerAll` so a real font of a matching family/weight
+  // always wins and the standard faces only cover the gaps — this is what keeps
+  // an unembedded `font-family` measuring exactly what the writer paints, so
+  // text never overlaps (see FontRegistry.registerStandardFonts).
+  registry.registerStandardFonts(doc);
 
   const baseStyle: ResolvedStyle = resolveStyle(
     { ...DEFAULT_BASE, ...options.baseStyle, ...report.style },

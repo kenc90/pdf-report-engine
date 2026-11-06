@@ -13,6 +13,7 @@ import {
   enclosingElement, highlightHtml, materialize, STARTER_HTML, BLANK_HTML,
   STYLE_PROPS, ATTR_SCHEMAS, BLOCKS, GROUPS, VOID_TAGS, BLOCK_TAGS,
 } from './editor-defs.js';
+import { initAiAssist } from './editor-ai.js';
 
 const $ = (id) => document.getElementById(id);
 const editor = $('editor');
@@ -809,6 +810,21 @@ $('reset').addEventListener('click', () => {
   status('Reset to the starter document.');
 });
 
+/**
+ * Replace the whole document with AI-generated HTML (undoable), then render it.
+ * Mirrors the New/Reset flow, but jumps straight to the PDF preview so the
+ * result is visible without a second click.
+ */
+function applyGenerated(html) {
+  pushUndo();
+  editor.value = html;
+  syncEditor({ reformat: true });
+  editor.setSelectionRange(0, 0);
+  selPath = null;
+  renderProps();
+  showTab('preview');
+}
+
 // ---- wiring ------------------------------------------------------------------
 editor.addEventListener('input', () => {
   // typing: just refresh chrome + selection; the text itself stays untouched
@@ -840,5 +856,10 @@ $('palette-search').addEventListener('input', (e) => buildPalette(e.target.value
   buildPalette();
   syncEditor();
   renderProps();
+  initAiAssist({
+    getEditorValue: () => editor.value,
+    applyGenerated,
+    status,
+  });
   status('Click a block to insert it · caret on a tag to edit its properties · Generate PDF to render.');
 })();

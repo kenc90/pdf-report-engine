@@ -176,16 +176,89 @@
     .addattr { display: flex; gap: 6px; padding-top: 8px; border-top: 1px dashed var(--line); margin-top: 6px; }
     .addattr input { flex: 1 1 auto; }
 
+    /* ---- AI assist (BYOK): a right-docked chat drawer ---- */
+    #ai-chat { display: none; }
+    #ai-chat.open { display: flex; }
+    .wb-grid.ai-open { grid-template-columns: 236px minmax(0, 1fr) 320px 360px; }
+    .ai-head { display: flex; align-items: center; gap: 6px; padding: 8px 10px; font: 700 12px/1.4 inherit; letter-spacing: .4px; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--line); background: var(--th-bg); flex: 0 0 auto; }
+    .ai-head .grow { flex: 1 1 auto; }
+    .ai-x { border: 1px solid var(--line); background: var(--card); color: var(--muted); border-radius: 8px; width: 26px; height: 26px; font-size: 14px; cursor: pointer; padding: 0; }
+    .ai-x:hover { background: var(--toc-hover); color: var(--heading); }
+    .ai-privacy { font-size: 11px; line-height: 1.6; color: var(--muted); background: var(--page-bg); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 8px; padding: 7px 9px; margin: 0 0 8px; }
+    .ai-settings { flex: 0 0 auto; border-bottom: 1px solid var(--line); padding: 10px; background: var(--page-bg); }
+    .ai-settings[hidden] { display: none; }
+    .ai-row { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+    .ai-row:first-child { margin-top: 0; }
+    .ai-row label { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--muted); }
+    .ai-row .ai-grow { flex: 1 1 200px; }
+    .ai-row select, .ai-row input[type="text"], .ai-row input[type="password"] {
+      min-width: 0; padding: 5px 7px; font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace;
+      border: 1px solid var(--line); border-radius: 7px; background: var(--card); color: var(--ink);
+    }
+    .ai-row label.check { flex-direction: row; align-items: center; gap: 6px; font-size: 11.5px; color: var(--ink); }
+    .ai-row select:focus, .ai-row input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+    /* message list */
+    #ai-messages { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+    .ai-msg { max-width: 94%; font-size: 12.5px; line-height: 1.6; border-radius: 12px; padding: 8px 11px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .ai-msg.user { align-self: flex-end; background: var(--th-bg); color: var(--ink); border: 1px solid var(--accent); }
+    .ai-msg.assistant { align-self: flex-start; background: var(--card); border: 1px solid var(--line); }
+    .ai-msg.sys { align-self: center; background: transparent; color: var(--muted); font-size: 11px; text-align: center; padding: 2px; }
+    .ai-msg.err { align-self: flex-start; background: #fbeaea; color: #b4232a; border: 1px solid #eecaca; }
+    .ai-doc { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+    .ai-doc textarea { width: 100%; box-sizing: border-box; min-height: 60px; max-height: 180px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; line-height: 1.5; white-space: pre; resize: vertical; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; background: var(--page-bg); color: var(--ink); }
+    .ai-typing { align-self: flex-start; color: var(--muted); font-size: 12px; padding: 4px 10px; }
+    /* live thinking box */
+    .ai-msg.thinking { align-self: flex-start; background: var(--page-bg); border: 1px dashed var(--line); display: flex; flex-direction: column; gap: 6px; }
+    .ai-think-head { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--muted); }
+    .ai-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: ai-pulse 1.1s ease-in-out infinite; }
+    @keyframes ai-pulse { 0%,100% { opacity: .3; } 50% { opacity: 1; } }
+    .ai-think-label { font-weight: 700; }
+    .ai-think-time { margin-left: auto; font-variant-numeric: tabular-nums; }
+    .ai-stop { border: 1px solid var(--line); background: var(--card); color: var(--muted); border-radius: 7px; padding: 2px 8px; font-size: 11px; cursor: pointer; }
+    .ai-stop:hover { background: var(--toc-hover); color: var(--heading); }
+    .ai-think-reason { margin: 0; max-height: 180px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 11.5px/1.55 ui-monospace, Menlo, Consolas, monospace; color: var(--muted); border-top: 1px solid var(--line); padding-top: 6px; }
+    .ai-think-reason[hidden] { display: none; }
+    .ai-think-done { margin-top: 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--page-bg); }
+    .ai-think-done summary { cursor: pointer; padding: 5px 9px; font-size: 11.5px; color: var(--muted); }
+    .ai-think-done pre { margin: 0; padding: 6px 9px 9px; max-height: 220px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 11.5px/1.55 ui-monospace, Menlo, Consolas, monospace; color: var(--muted); border-top: 1px solid var(--line); }
+    /* composer */
+    .ai-composer { flex: 0 0 auto; border-top: 1px solid var(--line); padding: 10px; background: var(--card); }
+    .ai-composer textarea { width: 100%; box-sizing: border-box; font: 12.5px/1.5 inherit; border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; background: var(--page-bg); color: var(--ink); resize: vertical; }
+    .ai-composer textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+    .ai-compose-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+    .ai-compose-row label.check { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted); }
+    .ai-compose-row .btn { margin-left: auto; }
+    .ai-attach-hint { font-size: 11px; color: var(--muted); cursor: default; }
+    /* pending + inline image thumbnails */
+    .ai-attach { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+    .ai-attach[hidden] { display: none; }
+    .ai-thumb { position: relative; width: 64px; height: 64px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--page-bg); }
+    .ai-thumb > img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .ai-thumb-x { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border: none; border-radius: 50%; background: rgba(0, 0, 0, .62); color: #fff; font-size: 11px; line-height: 18px; padding: 0; cursor: pointer; }
+    .ai-thumb-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    .ai-thumb-img { width: 84px; height: 84px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); display: block; }
+    /* drag-to-attach overlay */
+    #ai-chat { position: relative; }
+    #ai-chat.ai-drag::after {
+      content: 'Drop images to attach'; position: absolute; inset: 6px; z-index: 5;
+      display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--accent);
+      background: rgba(37, 99, 235, .12); border: 2px dashed var(--accent); border-radius: 10px; pointer-events: none;
+    }
+    .ai-status { font-size: 11.5px; color: var(--muted); margin-left: auto; }
+    .ai-status.error { color: #b4232a; }
+
     @media (max-width: 1080px) {
       .wb-grid { grid-template-columns: 200px minmax(0, 1fr) 280px; }
+      .wb-grid.ai-open { grid-template-columns: 190px minmax(0, 1fr) 260px 320px; }
     }
     @media (max-width: 860px) {
       /* stacked: let the page scroll instead of clipping to the viewport */
       main { overflow: auto; }
       #workbench { flex: 0 0 auto; }
       .wb { min-height: 0; }
-      .wb-grid { grid-template-columns: 1fr; grid-auto-rows: minmax(300px, auto); }
+      .wb-grid, .wb-grid.ai-open { grid-template-columns: 1fr; grid-auto-rows: minmax(300px, auto); }
       .pane#left, .pane#right { max-height: 340px; }
+      #ai-chat.open { max-height: 520px; }
     }
   </style>
 </head>
@@ -234,6 +307,7 @@
               <button class="btn ghost" id="undo" type="button" title="Undo the last palette or panel action (Ctrl+Z when outside the editor)">Undo</button>
               <button class="btn ghost" id="new" type="button" title="Clear the editor to a blank document (undoable)">New</button>
               <button class="btn ghost" id="reset" type="button" title="Load the starter example document (undoable)">Reset</button>
+              <button class="btn ghost" id="ai-btn" type="button" title="Chat with an AI assistant to build or edit this report, using your own key (BYOK)">AI assist</button>
               <span class="spacer"></span>
               <p id="status" role="status"></p>
             </div>
@@ -247,6 +321,60 @@
         <div class="pane" id="right">
           <div class="pane-title">Properties</div>
           <div class="pane-body"><div id="props"></div></div>
+        </div>
+
+        <!-- far right: AI assist chat drawer (BYOK), toggled by the AI assist button -->
+        <div class="pane" id="ai-chat" aria-label="AI assist" hidden>
+          <div class="ai-head">
+            <strong>AI assist</strong>
+            <span class="grow"></span>
+            <button class="ai-x" id="ai-settings-btn" type="button" title="Provider &amp; key settings" aria-label="Settings">⚙</button>
+            <button class="ai-x" id="ai-clear" type="button" title="Start a new conversation" aria-label="New conversation">⟲</button>
+            <button class="ai-x" id="ai-close" type="button" aria-label="Close panel">✕</button>
+          </div>
+          <div class="ai-settings" id="ai-settings" hidden>
+            <div class="ai-privacy"><strong>Bring your own key.</strong> Stored only in this browser and sent directly to the provider you pick — never to us. Use a scoped, revocable key.</div>
+            <div class="ai-row">
+              <label>Provider
+                <select id="ai-provider">
+                  <option value="openai">OpenAI</option>
+                  <option value="anthropic">Anthropic</option>
+                  <option value="gemini">Google Gemini</option>
+                  <option value="ollama">Ollama (local, no key)</option>
+                  <option value="custom">Custom (OpenAI-compatible)</option>
+                </select>
+              </label>
+              <label class="ai-grow">Model <input id="ai-model" type="text" placeholder="gpt-4o-mini" autocomplete="off" spellcheck="false"></label>
+            </div>
+            <div class="ai-row" id="ai-key-row">
+              <label class="ai-grow">API key
+                <input id="ai-key" type="password" placeholder="sk-…" autocomplete="off" spellcheck="false">
+              </label>
+              <label class="check"><input id="ai-remember" type="checkbox"> Remember</label>
+            </div>
+            <div class="ai-row" id="ai-base-row" hidden>
+              <label class="ai-grow">Base URL
+                <input id="ai-base" type="text" placeholder="http://localhost:11434/v1" autocomplete="off" spellcheck="false">
+              </label>
+            </div>
+            <div class="ai-row" id="ai-think-row" hidden>
+              <label class="check"><input id="ai-think" type="checkbox"> Show the model's reasoning (extended thinking)</label>
+            </div>
+            <div class="ai-row">
+              <button class="btn ghost" id="ai-test" type="button">Test connection</button>
+              <span id="ai-status" class="ai-status" role="status"></span>
+            </div>
+          </div>
+          <div id="ai-messages"></div>
+          <div class="ai-composer">
+            <div id="ai-attachments" class="ai-attach" hidden></div>
+            <textarea id="ai-input" rows="3" spellcheck="false" placeholder="Ask the assistant to build or change the report…  (Enter to send, Shift+Enter for a new line; drag-drop or paste images)"></textarea>
+            <div class="ai-compose-row">
+              <label class="check"><input id="ai-context" type="checkbox" checked> Use current doc</label>
+              <span class="ai-attach-hint" title="Attach screenshots or mockups. A vision-capable model is required.">📎 images</span>
+              <button class="btn" id="ai-send" type="button">Send</button>
+            </div>
+          </div>
         </div>
         </div><!-- /wb-grid -->
       </div>

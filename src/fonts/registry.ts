@@ -231,6 +231,37 @@ function faceKey(family: string, weight: number, style: string): string {
   return `${family.toLowerCase()}|${weight}|${style}`;
 }
 
+/** CSS names + generics that map onto each standard base font family. */
+const SANS_ALIASES = ['Helvetica', 'Arial', 'Helvetica Neue', 'sans-serif'];
+const SERIF_ALIASES = ['Times', 'Times New Roman', 'serif', 'Georgia'];
+const MONO_ALIASES = ['Courier', 'Courier New', 'monospace'];
+
+/**
+ * The standard PDF base fonts pdfkit paints without any embedded program, each
+ * paired with the family names it should answer to. Helvetica comes first so an
+ * unknown family of a given weight resolves to a sans face (a browser default),
+ * not arbitrarily to Times or Courier.
+ */
+const STANDARD_FONTS: ReadonlyArray<{
+  name: string;
+  weight: number;
+  style: 'normal' | 'italic';
+  aliases: string[];
+}> = [
+  { name: 'Helvetica', weight: 400, style: 'normal', aliases: SANS_ALIASES },
+  { name: 'Helvetica-Bold', weight: 700, style: 'normal', aliases: SANS_ALIASES },
+  { name: 'Helvetica-Oblique', weight: 400, style: 'italic', aliases: SANS_ALIASES },
+  { name: 'Helvetica-BoldOblique', weight: 700, style: 'italic', aliases: SANS_ALIASES },
+  { name: 'Times-Roman', weight: 400, style: 'normal', aliases: SERIF_ALIASES },
+  { name: 'Times-Bold', weight: 700, style: 'normal', aliases: SERIF_ALIASES },
+  { name: 'Times-Italic', weight: 400, style: 'italic', aliases: SERIF_ALIASES },
+  { name: 'Times-BoldItalic', weight: 700, style: 'italic', aliases: SERIF_ALIASES },
+  { name: 'Courier', weight: 400, style: 'normal', aliases: MONO_ALIASES },
+  { name: 'Courier-Bold', weight: 700, style: 'normal', aliases: MONO_ALIASES },
+  { name: 'Courier-Oblique', weight: 400, style: 'italic', aliases: MONO_ALIASES },
+  { name: 'Courier-BoldOblique', weight: 700, style: 'italic', aliases: MONO_ALIASES },
+];
+
 /**
  * Copy into a fresh `Uint8Array`. pdfkit's factory checks `instanceof`, and when
  * a bundler gives the ESM and CJS entries different realm views, a `Buffer` can
@@ -261,6 +292,51 @@ export class FontRegistry {
 
   registerAll(doc: PDFDocument, sources: FontSource[]): this {
     for (const source of sources) this.register(doc, source);
+    return this;
+  }
+
+  /**
+   * Seed the fourteen standard PDF fonts (the Helvetica / Times / Courier
+   * families with their bold, oblique and bold-oblique variants) so that any
+   * family a document references but never embeds still resolves to a *real*
+   * face whose metrics pdfkit reports — and therefore paints — exactly.
+   *
+   * This upholds the "measuring and drawing share one oracle" invariant for the
+   * no-embedded-fonts case. Without it an absent family falls through to the
+   * {@link HeuristicFontHandle}, whose fixed ~0.5em advance drifts from the real
+   * Helvetica glyphs the writer emits, so consecutive words can overlap. Each
+   * base font is also aliased to the common CSS names and the `serif` /
+   * `sans-serif` / `monospace` generics, so a stack like
+   * `'Inter', 'Helvetica Neue', Arial, sans-serif` lands on Helvetica and a
+   * monospace stack lands on Courier, matching how a browser would substitute.
+   *
+   * pdfkit ships the metrics for these fonts (no font file on disk), so layout
+   * stays deterministic; and because these are added as ordinary faces, an
+   * embedded font of the same family registered later still wins the stack match.
+   */
+  registerStandardFonts(doc: PDFDocument): this {
+    const metrics = new Map<string, PdfFontLike>();
+    const pdfFontFor = (name: string): PdfFontLike => {
+      let font = metrics.get(name);
+      if (!font) {
+        // pdfkit resolves a standard font name into `_font`; measuring through it
+        // is exactly what the writer will paint with `doc.font(name)`.
+        doc.font(name);
+        font = (doc as unknown as { _font: PdfFontLike })._font;
+        metrics.set(name, font);
+      }
+      return font;
+    };
+    for (const face of STANDARD_FONTS) {
+      const font = pdfFontFor(face.name);
+      for (const alias of face.aliases) {
+        const key = faceKey(alias, face.weight, face.style);
+        if (this.byKey.has(key)) continue;
+        const handle = new PdfFontHandle(key, alias, face.weight, face.style, font, face.name);
+        this.faces.push(handle);
+        this.byKey.set(key, handle);
+      }
+    }
     return this;
   }
 
