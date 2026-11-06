@@ -491,6 +491,27 @@
     .ai-msg .md th, .ai-msg .md td { border: 1px solid var(--line); padding: 4px 8px; text-align: left; vertical-align: top; }
     .ai-msg .md th { background: var(--th-bg); font-weight: 700; color: var(--heading); }
     .ai-msg .md tbody tr:nth-child(even) td { background: var(--toc-hover); }
+
+    /* ---- data (JSON) tab ---- */
+    .data-shell { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; }
+    .data-hint { margin: 0; font-size: 11.5px; color: var(--muted); line-height: 1.55; }
+    .data-hint code {
+      font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px;
+      background: color-mix(in srgb, var(--muted) 15%, var(--card)); color: var(--ink); padding: 1px 4px; border-radius: 4px;
+    }
+    #data-input {
+      flex: 1 1 auto; min-height: 0; width: 100%; box-sizing: border-box; resize: none;
+      font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; line-height: 1.55;
+      padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-md);
+      background: var(--card); color: var(--ink); white-space: pre; overflow: auto; tab-size: 2;
+    }
+    #data-input:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
+    #data-status { font-size: 12px; color: var(--ink); margin: 0; padding: 0 10px 6px; min-height: 18px; flex: 1 1 220px; }
+    #data-status.error { color: #b4232a; }
+
+    /* labels + JSON box inside an AI reply's Apply panel */
+    .ai-doc-label { font-size: 10.5px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: var(--muted); margin-top: 2px; }
+    .ai-doc-json { min-height: 60px; }
   </style>
 </head>
 <body>
@@ -523,6 +544,7 @@
         <div class="pane" id="center">
           <div class="tabs" role="tablist" aria-label="Editor and preview">
             <button class="tab active" id="tab-source" role="tab" aria-selected="true" aria-controls="panel-source" type="button">HTML source</button>
+            <button class="tab" id="tab-data" role="tab" aria-selected="false" aria-controls="panel-data" type="button">Data (JSON)</button>
             <button class="tab" id="tab-preview" role="tab" aria-selected="false" aria-controls="panel-preview" type="button">PDF preview <span class="badge" id="pagecount" hidden></span></button>
           </div>
           <div class="panel active" id="panel-source" role="tabpanel" aria-labelledby="tab-source">
@@ -541,6 +563,18 @@
               <button class="btn ghost" id="reset" type="button" title="Load the starter example document (undoable)">Reset</button>
               <span class="spacer"></span>
               <p id="status" role="status"></p>
+            </div>
+          </div>
+          <div class="panel" id="panel-data" role="tabpanel" aria-labelledby="tab-data">
+            <div class="data-shell">
+              <p class="data-hint">This JSON is exposed as <code>$data</code> (aka <code>$report</code>) to <code>data-bind</code>, <code>data-each</code>, <code>data-if</code> / <code>data-when</code> and <code>data-color-scale</code>. Leave empty for none. Example:</p>
+              <textarea id="data-input" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" aria-label="Report data (JSON)" placeholder='{&#10;  "title": "Q3 Sales",&#10;  "rows": [&#10;    { "product": "Coffee", "qty": 2, "price": 6.0 }&#10;  ]&#10;}'></textarea>
+            </div>
+            <div class="toolbar">
+              <button class="btn ghost" id="data-format" type="button" title="Pretty-print and validate the JSON">Format</button>
+              <button class="btn ghost" id="data-sample" type="button" title="Replace with a small sample dataset">Load sample</button>
+              <span class="spacer"></span>
+              <p id="data-status" role="status"></p>
             </div>
           </div>
           <div class="panel" id="panel-preview" role="tabpanel" aria-labelledby="tab-preview">

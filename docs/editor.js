@@ -33,6 +33,7 @@ let selPath = null;   // path of the selected element (into `tree`)
 const undoStack = [];
 
 const STORAGE_KEY = 'pdf-report-engine:editor:html';
+const DATA_STORAGE_KEY = 'pdf-report-engine:editor:data';
 
 /**
  * Re-parse the textarea; with `reformat`, pretty-print in place (only when the
@@ -721,25 +722,75 @@ function selectByAncestor(path) {
   editor.focus();
 }
 
-// ---- tabs (source / PDF preview) --------------------------------------------
+// ---- tabs (source / data / PDF preview) -------------------------------------
 const tabSource = $('tab-source');
+const tabData = $('tab-data');
 const tabPreview = $('tab-preview');
 const panelSource = $('panel-source');
+const panelData = $('panel-data');
 const panelPreview = $('panel-preview');
+const dataInput = $('data-input');
+const dataStatusEl = $('data-status');
 
 function showTab(which) {
-  const isSource = which !== 'preview';
-  tabSource.classList.toggle('active', isSource);
-  tabPreview.classList.toggle('active', !isSource);
-  tabSource.setAttribute('aria-selected', String(isSource));
-  tabPreview.setAttribute('aria-selected', String(!isSource));
-  panelSource.classList.toggle('active', isSource);
-  panelPreview.classList.toggle('active', !isSource);
-  if (isSource) syncScroll(); else generate();
+  const tabs = [[tabSource, panelSource, 'source'], [tabData, panelData, 'data'], [tabPreview, panelPreview, 'preview']];
+  for (const [tab, panel, name] of tabs) {
+    const active = name === which;
+    tab.classList.toggle('active', active);
+    tab.setAttribute('aria-selected', String(active));
+    panel.classList.toggle('active', active);
+  }
+  if (which === 'source') syncScroll();
+  else if (which === 'preview') generate();
 }
 const showSourceTab = () => showTab('source');
 tabSource.addEventListener('click', () => showTab('source'));
+tabData.addEventListener('click', () => showTab('data'));
 tabPreview.addEventListener('click', () => showTab('preview'));
+
+function dataStatus(msg, isError) {
+  dataStatusEl.textContent = msg;
+  dataStatusEl.className = isError ? 'error' : '';
+}
+
+// Parse the Data tab into the object handed to htmlToReportDoc. Empty → no data.
+function readData() {
+  const raw = (dataInput.value || '').trim();
+  if (!raw) return { data: undefined };
+  return { data: JSON.parse(raw) };
+}
+
+const SAMPLE_DATA = {
+  title: 'Q3 Sales',
+  generated: '2026-11-06',
+  rows: [
+    { product: 'Coffee', qty: 2, price: 6.0, status: 'ok' },
+    { product: 'Milk', qty: 1, price: 3.5, status: 'low' },
+    { product: 'Sugar', qty: 4, price: 2.25, status: 'ok' },
+  ],
+  total: 21.5,
+};
+
+$('data-format').addEventListener('click', () => {
+  const raw = (dataInput.value || '').trim();
+  if (!raw) { dataStatus('Nothing to format.'); return; }
+  try {
+    dataInput.value = JSON.stringify(JSON.parse(raw), null, 2);
+    try { localStorage.setItem(DATA_STORAGE_KEY, dataInput.value); } catch { /* ignore */ }
+    dataStatus('Valid JSON — formatted.');
+  } catch (err) {
+    dataStatus('Invalid JSON: ' + err.message, true);
+  }
+});
+$('data-sample').addEventListener('click', () => {
+  dataInput.value = JSON.stringify(SAMPLE_DATA, null, 2);
+  try { localStorage.setItem(DATA_STORAGE_KEY, dataInput.value); } catch { /* ignore */ }
+  dataStatus('Sample data loaded.');
+});
+dataInput.addEventListener('input', () => {
+  try { localStorage.setItem(DATA_STORAGE_KEY, dataInput.value); } catch { /* ignore */ }
+  if (dataStatusEl.className === 'error') dataStatus('');
+});
 
 // ---- generate ----------------------------------------------------------------
 let lastUrl = null;
@@ -763,8 +814,17 @@ async function generate() {
   status('Rendering PDF…');
   downloadEl.hidden = true;
   pagecountEl.hidden = true;
+  let opts;
+  try { opts = readData(); }
+  catch (err) {
+    dataStatus('Invalid JSON: ' + err.message, true);
+    status('Data JSON error: ' + err.message, true);
+    showTab('data');
+    generating = false;
+    return;
+  }
   try {
-    const report = htmlToReportDoc(editor.value);
+    const report = htmlToReportDoc(editor.value, opts);
     // charset-aware Google Fonts fetching works here exactly as in the demo;
     // text with no font falls back to the base-14 faces.
     const bytes = await renderToBuffer(report, { resolveFonts: { decodeTimeoutMs: 6000 } });
@@ -811,12 +871,16 @@ $('reset').addEventListener('click', () => {
 });
 
 /**
- * Replace the whole document with AI-generated HTML (undoable), then render it.
- * Mirrors the New/Reset flow, but jumps straight to the PDF preview so the
- * result is visible without a second click.
+ * Replace the whole document with AI-generated HTML (undoable), optionally its
+ * bound dataset into the Data tab, then render it. Mirrors the New/Reset flow,
+ * but jumps straight to the PDF preview so the result is visible immediately.
  */
-function applyGenerated(html) {
+function applyGenerated(html, dataJson) {
   pushUndo();
+  if (typeof dataJson === 'string' && dataJson.trim()) {
+    dataInput.value = dataJson;
+    try { localStorage.setItem(DATA_STORAGE_KEY, dataInput.value); } catch { /* ignore */ }
+  }
   editor.value = html;
   syncEditor({ reformat: true });
   editor.setSelectionRange(0, 0);
@@ -853,11 +917,15 @@ $('palette-search').addEventListener('input', (e) => buildPalette(e.target.value
   let saved = null;
   try { saved = localStorage.getItem(STORAGE_KEY); } catch { /* ignore */ }
   editor.value = saved !== null && saved !== '' ? saved : STARTER_HTML;
+  let savedData = '';
+  try { savedData = localStorage.getItem(DATA_STORAGE_KEY) || ''; } catch { /* ignore */ }
+  dataInput.value = savedData;
   buildPalette();
   syncEditor();
   renderProps();
   initAiAssist({
     getEditorValue: () => editor.value,
+    getEditorData: () => dataInput.value,
     applyGenerated,
     status,
   });

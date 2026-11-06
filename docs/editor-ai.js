@@ -54,7 +54,7 @@ function buildSystemPrompt() {
   const rules = [
     'You author reports for `pdf-report-engine`, a pure-JavaScript paginated PDF report engine.',
     'You are a helpful assistant embedded in a visual PDF-report editor. Chat with the user about the report they want.',
-    'Keep your prose short and friendly. Whenever you create or change the report, ALWAYS output the FULL document (not a diff, not a fragment) inside a single ```html fenced block, so it can replace the editor contents. It is fine to add a one- or two-sentence note around the block.',
+    'Keep your prose short and friendly. Whenever you create or change the report, ALWAYS output the FULL document (not a diff, not a fragment) inside a single ```html fenced block, so it can replace the editor contents. If the report binds data (reads `$data`), ALSO output a single ```json fenced block containing that dataset. It is fine to add a one- or two-sentence note around the blocks.',
     '',
     '## Hard rules (a strict subset — anything outside it will be dropped or break rendering)',
     '- The document is a flat sequence of blocks. A leading <style> and/or <body ...> wrapper is allowed.',
@@ -78,6 +78,7 @@ function buildSystemPrompt() {
     '- Diagonal (two-way) corner header cell: <th data-diagonal data-diagonal-bottom="Gender">Preferred Pet</th>. Cell merge via colspan="n" / rowspan="n".',
     '',
     '## Data-bound tables + expressions',
+    '- WHERE THE DATA LIVES: `$data` is supplied by the user in a separate "Data (JSON)" tab in this editor. Whenever your HTML reads `$data.<...>`, you MUST also emit ONE ```json fenced block holding a single JSON object whose shape matches those reads exactly (e.g. reading `$data.rows` ⇒ `{ "rows": [ { ... }, { ... } ] }`). The editor applies the ```html and ```json blocks together, so the report renders filled. If the report needs no bound data, write the figures inline and emit NO json block.',
     '- Turn a table into a data region with data-each="row in $data.list" (or data-bind="$data.list") on the <table>. The header lives in <thead>/<th>. The FIRST <tbody> row is a template; repeat it once per data row. Bind each template cell with data-bind="field" and optional data-format="#,##0.00".',
     '- Conditional style on a row/cell/block: data-when="<expr>" + data-when-style="<css>". Conditional visibility / row filter: data-if="<expr>". Numeric heatmap: data-color-scale="from=#eef4ff; to=#1e3a8a" (omit min/max to auto-derive per column).',
     '- IMPORTANT: row grouping with per-group subtotals is NOT authorable from HTML. If grouping/subtotals are wanted, emit STATIC <tbody> rows with the figures written out literally (and/or a summary band).',
@@ -100,25 +101,52 @@ function buildSystemPrompt() {
  * "make the chart a donut" refers to the real document. Only added when the
  * user leaves "Use current doc" on.
  */
-function buildContextMessage(currentHtml) {
+function buildContextMessage(currentHtml, currentData) {
   const src = String(currentHtml || '').trim();
-  if (!src) return null;
+  const dataStr = String(currentData || '').trim();
+  if (!src && !dataStr) return null;
   return {
     role: 'system',
     content: [
-      'The user currently has this report source in the editor. When they ask to change it, edit this document and return the FULL updated document (preserving anything they did not mention):',
+      'The user currently has this report in the editor. When they ask to change it, edit it and return the FULL updated document (preserving anything they did not mention). If you use `$data` bindings, keep the dataset in a ```json block in lockstep with the HTML.',
       '',
-      src,
+      '## Report source (HTML)',
+      src || '(empty)',
+      '',
+      '## Report data (JSON, bound as $data)',
+      dataStr || '(none — emit a ```json block if your HTML reads $data)',
     ].join('\n'),
   };
 }
 
-/** Pull the HTML out of a model reply (strip an optional code fence). */
+/**
+ * Pull the report HTML out of a model reply. Prefers an explicit ```html fence,
+ * otherwise the first fenced block that is NOT ```json; with no fences at all the
+ * whole reply is treated as markup (back-compat for unfenced output).
+ */
 function extractHtml(text) {
   const t = String(text || '').trim();
-  const fence = t.match(/```(?:html)?\s*([\s\S]*?)```/i);
-  const body = (fence ? fence[1] : t).trim();
-  return body;
+  const explicit = t.match(/```html\s*([\s\S]*?)```/i);
+  if (explicit) return explicit[1].trim();
+  const fences = [...t.matchAll(/```(\w*)\s*([\s\S]*?)```/gi)];
+  if (fences.length) {
+    const htmlFence = fences.find((f) => !/^json$/i.test(f[1] || ''));
+    return htmlFence ? htmlFence[2].trim() : '';
+  }
+  return t;
+}
+
+/** Pull the ```json dataset out of a reply; returns the parsed value or null. */
+function extractJson(text) {
+  const t = String(text || '').trim();
+  const m = t.match(/```json\s*([\s\S]*?)```/i);
+  if (!m) return null;
+  try { return JSON.parse(m[1].trim()); } catch { return null; }
+}
+
+/** Strip fenced html/json blocks (and their fences) from a reply, leaving prose. */
+function stripFences(text) {
+  return String(text || '').replace(/```(?:html|json)[\s\S]*?```/gi, '').trim();
 }
 
 /**
@@ -494,7 +522,7 @@ function renderMarkdown(src) {
   return out;
 }
 
-export function initAiAssist({ getEditorValue, applyGenerated, status }) {
+export function initAiAssist({ getEditorValue, getEditorData, applyGenerated, status }) {
   const $ = (id) => document.getElementById(id);
   const grid = document.querySelector('.wb-grid');
   const chat = $('ai-chat');
@@ -696,18 +724,39 @@ export function initAiAssist({ getEditorValue, applyGenerated, status }) {
     return det;
   }
 
-  /** Attach the editable document + Apply/Copy controls to an assistant bubble. */
-  function buildDocPanel(bubble, html) {
+  /** Attach the editable document (+ optional dataset) and Apply/Copy controls to an assistant bubble. */
+  function buildDocPanel(bubble, html, data) {
     let pretty = html;
     try { pretty = serializeHtml(parseHtml(html)); } catch { /* keep raw if it won't parse */ }
     const doc = document.createElement('div');
     doc.className = 'ai-doc';
+
+    const htmlLabel = document.createElement('div');
+    htmlLabel.className = 'ai-doc-label';
+    htmlLabel.textContent = 'Report source (HTML)';
     const ta = document.createElement('textarea');
     ta.rows = 5;
     ta.spellcheck = false;
     ta.wrap = 'off';
     ta.value = pretty;
     ta.setAttribute('aria-label', 'Generated report source');
+    doc.append(htmlLabel, ta);
+
+    let dataTa = null;
+    if (data != null) {
+      const dataLabel = document.createElement('div');
+      dataLabel.className = 'ai-doc-label';
+      dataLabel.textContent = 'Data (JSON) — bound as $data';
+      dataTa = document.createElement('textarea');
+      dataTa.rows = 5;
+      dataTa.spellcheck = false;
+      dataTa.wrap = 'off';
+      dataTa.className = 'ai-doc-json';
+      dataTa.value = JSON.stringify(data, null, 2);
+      dataTa.setAttribute('aria-label', 'Generated report data (JSON)');
+      doc.append(dataLabel, dataTa);
+    }
+
     const row = document.createElement('div');
     row.style.display = 'flex';
     row.style.gap = '8px';
@@ -717,11 +766,11 @@ export function initAiAssist({ getEditorValue, applyGenerated, status }) {
     btn.type = 'button';
     btn.textContent = 'Apply & preview';
     btn.addEventListener('click', () => {
-      applyGenerated(ta.value.trim());
+      applyGenerated(ta.value.trim(), dataTa ? dataTa.value.trim() : undefined);
       btn.textContent = 'Applied ✓';
       btn.disabled = true;
       setTimeout(() => { btn.textContent = 'Apply & preview'; btn.disabled = false; }, 1500);
-      status('AI report applied.');
+      status(dataTa ? 'AI report + data applied.' : 'AI report applied.');
     });
     const small = document.createElement('button');
     small.className = 'btn ghost';
@@ -732,7 +781,7 @@ export function initAiAssist({ getEditorValue, applyGenerated, status }) {
       catch { ta.focus(); ta.select(); }
     });
     row.append(btn, small);
-    doc.append(ta, row);
+    doc.append(row);
     bubble.appendChild(doc);
   }
 
@@ -741,13 +790,14 @@ export function initAiAssist({ getEditorValue, applyGenerated, status }) {
     bubble.hidden = false;
     bubble.textContent = ''; // drop the streamed raw text before rendering
     const html = extractHtml(raw);
-    const prose = String(raw || '').replace(/```(?:html)?[\s\S]*?```/i, '').trim();
+    const data = extractJson(raw);
+    const prose = stripFences(raw);
     const md = document.createElement('div');
     md.className = 'md';
     md.innerHTML = renderMarkdown(prose || 'Here is the updated report.');
     bubble.appendChild(md);
     if (reasoningText && reasoningText.trim()) bubble.appendChild(buildReasoningDetails(reasoningText.trim(), secs));
-    if (html) buildDocPanel(bubble, html);
+    if (html) buildDocPanel(bubble, html, data);
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
 
@@ -835,7 +885,7 @@ export function initAiAssist({ getEditorValue, applyGenerated, status }) {
 
     const messages = [{ role: 'system', content: buildSystemPrompt() }];
     if (contextEl.checked) {
-      const ctx = buildContextMessage(getEditorValue());
+      const ctx = buildContextMessage(getEditorValue(), getEditorData ? getEditorData() : '');
       if (ctx) messages.push(ctx);
     }
     messages.push(...history);
