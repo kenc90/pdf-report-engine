@@ -103,7 +103,13 @@ glyph embedding all happen in-process via [`pdfkit`](https://pdfkit.org) +
 
 ## Installation
 
-Install directly from GitHub (the `prepare` script builds `dist/` on install):
+Install from npm:
+
+```bash
+npm install pdf-report-engine
+```
+
+You can also install directly from GitHub (the `prepare` script builds `dist/` on install):
 
 ```bash
 npm install kenc90/pdf-report-engine
