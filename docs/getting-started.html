@@ -55,10 +55,10 @@
       <p>Install from npm:</p>
       <pre data-copy><code>npm install pdf-report-engine</code></pre>
       <p>To install a specific npm version, add <code>@</code> and the version:</p>
-      <pre data-copy><code>npm install pdf-report-engine@0.1.0</code></pre>
+      <pre data-copy><code>npm install pdf-report-engine@0.1.1</code></pre>
       <p>Alternatively, install directly from GitHub. Pin a tag, branch or commit with a <code>#</code> suffix:</p>
       <pre data-copy><code>npm install kenc90/pdf-report-engine</code></pre>
-      <pre data-copy><code>npm install kenc90/pdf-report-engine#v0.1.0   # or #main, or #&lt;sha&gt;</code></pre>
+      <pre data-copy><code>npm install kenc90/pdf-report-engine#v0.1.1   # or #main, or #&lt;sha&gt;</code></pre>
       <p>Building from source:</p>
       <pre data-copy><code>npm install     # dev dependencies
 npm run build   # compile TypeScript -> dist/ (JS + .d.ts)</code></pre>
@@ -156,7 +156,7 @@ const url = URL.createObjectURL(new Blob([pdf], { type: 'application/pdf' }));</
       </p>
       <pre data-copy><code>&lt;script type="module"&gt;
   import { htmlToReportDoc, renderToBuffer } from
-    'https://cdn.jsdelivr.net/gh/kenc90/pdf-report-engine@v0.1.0/browser/pdf-report-engine.js';
+    'https://cdn.jsdelivr.net/gh/kenc90/pdf-report-engine@v0.1.1/browser/pdf-report-engine.js';
 
   const report = htmlToReportDoc('&lt;h1&gt;Hello&lt;/h1&gt;');
   const pdf = await renderToBuffer(report);
