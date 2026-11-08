@@ -1,7 +1,7 @@
 /**
  * Browser bundle build.
  *
- * Produces two artifacts in docs/browser/:
+ * Produces two artifacts in browser/ and mirrors them into docs/browser/:
  *   1. pdf-report-engine.js — the bundled ESM library. `wawoff2` is externalized
  *      (see remote.ts's `ensureBrowserWawoff2Ready`) so the browser build does
  *      not inline the broken Emscripten-CJS interop.
@@ -16,8 +16,10 @@ import { build } from 'esbuild';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const outDir = 'docs/browser';
+const outDir = 'browser';
+const docsOutDir = 'docs/browser';
 fs.mkdirSync(outDir, { recursive: true });
+fs.mkdirSync(docsOutDir, { recursive: true });
 
 await build({
   entryPoints: ['src/index.ts'],
@@ -36,4 +38,9 @@ await build({
 const src = 'node_modules/wawoff2/build/decompress_binding.js';
 const dst = path.join(outDir, 'wawoff2-decoder.js');
 fs.copyFileSync(src, dst);
-console.log(`[build-browser] wrote ${path.join(outDir, 'pdf-report-engine.js')} and ${dst}`);
+
+for (const file of ['pdf-report-engine.js', 'wawoff2-decoder.js']) {
+  fs.copyFileSync(path.join(outDir, file), path.join(docsOutDir, file));
+}
+
+console.log(`[build-browser] wrote ${outDir}/* and mirrored the files into ${docsOutDir}/`);

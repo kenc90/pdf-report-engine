@@ -680,8 +680,10 @@ stays deterministic across machines rather than dipping into whatever the OS hap
 > (esbuild, with `pdfkit` routed to its self-contained browser build so no Node polyfill config is needed).
 
 > **Deploying the prebuilt bundle:** `npm run build:browser` writes **two** files into
-> `docs/browser/` — `pdf-report-engine.js` (the ESM bundle) and `wawoff2-decoder.js` (a classic
-> script). Ship them **together, in the same folder.** The engine loads `wawoff2-decoder.js`
+> `browser/` — `pdf-report-engine.js` (the ESM bundle) and `wawoff2-decoder.js` (a classic
+> script) — and mirrors them into `docs/browser/` for the docs site's demo. Use the root
+> `browser/` files for the public CDN URL, and ship the two files **together, in the same folder.**
+> The engine loads `wawoff2-decoder.js`
 > lazily at runtime as a sibling (resolved via `import.meta.url`) and only when it must decode
 > **WOFF2** — e.g. a browser hitting a Google Fonts / `@font-face` link, which Google serves as
 > WOFF2. Load the bundle with `<script type="module">` or `import()` (a plain non-module script

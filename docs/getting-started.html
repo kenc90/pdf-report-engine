@@ -156,7 +156,7 @@ const url = URL.createObjectURL(new Blob([pdf], { type: 'application/pdf' }));</
       </p>
       <pre data-copy><code>&lt;script type="module"&gt;
   import { htmlToReportDoc, renderToBuffer } from
-    'https://cdn.jsdelivr.net/gh/kenc90/pdf-report-engine@main/docs/browser/pdf-report-engine.js';
+    'https://cdn.jsdelivr.net/gh/kenc90/pdf-report-engine@v0.1.0/browser/pdf-report-engine.js';
 
   const report = htmlToReportDoc('&lt;h1&gt;Hello&lt;/h1&gt;');
   const pdf = await renderToBuffer(report);
@@ -164,9 +164,7 @@ const url = URL.createObjectURL(new Blob([pdf], { type: 'application/pdf' }));</
   window.open(url);
 &lt;/script&gt;</code></pre>
       <p>
-        jsDelivr also mirrors npm, so once the package is published you can switch to the shorter
-        <code>https://cdn.jsdelivr.net/npm/pdf-report-engine@latest/docs/browser/pdf-report-engine.js</code>
-        form. The <code>wawoff2-decoder.js</code> file sits alongside the bundle automatically —
+        The <code>wawoff2-decoder.js</code> file sits alongside the bundle automatically —
         the engine loads it lazily only when it needs to decode WOFF2 (e.g. Google Fonts).
       </p>
       <div class="note">
