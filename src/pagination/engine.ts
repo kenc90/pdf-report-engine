@@ -93,7 +93,11 @@ function fragSpan(f: Fragment): number {
   return f.before + f.height + f.after;
 }
 
-function layoutBlocks(blocks: Block[] | undefined, ctx: LayoutContext, opts: { contentWidth: number; scope: ExprContext; inherited?: ResolvedStyle }): Fragment[] {
+function layoutBlocks(
+  blocks: Block[] | undefined,
+  ctx: LayoutContext,
+  opts: { contentWidth: number; scope: ExprContext; inherited?: ResolvedStyle; maxRowHeight?: number },
+): Fragment[] {
   const out: Fragment[] = [];
   for (const b of blocks ?? []) out.push(...layoutBlock(b, ctx, opts));
   return out;
@@ -138,7 +142,12 @@ export function paginate(input: PaginateInput): Page[] {
   const titleH = titleMeasured.reduce((s, f) => s + fragSpan(f), 0);
   const summaryH = summaryMeasured.reduce((s, f) => s + fragSpan(f), 0);
 
-  const bodyFragments = layoutBlocks(flowBody, ctx, opts);
+  const bodyTop = page.margin.top + headerH;
+  const bodyBottomLimit = page.height - page.margin.bottom - footerH;
+  const bodyFragments = layoutBlocks(flowBody, ctx, {
+    ...opts,
+    maxRowHeight: bodyBottomLimit - bodyTop,
+  });
   // Positioned blocks are laid out per page in Pass C (with the real `$page`
   // scope, so `{PAGE}`/`{TOTAL}` resolve) and never consume body flow space.
   const positioned = body.filter(
@@ -147,8 +156,6 @@ export function paginate(input: PaginateInput): Page[] {
 
   // --- Pass B: flow body fragments into pages ------------------------------
   const contentLeft = page.content.x;
-  const bodyTop = page.margin.top + headerH;
-  const bodyBottomLimit = page.height - page.margin.bottom - footerH;
 
   const headerByGroup = new Map<string, Fragment[]>();
   for (const f of bodyFragments) {
@@ -205,6 +212,7 @@ export function paginate(input: PaginateInput): Page[] {
     if (lastContent) bottom -= summaryH;
     return bottom - top;
   };
+  const fullPageBodyCapacity = pageCapacity(1, false);
 
   current = openPage();
   let remainingHeight = pageCapacity(pages.length - 1, true);
@@ -217,19 +225,42 @@ export function paginate(input: PaginateInput): Page[] {
 
     const forceBreak = (first.breakBefore === 'page' || first.isPageBreak) && cursorY > bodyStartY + 0.01;
     const overflow = cursorY + first.before + first.height > bodyBottomLimit;
+    const tableHeaderHeight = first.groupKey
+      ? (headerByGroup.get(first.groupKey) ?? []).reduce((sum, header) => sum + fragSpan(header), 0)
+      : 0;
+    const continuationCapacity = fullPageBodyCapacity - tableHeaderHeight;
+    const splitParts =
+      run.length === 1 &&
+      first.splitParts &&
+      !first.keepWithNext &&
+      fragSpan(first) > fullPageBodyCapacity &&
+      first.splitParts.every((part) => fragSpan(part) <= continuationCapacity)
+        ? first.splitParts
+        : undefined;
+
+    if (splitParts) {
+      if (forceBreak) {
+        startNewPage();
+        repeatTableHeader(first.groupKey);
+      }
+
+      for (const part of splitParts) {
+        if (cursorY + part.before + part.height > bodyBottomLimit && cursorY > bodyStartY + 0.01) {
+          startNewPage();
+          repeatTableHeader(first.groupKey);
+        }
+        cursorY += part.before;
+        current!.body.push({ fragment: part, x: contentLeft, y: cursorY });
+        cursorY += part.height + part.after;
+      }
+      continue;
+    }
 
     if (forceBreak || overflow) {
       // Decide widows/orphans for the first fragment's group if it is a table.
       const groupKey = first.groupKey;
       startNewPage();
-      if (groupKey && startedHeaderGroups.has(groupKey) && headerByGroup.has(groupKey)) {
-        for (const hf of headerByGroup.get(groupKey)!) {
-          cursorY += hf.before;
-          current!.body.push({ fragment: hf, x: contentLeft, y: cursorY });
-          cursorY += hf.height + hf.after;
-          startedHeaderGroups.add(groupKey);
-        }
-      }
+      repeatTableHeader(groupKey);
       if (first.resetPageNumber) {
         resetEpoch = pages.length - 1;
       }
@@ -277,6 +308,16 @@ export function paginate(input: PaginateInput): Page[] {
     current = next;
     cursorY = bodyTop;
     bodyStartY = cursorY;
+  }
+
+  function repeatTableHeader(groupKey: string | undefined): void {
+    if (!groupKey || !startedHeaderGroups.has(groupKey) || !headerByGroup.has(groupKey)) return;
+    for (const hf of headerByGroup.get(groupKey)!) {
+      cursorY += hf.before;
+      current!.body.push({ fragment: hf, x: contentLeft, y: cursorY });
+      cursorY += hf.height + hf.after;
+      startedHeaderGroups.add(groupKey);
+    }
   }
 
   // A trailing empty page can appear if a run's tail was pushed to a fresh page

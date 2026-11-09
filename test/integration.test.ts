@@ -96,6 +96,34 @@ describe('pagination + running tokens', () => {
     });
   });
 
+  it('splits an oversized text row at line boundaries and repeats its header', () => {
+    const words = Array.from({ length: 90 }, (_, i) => `token${String(i).padStart(3, '0')}`);
+    const { pages } = createReport({
+      page: { size: [260, 180], margin: 12 },
+      body: [{
+        type: 'table',
+        columns: [{ width: 166 }, { width: 70 }],
+        headerRows: [{ cells: [{ content: 'Comment' }, { content: 'Reference' }] }],
+        staticRows: [{ cells: [{ content: words.join(' ') }, { content: 'ROW-001' }] }],
+        showGrid: true,
+      }],
+    });
+
+    expect(pages.length).toBeGreaterThan(1);
+    for (const page of pages) expect(bodyText(page)).toContain('Comment');
+
+    const rendered = pages.map(bodyText).join(' ');
+    for (const word of words) {
+      expect(rendered.split(word)).toHaveLength(2);
+    }
+
+    for (const page of pages) {
+      for (const placed of page.body) {
+        expect(placed.y + placed.fragment.height).toBeLessThanOrEqual(page.height - page.margin.bottom + 0.5);
+      }
+    }
+  });
+
   it('honours breakAfter: "page", and never leaves a trailing blank page', () => {
     const doc = (body: ReportDoc['body']): ReportDoc => ({ page: { size: 'a4', margin: 51 }, body });
     const { pages } = createReport(

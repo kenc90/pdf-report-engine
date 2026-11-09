@@ -30,6 +30,9 @@ glyph embedding all happen in-process via [`pdfkit`](https://pdfkit.org) +
   `groupHeader`, `groupFooter`, `pageFooter`, `summary`.
 - **Repeated table column headers** on every page a table spills onto (automatic;
   `repeatHeader: false` opts out).
+- **Oversized text-row pagination** — top-aligned text-only detail rows can continue at safe
+  shared line boundaries when they are taller than a full page; shorter rows still move whole.
+  Rich-block cells and vertically merged rows remain atomic.
 - **Group breaks** with per-group subtotal footers, plus **keep rules** —
   `keepWithNext` chains and `break-inside: avoid`.
 - **Running tokens** `{PAGE}` / `{TOTAL}` (and `$page.number` / `$page.total` in expressions)
@@ -55,8 +58,7 @@ glyph embedding all happen in-process via [`pdfkit`](https://pdfkit.org) +
   children across N equal-width sub-columns with an optional vertical rule between them, balanced
   by height and kept atomic so pagination can push the whole cluster to a new page.
 - **Rich table cells** — a cell can hold a stack of blocks (images, QR/barcodes, charts, nested
-  tables, paragraphs), laid out inside the padded cell. Rows grow to fit and stay atomic, so
-  pagination is unchanged.
+  tables, paragraphs), laid out inside the padded cell. Rows grow to fit and remain atomic.
 - **Conditional formatting** — `visible`, `styleWhen` rules and numeric `colorScale` heatmaps work
   on blocks, table rows and cells. Heatmap ranges can be derived automatically per column, and
   dark fills repaint their text white.
@@ -380,6 +382,7 @@ node examples/02-data-table.mjs            # dataSource + grouping + subtotals +
 node examples/03-from-html.mjs             # author with HTML via htmlToReportDoc
 node examples/04-create-report-stream.mjs  # createReport -> pipe the stream + read pages
 node examples/05-images.mjs                # images from bytes / path / online (resolveImage hook)
+node examples/06-long-table-row.mjs        # oversized text-only table row continues across pages
 ```
 
 Each writes a PDF to `output/examples/`. They need no fonts (base-14 fallback) and no network.
@@ -583,6 +586,8 @@ The `samples/` folder demonstrates the supported subset:
   that **combines** both merges in one grid.
 - `rich-cells.html` — **rich table cells**: an image, a QR code, a sparkline chart and a nested
   mini table all laid out inside cells; the surrounding rows grow to fit each block stack.
+- `long-table-row.html` — one oversized, text-only table row that continues at safe line
+  boundaries, with its column header repeated across pages.
 - `conditional-format.html` + `conditional-format.data.json` — **conditional formatting**:
   block-level `data-if` / `data-when`, row filtering and row highlights on a data-bound portfolio
   table, revenue/margin `data-color-scale` heatmaps with automatic ranges, and a filtered
@@ -803,7 +808,8 @@ whole-report total the simplest approach is a `variables` entry referenced via `
 
 1. **Pass A** — measure fixed bands (headers/footers) with a placeholder page number.
 2. **Pass B** — flow the body one fragment at a time (a paragraph contributes a fragment per
-   typeset line; a table row, image, chart, barcode or TOC row is one atomic fragment), honouring
+   typeset line; table rows are normally atomic, but oversized top-aligned text-only detail rows
+   can continue at safe shared line boundaries; images, charts, barcodes and TOC rows are atomic), honouring
    `breakBefore: 'page'`, `breakAfter: 'page'`, `pageBreak` blocks, `breakInside: 'avoid'` and
    `keepWithNext` chains, automatic table-header repeats, group breaks and page-number resets.
 3. **Pass C** — re-flow headers/footers on each page with the real `$page` values, so

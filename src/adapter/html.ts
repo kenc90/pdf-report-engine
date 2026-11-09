@@ -1575,6 +1575,8 @@ function toCellNode(td: HElement, opts: HtmlOptions): CellNode {
 
 function toRowNode(tr: HElement, opts: HtmlOptions, kind: RowNode['kind']): RowNode {
   const row: RowNode = { kind, cells: cellsOf(tr).map((td) => toCellNode(td, opts)) };
+  const style = elementStyle(tr, opts);
+  if (style.breakInside !== undefined) row.breakInside = style.breakInside;
   const visible = visibleAttr(tr);
   if (visible !== undefined) row.visible = visible;
   const conditions = styleWhenAttr(tr);
@@ -1620,7 +1622,12 @@ function tableBlock(table: HElement, opts: HtmlOptions, style: IrBox): Block {
     if (template) {
       // Carry the template's row-level conditions onto the shared detail row.
       const detail = toRowNode(template, opts, 'detail');
-      block.detail = { cells: detail.cells, visible: detail.visible, styleWhen: detail.styleWhen };
+      block.detail = {
+        cells: detail.cells,
+        visible: detail.visible,
+        styleWhen: detail.styleWhen,
+        breakInside: detail.breakInside,
+      };
       block.columns = cellsOf(template).map((td) => columnOf(td, opts));
     }
   } else if (dataRows.length) {

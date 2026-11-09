@@ -95,6 +95,18 @@ describe('htmlToReportDoc: tables', () => {
     expect(cell.content).toBe('Paid');
   });
 
+  it('maps break-inside: avoid from literal and data-bound rows', () => {
+    const literal = htmlToReportDoc(
+      '<table><tbody><tr style="break-inside: avoid"><td>Long note</td></tr></tbody></table>',
+    ).body![0] as TableBlock;
+    expect(literal.staticRows![0]!.breakInside).toBe('avoid');
+
+    const bound = htmlToReportDoc(
+      '<table data-each="row in $data.items"><tbody><tr style="break-inside: avoid"><td data-bind="name"></td></tr></tbody></table>',
+    ).body![0] as TableBlock;
+    expect(bound.detail).toMatchObject({ breakInside: 'avoid' });
+  });
+
   it('maps a diagonal corner header cell from data-diagonal attributes', () => {
     const doc = htmlToReportDoc(
       '<table><thead><tr><th data-diagonal data-diagonal-bottom="Gender">Preferred Pet</th><th>Dog</th></tr></thead><tbody><tr><td>Girl</td><td>2</td></tr></tbody></table>',

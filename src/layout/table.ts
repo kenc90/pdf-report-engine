@@ -70,6 +70,7 @@ interface UnitCtx {
   grid: GridSpec;
   groupKey: string;
   scope: ExprContext;
+  maxRowHeight?: number;
 }
 
 interface GridSpec {
@@ -87,7 +88,18 @@ export function layoutTable(block: TableBlock, ctx: LayoutContext, opts: BlockLa
   const grid = resolveGrid(block);
   const groupKey = block.id ?? `table:${tableSeq++}`;
 
-  const uc: UnitCtx = { block, ctx, columns, tableStyle, margin, contentLeft: margin.left, grid, groupKey, scope: opts.scope };
+  const uc: UnitCtx = {
+    block,
+    ctx,
+    columns,
+    tableStyle,
+    margin,
+    contentLeft: margin.left,
+    grid,
+    groupKey,
+    scope: opts.scope,
+    maxRowHeight: opts.maxRowHeight,
+  };
 
   const frags: Fragment[] = [];
   let i = 0;
@@ -412,7 +424,7 @@ function layoutRow(unit: Extract<Unit, { t: 'header' | 'footer' | 'detail' }>, u
       : unit.t === 'footer'
         ? 'footer'
         : 'detail';
-  return {
+  const fragment: Fragment = {
     height: rowHeight,
     before: isFirstVisual ? uc.margin.top : 0,
     after: unit.t === 'footer' ? uc.margin.bottom : 0,
@@ -423,6 +435,94 @@ function layoutRow(unit: Extract<Unit, { t: 'header' | 'footer' | 'detail' }>, u
     breakAfter: row.keepWithNext ? 'avoid' : undefined,
     keepWithNext: row.keepWithNext,
   };
+  if (
+    unit.t === 'detail' &&
+    uc.maxRowHeight !== undefined &&
+    fragment.before + fragment.height + fragment.after > uc.maxRowHeight &&
+    row.breakInside !== 'avoid' &&
+    !row.keepWithNext &&
+    block.breakInside !== 'avoid' &&
+    layouts.every((cl) => cl.blocks.length === 0 && !cl.diagonal && cl.vAlign === 'top')
+  ) {
+    const parts = splitTextRow(layouts, rowHeight, fragment);
+    if (parts) fragment.splitParts = parts;
+  }
+  return fragment;
+}
+
+function splitTextRow(layouts: CellLayout[], rowHeight: number, row: Fragment): Fragment[] | undefined {
+  const lineRanges: Array<Array<{ line: Line; top: number; bottom: number }>> = [];
+  const candidates = new Set<number>();
+
+  for (const cell of layouts) {
+    let top = cell.pad.top;
+    const ranges: Array<{ line: Line; top: number; bottom: number }> = [];
+    for (const line of cell.lines) {
+      const bottom = top + line.height;
+      ranges.push({ line, top, bottom });
+      candidates.add(bottom);
+      top = bottom;
+    }
+    lineRanges.push(ranges);
+  }
+
+  const cuts = [...candidates]
+    .filter((cut) => cut > 0.5 && cut < rowHeight - 0.5)
+    .filter((cut) =>
+      lineRanges.every((ranges) =>
+        ranges.every(({ top, bottom }) => !(top < cut - 0.01 && bottom > cut + 0.01)),
+      ),
+    )
+    .sort((a, b) => a - b);
+  if (cuts.length === 0) return undefined;
+
+  const boundaries = [0, ...cuts, rowHeight];
+  return boundaries.slice(0, -1).map((top, index) => {
+    const bottom = boundaries[index + 1]!;
+    const height = bottom - top;
+    const commands: DrawCommand[] = [];
+
+    for (let cellIndex = 0; cellIndex < layouts.length; cellIndex += 1) {
+      const cell = layouts[cellIndex]!;
+      if (cell.fill) commands.push({ op: 'fillRect', x: cell.x, y: 0, w: cell.w, h: height, color: toRGB(cell.fill) });
+
+      for (const { line, top: lineTop, bottom: lineBottom } of lineRanges[cellIndex]!) {
+        if (lineTop < top - 0.01 || lineBottom > bottom + 0.01) continue;
+        commands.push({
+          op: 'text',
+          x: cell.x + cell.pad.left,
+          baselineY: lineTop - top + line.ascent,
+          runs: line.runs,
+          gapWidth: line.gapWidth,
+          decorations: [],
+        });
+      }
+
+      drawSides(
+        commands,
+        {
+          top: index === 0 ? cell.borders.top : undefined,
+          right: cell.borders.right,
+          bottom: index === boundaries.length - 2 ? cell.borders.bottom : undefined,
+          left: cell.borders.left,
+        },
+        cell.x,
+        0,
+        cell.w,
+        height,
+      );
+    }
+
+    return {
+      height,
+      before: index === 0 ? row.before : 0,
+      after: index === boundaries.length - 2 ? row.after : 0,
+      commands,
+      avoidSplit: true,
+      role: row.role,
+      groupKey: row.groupKey,
+    };
+  });
 }
 
 /** Content-box top for a cell of known outer height, honouring `verticalAlign`. */

@@ -45,6 +45,8 @@ export interface BlockLayoutOptions {
   contentWidth: number;
   scope: ExprContext;
   inherited?: ResolvedStyle;
+  /** Full-page body height, used to prepare continuations for oversized table rows. */
+  maxRowHeight?: number;
 }
 
 export function layoutBlock(block: Block, ctx: LayoutContext, opts: BlockLayoutOptions): Fragment[] {

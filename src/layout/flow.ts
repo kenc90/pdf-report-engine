@@ -122,6 +122,8 @@ export interface Fragment {
   breakAfter?: 'auto' | 'page' | 'avoid';
   /** Never let this fragment split across pages (single table row, keep-together block). */
   avoidSplit?: boolean;
+  /** Safe row continuations used only when an otherwise atomic text row is taller than a page. */
+  splitParts?: Fragment[];
   keepWithNext?: boolean;
   role?: FragmentRole;
   /** Groups fragments that repeat together, e.g. a table's header rows on each page. */

@@ -515,8 +515,11 @@ export interface RowNode {
   visible?: boolean | Expr;
   /** Conditional styling applied to every cell in the row. */
   styleWhen?: StyleCondition[];
-  /** Row level pagination hints. A row is already one atomic fragment, so
-   * `breakInside` changes nothing; `keepWithNext` glues it to the following row. */
+  /**
+   * Row-level pagination hints. Oversized text-only detail rows may split at safe
+   * shared line boundaries; `avoid` keeps the row atomic. `keepWithNext` glues
+   * this row to the following row.
+   */
   breakInside?: 'auto' | 'avoid';
   keepWithNext?: boolean;
   minHeight?: number;

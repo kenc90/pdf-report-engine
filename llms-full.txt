@@ -277,7 +277,9 @@ atomic. CSS `column-count: N` in HTML maps here.
 - **`RowNode`**: `cells: CellNode[]`, `kind?`
   (`'header'|'detail'|'groupHeader'|'groupFooter'|'subtotal'|'grandTotal'`),
   `visible?` (per-row filter — falsy drops the row), `styleWhen?`, `breakInside?`,
-  `keepWithNext?`, `minHeight?`. A row is already one atomic fragment.
+  `keepWithNext?`, `minHeight?`. Rows are normally atomic; an oversized top-aligned,
+  text-only detail row can split at safe shared line boundaries unless `breakInside: 'avoid'`
+  is set. Rich-block cells and vertically merged rows remain atomic.
 - **`CellNode`**: `content?` (`Content`) **or** `blocks?: Block[]` (rich cell: images,
   barcodes, charts, nested tables, paragraphs — `content` wins if both), `colSpan?`,
   `rowSpan?`, `align` (incl. `'justify'`), `verticalAlign`, `style?`, `border?`,

@@ -283,9 +283,15 @@ detail: {
       <p>
         Pagination fills a vertical cursor down the page, one <em>fragment</em> at a time. A
         paragraph becomes one fragment per typeset line — that is why prose flows freely across
-        pages — while a table row, an image, a chart, a barcode and a table-of-contents row are
-        each a single fragment and therefore atomic: if they do not fit below, they move whole to
-        the next page.
+        pages. Table rows normally move as a unit when they do not fit in the remaining space.
+        If a top-aligned, text-only detail row is taller than a full page's body area, it can
+        continue at safe shared line boundaries; its column header repeats on each page. Rows
+        with rich block cells, vertical merges, non-top vertical alignment or
+        <code>breakInside: 'avoid'</code> remain atomic, as do images, charts, barcodes and
+        table-of-contents rows. See <code>examples/06-long-table-row.mjs</code> for a runnable
+        example. In the HTML subset, use <code>style="break-inside: avoid"</code> on a
+        <code>&lt;tr&gt;</code> to keep that row whole, or on a <code>&lt;table&gt;</code> to keep
+        the entire table together.
       </p>
 
       <h3>Forcing a break</h3>
