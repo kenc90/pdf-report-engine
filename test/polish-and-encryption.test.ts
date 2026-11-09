@@ -116,6 +116,14 @@ describe('html adapter CSS parsing', () => {
 });
 
 describe('renders stay valid', () => {
+  it('writes the custom creator to the PDF Creator metadata field', async () => {
+    const pdf = await renderToBuffer({ ...para({}), info: { creator: 'Custom creator' } });
+    const text = pdf.toString('latin1');
+    expect(text).toMatch(/\/Creator \d+ 0 R/);
+    expect(text).toContain('(Custom creator)');
+    expect(text).not.toContain('/Creater');
+  });
+
   it('writes a PDF that carries an /Encrypt dictionary when a password is set', async () => {
     const plain = await renderToBuffer(para({ backgroundColor: '#eee' }));
     expect(plain.toString('latin1')).not.toContain('/Encrypt');

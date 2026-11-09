@@ -228,7 +228,7 @@ function toPdfInfo(report: ReportDoc): Record<string, string> {
   if (info.author) out.Author = info.author;
   if (info.subject) out.Subject = info.subject;
   if (info.keywords) out.Keywords = info.keywords;
-  if (info.creator) out.Creater = info.creator;
+  if (info.creator) out.Creator = info.creator;
   if (info.producer) out.Producer = info.producer;
   return out;
 }
@@ -255,4 +255,3 @@ function toPdfSecurity(
   if (enc.permissions) out.permissions = { ...enc.permissions };
   return out;
 }
-
