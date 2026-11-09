@@ -19,16 +19,17 @@ import { parseHtml, serializeHtml, BLOCKS } from './editor-defs.js';
 
 /**
  * One entry per selectable provider. `kind` picks the request builder:
- *  - 'openai'    → OpenAI Chat Completions (also any OpenAI-compatible server)
+ *  - 'openai'    → OpenAI Chat Completions (also OpenRouter and other compatible servers)
  *  - 'anthropic' → Anthropic Messages
  *  - 'gemini'    → Google Generative Language
  * `base` is the default endpoint, `model` a placeholder, `needsKey` whether a
  * secret is required, `showBase` whether to reveal the base-URL field.
  */
 const PRESETS = {
-  openai: { kind: 'openai', base: 'https://api.openai.com/v1', model: 'gpt-4o-mini', needsKey: true, showBase: true },
-  anthropic: { kind: 'anthropic', base: 'https://api.anthropic.com', model: 'claude-3-5-sonnet-latest', needsKey: true, showBase: true },
-  gemini: { kind: 'gemini', base: 'https://generativelanguage.googleapis.com', model: 'gemini-2.0-flash', needsKey: true, showBase: true },
+  openai: { kind: 'openai', base: 'https://api.openai.com/v1', model: 'gpt-4o-mini', needsKey: true, showBase: false },
+  openrouter: { kind: 'openai', base: 'https://openrouter.ai/api/v1', model: 'openai/gpt-4o-mini', needsKey: true, showBase: false, keyPlaceholder: 'sk-or-v1-…' },
+  anthropic: { kind: 'anthropic', base: 'https://api.anthropic.com', model: 'claude-3-5-sonnet-latest', needsKey: true, showBase: false },
+  gemini: { kind: 'gemini', base: 'https://generativelanguage.googleapis.com', model: 'gemini-2.0-flash', needsKey: true, showBase: false },
   ollama: { kind: 'openai', base: 'http://localhost:11434/v1', model: 'llama3.1', needsKey: false, showBase: true },
   custom: { kind: 'openai', base: '', model: '', needsKey: false, showBase: true },
 };
@@ -55,6 +56,8 @@ function buildSystemPrompt() {
     'You author reports for `pdf-report-engine`, a pure-JavaScript paginated PDF report engine.',
     'You are a helpful assistant embedded in a visual PDF-report editor. Chat with the user about the report they want.',
     'Keep your prose short and friendly. Whenever you create or change the report, ALWAYS output the FULL document (not a diff, not a fragment) inside a single ```html fenced block, so it can replace the editor contents. If the report binds data (reads `$data`), ALSO output a single ```json fenced block containing that dataset. It is fine to add a one- or two-sentence note around the blocks.',
+    'For PDFs, use the extracted text and rendered page images to understand content and layout.',
+    'For JRXML/XML, translate the attached source markup into the supported HTML report dialect.',
     '',
     '## Hard rules (a strict subset — anything outside it will be dropped or break rendering)',
     '- The document is a flat sequence of blocks. A leading <style> and/or <body ...> wrapper is allowed.',
@@ -182,6 +185,83 @@ function fileToImagePart(file) {
   });
 }
 
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('could not read file bytes'));
+    reader.onload = () => {
+      const dataUrl = String(reader.result);
+      const comma = dataUrl.indexOf(',');
+      if (comma < 0) return reject(new Error('invalid data URL'));
+      resolve(dataUrl.slice(comma + 1));
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+let pdfjsPromise;
+
+async function loadPdfJs() {
+  if (!pdfjsPromise) {
+    pdfjsPromise = import('./assets/pdfjs.mjs').then((pdfjs) => {
+      pdfjs.GlobalWorkerOptions.workerSrc = new URL('./assets/pdf.worker.mjs', import.meta.url).href;
+      return pdfjs;
+    }).catch((err) => {
+      pdfjsPromise = null;
+      throw new Error(`Could not load the PDF reader: ${err.message}`);
+    });
+  }
+  return pdfjsPromise;
+}
+
+function samplePdfPages(pageCount, maxImages) {
+  const count = Math.min(pageCount, maxImages);
+  if (count === pageCount) return Array.from({ length: count }, (_v, i) => i + 1);
+  if (count <= 1) return [1];
+  return Array.from({ length: count }, (_v, i) => Math.round(i * (pageCount - 1) / (count - 1)) + 1);
+}
+
+async function readPdfFile(file, maxImages) {
+  const pdfjs = await loadPdfJs();
+  const task = pdfjs.getDocument({ data: await file.arrayBuffer() });
+  const pdf = await task.promise;
+  const textPages = [];
+  try {
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+      const page = await pdf.getPage(pageNumber);
+      const content = await page.getTextContent();
+      const pageText = content.items.map((item) => typeof item.str === 'string' ? item.str : '').filter(Boolean).join(' ');
+      if (pageText) textPages.push(`--- Page ${pageNumber} ---\n${pageText}`);
+    }
+
+    const pageImages = [];
+    for (const pageNumber of samplePdfPages(pdf.numPages, maxImages)) {
+      const page = await pdf.getPage(pageNumber);
+      const baseViewport = page.getViewport({ scale: 1 });
+      const scale = Math.min(1.6, 1400 / baseViewport.width, 1400 / baseViewport.height);
+      const viewport = page.getViewport({ scale });
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.ceil(viewport.width));
+      canvas.height = Math.max(1, Math.ceil(viewport.height));
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+      const previewUrl = canvas.toDataURL('image/jpeg', 0.82);
+      pageImages.push({
+        mime: 'image/jpeg',
+        data: previewUrl.slice(previewUrl.indexOf(',') + 1),
+        previewUrl,
+        pdfName: file.name,
+        label: `${file.name}, page ${pageNumber}`,
+      });
+      canvas.width = 0;
+      canvas.height = 0;
+    }
+    let text = textPages.join('\n\n') || '(No extractable text; this may be a scanned PDF.)';
+    return { pageCount: pdf.numPages, text, pageImages };
+  } finally {
+    await pdf.destroy();
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Provider request builders (all browser-direct; each returns assistant text)
 // ---------------------------------------------------------------------------
@@ -231,15 +311,34 @@ async function sseTokens(res, onData) {
  */
 function openAIMessage(m) {
   if (m.role !== 'user' || !m.images || !m.images.length) return { role: m.role, content: m.content };
-  const parts = m.images.map((img) => ({ type: 'image_url', image_url: { url: `data:${img.mime};base64,${img.data}` } }));
+  const parts = [];
+  for (const img of m.images || []) {
+    if (img.label) parts.push({ type: 'text', text: `Attached image: ${img.label}` });
+    parts.push({ type: 'image_url', image_url: { url: `data:${img.mime};base64,${img.data}` } });
+  }
   if (m.content) parts.push({ type: 'text', text: m.content });
   return { role: m.role, content: parts };
 }
 
 /** Anthropic variant: image → `{ type:'image', source:{ type:'base64', ... } }`. */
 function anthropicMessage(m) {
-  if (m.role !== 'user' || !m.images || !m.images.length) return { role: m.role, content: m.content };
-  const parts = m.images.map((img) => ({ type: 'image', source: { type: 'base64', media_type: img.mime, data: img.data } }));
+  if (m.role !== 'user' || (!(m.images && m.images.length) && !(m.documents && m.documents.length))) {
+    return { role: m.role, content: m.content };
+  }
+  const parts = [];
+  const documentNames = new Set((m.documents || []).map((document) => document.name));
+  for (const document of m.documents || []) {
+    parts.push({ type: 'text', text: `Attached PDF: ${document.name}` });
+    parts.push({
+      type: 'document',
+      source: { type: 'base64', media_type: document.mime, data: document.data },
+    });
+  }
+  for (const img of m.images || []) {
+    if (img.pdfName && documentNames.has(img.pdfName)) continue;
+    if (img.label) parts.push({ type: 'text', text: `Attached image: ${img.label}` });
+    parts.push({ type: 'image', source: { type: 'base64', media_type: img.mime, data: img.data } });
+  }
   if (m.content) parts.push({ type: 'text', text: m.content });
   return { role: m.role, content: parts };
 }
@@ -247,8 +346,17 @@ function anthropicMessage(m) {
 /** Gemini variant: image → inlineData part alongside the text part. */
 function geminiMessage(m) {
   const parts = [];
-  if (m.role === 'user' && m.images && m.images.length) {
-    for (const img of m.images) parts.push({ inlineData: { mimeType: img.mime, data: img.data } });
+  if (m.role === 'user') {
+    const documentNames = new Set((m.documents || []).map((document) => document.name));
+    for (const document of m.documents || []) {
+      parts.push({ text: `Attached PDF: ${document.name}` });
+      parts.push({ inlineData: { mimeType: document.mime, data: document.data } });
+    }
+    for (const img of m.images || []) {
+      if (img.pdfName && documentNames.has(img.pdfName)) continue;
+      if (img.label) parts.push({ text: `Attached image: ${img.label}` });
+      parts.push({ inlineData: { mimeType: img.mime, data: img.data } });
+    }
   }
   if (m.content) parts.push({ text: m.content });
   if (!parts.length) parts.push({ text: '' });
@@ -529,6 +637,7 @@ export function initAiAssist({ getEditorValue, getEditorData, applyGenerated, st
   const settingsEl = $('ai-settings');
   const providerEl = $('ai-provider');
   const modelEl = $('ai-model');
+  const modelListEl = $('ai-model-options');
   const keyEl = $('ai-key');
   const baseRow = $('ai-base-row');
   const baseEl = $('ai-base');
@@ -561,7 +670,7 @@ export function initAiAssist({ getEditorValue, getEditorData, applyGenerated, st
     return {
       provider: providerEl.value,
       model: modelEl.value.trim() || preset.model,
-      baseUrl: baseEl.value.trim(),
+      baseUrl: preset.showBase ? baseEl.value.trim() : '',
       remember: rememberEl.checked,
       reasoning: thinkEl ? thinkEl.checked : false,
       apiKey: keyEl.value.trim() || secret,
@@ -573,14 +682,47 @@ export function initAiAssist({ getEditorValue, getEditorData, applyGenerated, st
     statusEl.className = `ai-status${isError ? ' error' : ''}`;
   }
 
+  let openRouterModelRequest = 0;
+  async function loadOpenRouterModels() {
+    const requestId = ++openRouterModelRequest;
+    aiStatus('Loading OpenRouter models…');
+    try {
+      const res = await fetch('https://openrouter.ai/api/v1/models');
+      if (!res.ok) throw await readError(res);
+      const response = await res.json();
+      if (!Array.isArray(response.data)) throw new Error('Invalid model list response');
+      const models = response.data
+        .filter((model) => model && typeof model.id === 'string' && model.id)
+        .sort((a, b) => a.id.localeCompare(b.id));
+      if (!models.length) throw new Error('The model list was empty');
+      if (requestId !== openRouterModelRequest || providerEl.value !== 'openrouter') return;
+      modelListEl.replaceChildren();
+      for (const model of models) {
+        const option = document.createElement('option');
+        option.value = model.id;
+        option.label = typeof model.name === 'string' ? model.name : model.id;
+        modelListEl.appendChild(option);
+      }
+    } catch (err) {
+      if (requestId === openRouterModelRequest && providerEl.value === 'openrouter') {
+        aiStatus(`Could not load OpenRouter models: ${err.message}`, true);
+      }
+    }
+  }
+
   /** Reflect provider choice: model placeholder, base visibility, key necessity. */
   function applyPreset() {
     const preset = currentPreset();
     modelEl.placeholder = preset.model || 'model name';
+    if (providerEl.value === 'openrouter') modelEl.setAttribute('list', 'ai-model-options');
+    else {
+      modelEl.removeAttribute('list');
+      modelListEl.replaceChildren();
+    }
     baseRow.hidden = !preset.showBase;
     baseEl.placeholder = preset.base || 'https://your-endpoint/v1';
     keyRow.style.opacity = preset.needsKey ? '1' : '';
-    keyEl.placeholder = preset.needsKey ? 'sk-…' : '(no key needed)';
+    keyEl.placeholder = preset.needsKey ? (preset.keyPlaceholder || 'sk-…') : '(no key needed)';
     // Extended-thinking is an explicit request only on Anthropic; other providers
     // stream reasoning automatically when the model supports it, so hide the opt-in.
     const thinkRow = thinkEl && thinkEl.closest('.ai-row');
@@ -597,6 +739,7 @@ export function initAiAssist({ getEditorValue, getEditorData, applyGenerated, st
     applyPreset();
   }
   loadFormFromCfg();
+  if (providerEl.value === 'openrouter') void loadOpenRouterModels();
 
   // ---- message rendering ----
   function addBubble(kind, text) {
@@ -608,54 +751,125 @@ export function initAiAssist({ getEditorValue, getEditorData, applyGenerated, st
     return div;
   }
 
-  /** A user bubble with any attached image thumbnails. */
-  function addUserBubble(text, images) {
+  function makeFileChip(name, kind, onRemove) {
+    const chip = document.createElement('span');
+    chip.className = 'ai-file-chip';
+    const type = document.createElement('span');
+    type.className = 'kind';
+    type.textContent = kind;
+    const label = document.createElement('span');
+    label.className = 'name';
+    label.textContent = name;
+    chip.append(type, label);
+    if (onRemove) {
+      const remove = document.createElement('button');
+      remove.className = 'remove';
+      remove.type = 'button';
+      remove.textContent = '×';
+      remove.title = `Remove ${name}`;
+      remove.setAttribute('aria-label', `Remove ${name}`);
+      remove.addEventListener('click', onRemove);
+      chip.appendChild(remove);
+    }
+    return chip;
+  }
+
+  /** A user bubble with attached file names and image previews. */
+  function addUserBubble(text, attachments, images) {
     const div = addBubble('user', text || '');
+    const files = attachments.filter((item) => item.kind !== 'image');
+    if (files.length) {
+      const row = document.createElement('div');
+      row.className = 'ai-thumb-row';
+      for (const file of files) row.appendChild(makeFileChip(file.name, file.kind.toUpperCase()));
+      div.appendChild(row);
+    }
     if (images && images.length) {
       const row = document.createElement('div');
       row.className = 'ai-thumb-row';
       for (const img of images) {
         const im = document.createElement('img');
         im.className = 'ai-thumb-img';
-        im.src = `data:${img.mime};base64,${img.data}`;
-        im.alt = 'attached image';
+        im.src = img.previewUrl || `data:${img.mime};base64,${img.data}`;
+        im.alt = img.label || 'attached image';
         row.appendChild(im);
       }
       div.appendChild(row);
-      messagesEl.scrollTop = messagesEl.scrollHeight;
     }
+    messagesEl.scrollTop = messagesEl.scrollHeight;
     return div;
   }
 
-  // ---- image attachments (drag-drop / paste) ----
+  // ---- file attachments (drag-drop / picker / image paste) ----
   const MAX_IMAGES = 4;
+  const MAX_PDF_BYTES = 12 * 1024 * 1024;
+  const MAX_XML_BYTES = 20 * 1024 * 1024;
   function renderAttachments() {
     attachEl.innerHTML = '';
     attachEl.hidden = pending.length === 0;
     pending.forEach((p, i) => {
-      const fig = document.createElement('div');
-      fig.className = 'ai-thumb';
-      const im = document.createElement('img');
-      im.src = p.previewUrl;
-      im.alt = 'staged image';
-      const rm = document.createElement('button');
-      rm.className = 'ai-thumb-x';
-      rm.type = 'button';
-      rm.textContent = '✕';
-      rm.title = 'Remove';
-      rm.addEventListener('click', () => { pending.splice(i, 1); renderAttachments(); });
-      fig.append(im, rm);
-      attachEl.appendChild(fig);
+      const remove = () => { pending.splice(i, 1); renderAttachments(); };
+      if (p.kind === 'image') {
+        const fig = document.createElement('div');
+        fig.className = 'ai-thumb';
+        const im = document.createElement('img');
+        im.src = p.image.previewUrl;
+        im.alt = p.name;
+        const rm = document.createElement('button');
+        rm.className = 'ai-thumb-x';
+        rm.type = 'button';
+        rm.textContent = '×';
+        rm.title = `Remove ${p.name}`;
+        rm.setAttribute('aria-label', `Remove ${p.name}`);
+        rm.addEventListener('click', remove);
+        fig.append(im, rm);
+        attachEl.appendChild(fig);
+      } else {
+        const label = p.kind === 'pdf' ? `${p.pageCount} pages` : 'XML';
+        attachEl.appendChild(makeFileChip(p.name, label, remove));
+      }
     });
+  }
+
+  function visualAttachmentCount() {
+    return pending.reduce((total, item) => total + (item.kind === 'image' ? 1 : item.kind === 'pdf' ? item.pageImages.length : 0), 0);
   }
 
   async function addFiles(files) {
     for (const f of files) {
-      if (!String(f.type || '').startsWith('image/')) continue;
-      if (pending.length >= MAX_IMAGES) { aiStatus(`Max ${MAX_IMAGES} images per message.`, true); break; }
-      if (f.size > 12 * 1024 * 1024) { aiStatus(`Image too large (>12MB): ${f.name}`, true); continue; }
-      try { pending.push(await fileToImagePart(f)); renderAttachments(); }
-      catch (err) { aiStatus(`Could not read image: ${err.message}`, true); }
+      const mime = String(f.type || '').toLowerCase();
+      const name = String(f.name || 'attachment');
+      const ext = name.split('.').pop().toLowerCase();
+      try {
+        if (mime.startsWith('image/')) {
+          if (visualAttachmentCount() >= MAX_IMAGES) { aiStatus(`Max ${MAX_IMAGES} visual pages or images per message.`, true); break; }
+          if (f.size > 12 * 1024 * 1024) throw new Error('image too large (>12MB)');
+          pending.push({ kind: 'image', name, image: await fileToImagePart(f) });
+        } else if (mime === 'application/pdf' || ext === 'pdf') {
+          const currentPdfBytes = pending.reduce((total, item) => total + (item.kind === 'pdf' ? item.file.size : 0), 0);
+          if (currentPdfBytes + f.size > MAX_PDF_BYTES) throw new Error('PDF attachments exceed the 12MB total limit');
+          const slots = MAX_IMAGES - visualAttachmentCount();
+          if (slots < 1) throw new Error(`max ${MAX_IMAGES} visual pages or images per message`);
+          const pdf = await readPdfFile(f, slots);
+          pending.push({ kind: 'pdf', name, file: f, ...pdf });
+        } else if (['jrxml', 'xml'].includes(ext) || ['application/xml', 'text/xml'].includes(mime)) {
+          if (f.size > 2 * 1024 * 1024) throw new Error('XML file too large (>2MB)');
+          const currentXmlBytes = pending.reduce((total, item) => total + (item.kind === 'jrxml' ? item.fileSize : 0), 0);
+          if (currentXmlBytes + f.size > MAX_XML_BYTES) throw new Error('JRXML/XML attachments exceed the 20MB total file-size limit');
+          const source = await f.text();
+          pending.push({
+            kind: 'jrxml',
+            name,
+            text: source,
+            fileSize: f.size,
+          });
+        } else {
+          throw new Error('unsupported file type (attach an image, PDF, or JRXML/XML file)');
+        }
+        renderAttachments();
+      } catch (err) {
+        aiStatus(`Could not read ${name}: ${err.message}`, true);
+      }
     }
   }
 
@@ -832,7 +1046,11 @@ export function initAiAssist({ getEditorValue, getEditorData, applyGenerated, st
     addBubble('sys', 'New conversation. Ask me to build or change the report.');
   });
 
-  providerEl.addEventListener('change', () => { applyPreset(); });
+  providerEl.addEventListener('change', () => {
+    applyPreset();
+    if (providerEl.value === 'openrouter') void loadOpenRouterModels();
+    else aiStatus('');
+  });
   keyEl.addEventListener('input', () => { secret = keyEl.value.trim(); });
 
   inputEl.addEventListener('keydown', (e) => {
@@ -865,8 +1083,8 @@ export function initAiAssist({ getEditorValue, getEditorData, applyGenerated, st
   async function sendMessage() {
     if (busy) return;
     const text = inputEl.value.trim();
-    const images = pending.slice();
-    if (!text && !images.length) return;
+    const attachments = pending.slice();
+    if (!text && !attachments.length) return;
     const form = readForm();
     const preset = currentPreset();
     if (preset.needsKey && !form.apiKey) {
@@ -875,13 +1093,50 @@ export function initAiAssist({ getEditorValue, getEditorData, applyGenerated, st
       keyEl.focus();
       return;
     }
+
+    const documents = [];
+    if (preset.kind === 'anthropic' || preset.kind === 'gemini') {
+      const pdfs = attachments.filter((attachment) => attachment.kind === 'pdf');
+      if (pdfs.length) {
+        busy = true;
+        sendBtn.disabled = true;
+        aiStatus('Preparing PDF for the selected provider…');
+        try {
+          for (const pdf of pdfs) {
+            documents.push({ name: pdf.name, mime: 'application/pdf', data: await fileToBase64(pdf.file) });
+          }
+        } catch (err) {
+          busy = false;
+          sendBtn.disabled = false;
+          aiStatus(`Could not prepare PDF attachment: ${err.message}`, true);
+          return;
+        }
+      }
+    }
+
+    const images = [];
+    const attachmentNotes = [];
+    for (const attachment of attachments) {
+      if (attachment.kind === 'image') {
+        images.push({ ...attachment.image, label: attachment.name });
+        attachmentNotes.push(`Attached image: ${attachment.name}.`);
+      } else if (attachment.kind === 'pdf') {
+        images.push(...attachment.pageImages);
+        attachmentNotes.push(
+          `Attached PDF "${attachment.name}" (${attachment.pageCount} pages). Text extracted in the browser:\n${attachment.text}`,
+        );
+      } else {
+        attachmentNotes.push(`Attached JRXML/XML file "${attachment.name}":\n${attachment.text}`);
+      }
+    }
+    const messageContent = [text, ...attachmentNotes].filter(Boolean).join('\n\n');
     saveConfig({ ...cfg, ...form }, form.apiKey);
 
     inputEl.value = '';
     pending = [];
     renderAttachments();
-    addUserBubble(text, images);
-    history.push({ role: 'user', content: text || '(see the attached image)', images });
+    addUserBubble(text || 'Attached files', attachments, images);
+    history.push({ role: 'user', content: messageContent, images, documents });
 
     const messages = [{ role: 'system', content: buildSystemPrompt() }];
     if (contextEl.checked) {

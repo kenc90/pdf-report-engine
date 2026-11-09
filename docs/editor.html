@@ -202,6 +202,7 @@
     .ai-settings { flex: 0 0 auto; border-bottom: 1px solid var(--line); padding: 10px; background: var(--page-bg); }
     .ai-settings[hidden] { display: none; }
     .ai-row { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+    .ai-row[hidden] { display: none; }
     .ai-row:first-child { margin-top: 0; }
     .ai-row label { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--muted); }
     .ai-row .ai-grow { flex: 1 1 200px; }
@@ -249,7 +250,7 @@
     }
     .ai-attach-btn svg { width: 13px; height: 13px; flex: none; }
     .ai-attach-btn:hover { color: var(--heading); border-color: var(--accent); }
-    /* pending + inline image thumbnails */
+    /* pending + inline attachment previews */
     .ai-attach { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
     .ai-attach[hidden] { display: none; }
     .ai-thumb { position: relative; width: 64px; height: 64px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--page-bg); }
@@ -257,10 +258,14 @@
     .ai-thumb-x { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border: none; border-radius: 50%; background: rgba(0, 0, 0, .62); color: #fff; font-size: 11px; line-height: 18px; padding: 0; cursor: pointer; }
     .ai-thumb-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
     .ai-thumb-img { width: 84px; height: 84px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); display: block; }
+    .ai-file-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 220px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--page-bg); color: var(--muted); font-size: 11px; }
+    .ai-file-chip .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ai-file-chip .kind { flex: none; font-weight: 700; color: var(--heading); }
+    .ai-file-chip .remove { flex: none; border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 0 2px; font-size: 14px; }
     /* drag-to-attach overlay */
     #ai-chat { position: relative; }
     #ai-chat.ai-drag::after {
-      content: 'Drop images to attach'; position: absolute; inset: 6px; z-index: 5;
+      content: 'Drop images, PDFs, or JRXML files to attach'; position: absolute; inset: 6px; z-index: 5;
       display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--accent);
       background: rgba(37, 99, 235, .12); border: 2px dashed var(--accent); border-radius: 10px; pointer-events: none;
     }
@@ -617,13 +622,15 @@
               <label>Provider
                 <select id="ai-provider">
                   <option value="openai">OpenAI</option>
+                  <option value="openrouter">OpenRouter</option>
                   <option value="anthropic">Anthropic</option>
                   <option value="gemini">Google Gemini</option>
                   <option value="ollama">Ollama (local, no key)</option>
                   <option value="custom">Custom (OpenAI-compatible)</option>
                 </select>
               </label>
-              <label class="ai-grow">Model <input id="ai-model" type="text" placeholder="gpt-4o-mini" autocomplete="off" spellcheck="false"></label>
+              <label class="ai-grow">Model <input id="ai-model" type="text" list="ai-model-options" placeholder="gpt-4o-mini" autocomplete="off" spellcheck="false"></label>
+              <datalist id="ai-model-options"></datalist>
             </div>
             <div class="ai-row" id="ai-key-row">
               <label class="ai-grow">API key
@@ -647,11 +654,11 @@
           <div id="ai-messages"></div>
           <div class="ai-composer">
             <div id="ai-attachments" class="ai-attach" hidden></div>
-            <textarea id="ai-input" rows="3" spellcheck="false" placeholder="Ask the assistant to build or change the report…  (Enter to send, Shift+Enter for a new line; drag-drop or paste images)"></textarea>
+            <textarea id="ai-input" rows="3" spellcheck="false" placeholder="Ask the assistant to build or change the report…  (Enter to send, Shift+Enter for a new line; attach files or paste images)"></textarea>
             <div class="ai-compose-row">
               <label class="check"><input id="ai-context" type="checkbox" checked> Use current doc</label>
-              <button class="ai-attach-btn" id="ai-attach-btn" type="button" title="Attach screenshots or mockups (up to 4 images). A vision-capable model is required." aria-label="Attach images"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a5.5 5.5 0 0 1-7.78-7.78l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-8.49 8.49a1.5 1.5 0 0 1-2.12-2.12l8.49-8.49"/></svg>Attach</button>
-              <input id="ai-attach-input" type="file" accept="image/*" multiple hidden>
+              <button class="ai-attach-btn" id="ai-attach-btn" type="button" title="Attach images, PDFs, or JRXML/XML files. XML files: 2MB each, 20MB total. PDFs: 12MB total." aria-label="Attach files"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a5.5 5.5 0 0 1-7.78-7.78l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-8.49 8.49a1.5 1.5 0 0 1-2.12-2.12l8.49-8.49"/></svg>Attach</button>
+              <input id="ai-attach-input" type="file" accept="image/*,.pdf,.jrxml,.xml,application/pdf,application/xml,text/xml" multiple hidden>
               <button class="btn" id="ai-send" type="button">Send</button>
             </div>
           </div>

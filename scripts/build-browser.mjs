@@ -43,4 +43,24 @@ for (const file of ['pdf-report-engine.js', 'wawoff2-decoder.js']) {
   fs.copyFileSync(path.join(outDir, file), path.join(docsOutDir, file));
 }
 
-console.log(`[build-browser] wrote ${outDir}/* and mirrored the files into ${docsOutDir}/`);
+await build({
+  entryPoints: ['node_modules/pdfjs-dist/build/pdf.mjs'],
+  bundle: true,
+  platform: 'browser',
+  format: 'esm',
+  target: ['es2020'],
+  minify: true,
+  outfile: 'docs/assets/pdfjs.mjs',
+});
+await build({
+  entryPoints: ['node_modules/pdfjs-dist/build/pdf.worker.mjs'],
+  bundle: true,
+  platform: 'browser',
+  format: 'esm',
+  target: ['es2020'],
+  minify: true,
+  outfile: 'docs/assets/pdf.worker.mjs',
+});
+fs.copyFileSync('node_modules/pdfjs-dist/LICENSE', 'docs/assets/pdfjs-LICENSE.txt');
+
+console.log(`[build-browser] wrote ${outDir}/*, mirrored the files into ${docsOutDir}/, and built the PDF.js editor assets.`);
