@@ -1,6 +1,6 @@
 {
   "name": "pdf-report-engine",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Real (vector, searchable-text) paginated PDF report engine: report IR -> layout -> pagination -> PDF. Pure JS, no Chromium.",
   "type": "module",
   "license": "MIT",

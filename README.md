@@ -1,6 +1,6 @@
 # pdf-report-engine
 
-![version](https://img.shields.io/badge/version-0.1.1-brightgreen)
+![version](https://img.shields.io/badge/version-0.2.0-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 ![node](https://img.shields.io/badge/node-%E2%89%A518-brightgreen)
 
@@ -115,7 +115,7 @@ You can also install directly from GitHub (the `prepare` script builds `dist/` o
 
 ```bash
 npm install kenc90/pdf-report-engine
-# pin a version:  npm install kenc90/pdf-report-engine#v0.1.1
+# pin a version:  npm install kenc90/pdf-report-engine#v0.2.0
 ```
 
 To work on the library itself, clone the repo and install dev dependencies:
