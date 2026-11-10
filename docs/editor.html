@@ -54,7 +54,24 @@
       display: flex; flex-direction: column; gap: 12px;
       flex: 1 1 auto; min-height: 0; width: 100%;
     }
-    .wb-grid { display: grid; grid-template-columns: 236px minmax(0, 1fr) 320px; gap: 4px; flex: 1 1 auto; min-height: 0; }
+    .wb-grid { display: grid; grid-template-columns: var(--left-width, 236px) 6px minmax(0, 1fr) 6px var(--right-width, 320px); gap: 4px; flex: 1 1 auto; min-height: 0; }
+    #left { grid-column: 1; }
+    #split-left { grid-column: 2; }
+    #center { grid-column: 3; }
+    #split-right { grid-column: 4; }
+    #right { grid-column: 5; }
+    #split-ai { display: none; grid-column: 6; }
+    #ai-chat { grid-column: 7; }
+    .wb-splitter {
+      position: relative; align-self: stretch; width: 6px; min-height: 36px; border: 0; border-radius: 4px;
+      padding: 0; background: transparent; cursor: col-resize; touch-action: none;
+    }
+    .wb-splitter::after {
+      content: ''; position: absolute; top: 8px; bottom: 8px; left: 2px; width: 2px;
+      border-radius: 2px; background: var(--line); transition: background .15s, width .15s, left .15s;
+    }
+    .wb-splitter:hover::after, .wb-splitter:focus-visible::after { left: 1px; width: 4px; background: var(--accent); }
+    .wb-splitter:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
     .pane { border: 1px solid var(--line); border-radius: 10px; background: var(--card); overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
     .pane-title {
       flex: 0 0 auto; padding: 9px 12px; font-family: inherit; font-size: 12px; line-height: 1.4; font-weight: 700; letter-spacing: .4px;
@@ -193,7 +210,8 @@
     /* ---- AI assist (BYOK): a right-docked chat drawer ---- */
     #ai-chat { display: none; }
     #ai-chat.open { display: flex; }
-    .wb-grid.ai-open { grid-template-columns: 236px minmax(0, 1fr) 320px 360px; }
+    .wb-grid.ai-open { grid-template-columns: var(--left-width, 236px) 6px minmax(0, 1fr) 6px var(--right-width, 320px) 6px var(--ai-width, 360px); }
+    .wb-grid.ai-open #split-ai { display: block; }
     .ai-head { display: flex; align-items: center; gap: 6px; padding: 8px 10px; font-family: inherit; font-size: 11px; line-height: 1.4; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--line); background: var(--th-bg); flex: 0 0 auto; }
     .ai-head .grow { flex: 1 1 auto; }
     .ai-x { border: 1px solid var(--line); background: var(--card); color: var(--muted); border-radius: 8px; width: 26px; height: 26px; font-size: 14px; cursor: pointer; padding: 0; }
@@ -273,8 +291,8 @@
     .ai-status.error { color: #b4232a; }
 
     @media (max-width: 1080px) {
-      .wb-grid { grid-template-columns: 200px minmax(0, 1fr) 280px; }
-      .wb-grid.ai-open { grid-template-columns: 190px minmax(0, 1fr) 260px 320px; }
+      .wb-grid { --left-width: 200px; --right-width: 280px; grid-template-columns: var(--left-width) 6px minmax(0, 1fr) 6px var(--right-width); }
+      .wb-grid.ai-open { --left-width: 190px; --right-width: 260px; --ai-width: 320px; grid-template-columns: var(--left-width) 6px minmax(0, 1fr) 6px var(--right-width) 6px var(--ai-width); }
     }
     @media (max-width: 860px) {
       /* stacked: let the page scroll instead of clipping to the viewport */
@@ -282,6 +300,8 @@
       #workbench { flex: 0 0 auto; }
       .wb { min-height: 0; }
       .wb-grid, .wb-grid.ai-open { grid-template-columns: 1fr; grid-auto-rows: minmax(300px, auto); }
+      #left, #center, #right, #ai-chat, #split-left, #split-right, #split-ai { grid-column: auto; }
+      .wb-splitter { display: none !important; }
       .pane#left, .pane#right { max-height: 340px; }
       #ai-chat.open { max-height: 520px; }
     }
@@ -567,6 +587,7 @@
           <input id="palette-search" type="search" placeholder="Filter blocks…" aria-label="Filter blocks" />
           <div class="pane-body" id="palette-groups"></div>
         </div>
+        <div class="wb-splitter" id="split-left" role="separator" aria-orientation="vertical" aria-label="Resize blocks panel" aria-valuenow="236" tabindex="0" title="Drag or use the arrow keys to resize"></div>
 
         <!-- center: source editor + PDF preview tabs -->
         <div class="pane" id="center">
@@ -615,12 +636,14 @@
             <iframe id="preview" title="Generated PDF preview"></iframe>
           </div>
         </div>
+        <div class="wb-splitter" id="split-right" role="separator" aria-orientation="vertical" aria-label="Resize properties panel" aria-valuenow="320" tabindex="0" title="Drag or use the arrow keys to resize"></div>
 
         <!-- right: properties of the caret element -->
         <div class="pane" id="right">
           <div class="pane-title">Properties</div>
           <div class="pane-body"><div id="props"></div></div>
         </div>
+        <div class="wb-splitter" id="split-ai" role="separator" aria-orientation="vertical" aria-label="Resize AI assist panel" aria-valuenow="360" tabindex="0" title="Drag or use the arrow keys to resize"></div>
 
         <!-- far right: AI assist chat drawer (BYOK), toggled by the AI assist button -->
         <div class="pane" id="ai-chat" aria-label="AI assist" hidden>

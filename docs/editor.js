@@ -32,6 +32,88 @@ const statusEl = $('status');
 const downloadEl = $('download');
 const pagecountEl = $('pagecount');
 
+// ---- resizable workbench panes ---------------------------------------------
+const workbenchGrid = document.querySelector('.wb-grid');
+const paneWidthsKey = 'pdf-report-editor-pane-widths';
+const paneWidthDefaults = { left: 236, right: 320, ai: 360 };
+const paneWidthLimits = { left: [150, 500], right: [220, 500], ai: [240, 560] };
+const splitters = [
+  { el: $('split-left'), pane: $('left'), key: 'left', sign: 1 },
+  { el: $('split-right'), pane: $('right'), key: 'right', sign: -1 },
+  { el: $('split-ai'), pane: $('ai-chat'), key: 'ai', sign: -1 },
+];
+let paneWidths = { ...paneWidthDefaults };
+const savedPaneWidthKeys = new Set();
+try {
+  const savedWidths = JSON.parse(localStorage.getItem(paneWidthsKey) || '{}');
+  for (const [key, width] of Object.entries(savedWidths)) {
+    const limits = paneWidthLimits[key];
+    if (limits && Number.isFinite(width) && width >= limits[0] && width <= limits[1]) {
+      paneWidths[key] = width;
+      savedPaneWidthKeys.add(key);
+    }
+  }
+} catch { /* use the stylesheet defaults */ }
+
+for (const { key } of splitters) {
+  if (savedPaneWidthKeys.has(key)) workbenchGrid.style.setProperty(`--${key}-width`, `${paneWidths[key]}px`);
+}
+for (const { pane, key, el } of splitters) {
+  const measuredWidth = Math.round(pane.getBoundingClientRect().width);
+  const [minWidth, maxWidth] = paneWidthLimits[key];
+  if (window.innerWidth > 860 && measuredWidth >= minWidth && measuredWidth <= maxWidth) paneWidths[key] = measuredWidth;
+  el.setAttribute('aria-valuenow', String(paneWidths[key]));
+}
+
+function resizePane(splitter, width) {
+  const [minWidth, maxWidth] = paneWidthLimits[splitter.key];
+  const centerWidth = $('center').getBoundingClientRect().width;
+  const widthLimit = Math.min(maxWidth, splitter.pane.getBoundingClientRect().width + centerWidth - 220);
+  paneWidths[splitter.key] = Math.round(Math.max(minWidth, Math.min(widthLimit, width)));
+  workbenchGrid.style.setProperty(`--${splitter.key}-width`, `${paneWidths[splitter.key]}px`);
+  splitter.el.setAttribute('aria-valuenow', String(paneWidths[splitter.key]));
+}
+
+function savePaneWidths() {
+  try { localStorage.setItem(paneWidthsKey, JSON.stringify(paneWidths)); } catch { /* ignore unavailable storage */ }
+}
+
+for (const splitter of splitters) {
+  const { el, pane, key, sign } = splitter;
+  const [minWidth] = paneWidthLimits[key];
+  el.setAttribute('aria-valuemin', String(minWidth));
+  el.setAttribute('aria-valuemax', String(paneWidthLimits[key][1]));
+  el.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0 || el.getClientRects().length === 0) return;
+    event.preventDefault();
+    el.setPointerCapture(event.pointerId);
+    el.dataset.pointerId = String(event.pointerId);
+    el.dataset.startX = String(event.clientX);
+    el.dataset.startWidth = String(pane.getBoundingClientRect().width);
+  });
+  el.addEventListener('pointermove', (event) => {
+    if (el.dataset.pointerId !== String(event.pointerId)) return;
+    const startX = Number(el.dataset.startX);
+    const startWidth = Number(el.dataset.startWidth);
+    resizePane(splitter, startWidth + (event.clientX - startX) * sign);
+  });
+  el.addEventListener('pointerup', (event) => {
+    if (el.dataset.pointerId !== String(event.pointerId)) return;
+    delete el.dataset.pointerId;
+    savePaneWidths();
+  });
+  el.addEventListener('pointercancel', () => {
+    delete el.dataset.pointerId;
+  });
+  el.addEventListener('keydown', (event) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+    const direction = event.key === 'ArrowRight' ? 1 : -1;
+    resizePane(splitter, pane.getBoundingClientRect().width + direction * sign * (event.shiftKey ? 10 : 1));
+    savePaneWidths();
+  });
+}
+
 // ---- shared model ----------------------------------------------------------
 let tree = null;      // parsed tree of the current serialized source
 let offsets = null;   // open-tag ranges keyed by child-index path strings
