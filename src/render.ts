@@ -13,6 +13,7 @@ import { LayoutContext, type TocEntry } from './layout/context.js';
 import { ExprCompiler } from './expr/eval.js';
 import { createFunctions } from './expr/functions.js';
 import { paginate, type Page } from './pagination/engine.js';
+import type { PlacedFragment } from './pagination/engine.js';
 import { writePage } from './writer/pdfkit-writer.js';
 import { resolveRemoteImages, type ImageResolveOptions } from './core/remote-image.js';
 import { resolveRemoteFonts, type FontResolveOptions } from './fonts/remote.js';
@@ -29,6 +30,14 @@ export interface RenderOptions {
   now?: () => Date;
   /** Overrides the document's base style before inheritance. */
   baseStyle?: Partial<StyleProps>;
+  /**
+   * Emit a tagged structure tree for screen-reader-oriented reading. This is
+   * not a claim of PDF/UA or Section 508 conformance. Supply a BCP 47 language
+   * tag here or on `ReportDoc.language`.
+   */
+  accessibility?: { language?: string };
+  /** Emit an archival PDF/A file using PDF/A-2b constraints. */
+  pdfa?: 'PDF/A-2b';
   /**
    * Keep every page's content in memory until `doc.end()` (pdfkit's `bufferPages`).
    *
@@ -66,6 +75,19 @@ export interface RenderResult {
 const DEFAULT_BASE: StyleProps = { fontFamily: 'Helvetica', fontSize: 11 };
 
 export function createReport(report: ReportDoc, options: RenderOptions = {}): RenderResult {
+  const language = options.accessibility
+    ? options.accessibility.language ?? report.language
+    : undefined;
+  if (options.accessibility && (typeof language !== 'string' || language.trim() === '')) {
+    throw new Error('Tagged accessibility output requires a document language (for example, "en" or "en-US").');
+  }
+  if (
+    options.pdfa &&
+    (report.encrypt?.userPassword || report.encrypt?.ownerPassword)
+  ) {
+    throw new Error(`${options.pdfa} output cannot be encrypted.`);
+  }
+
   const page = resolvePage(report.page);
   const doc: PDFKitDoc = new PDFDocument({
     size: [page.width, page.height],
@@ -74,6 +96,10 @@ export function createReport(report: ReportDoc, options: RenderOptions = {}): Re
     autoFirstPage: false,
     bufferPages: options.bufferPages ?? true,
     info: toPdfInfo(report),
+    ...(options.pdfa ? { subset: options.pdfa, pdfVersion: '1.7' as const } : {}),
+    ...(options.accessibility
+      ? { tagged: true, lang: language, displayTitle: Boolean(report.info?.title) }
+      : {}),
     ...toPdfSecurity(report.encrypt),
   });
 
@@ -127,9 +153,64 @@ export function createReport(report: ReportDoc, options: RenderOptions = {}): Re
     ctx.tocEntries = entries;
   }
 
-  for (const p of pages) writePage(doc, p, { outline: report.outline });
+  if (options.accessibility) validateAccessibilityFigures(pages);
+  if (options.pdfa) validatePdfaFonts(pages);
+  for (const p of pages) {
+    writePage(doc, p, { outline: report.outline, accessibility: Boolean(options.accessibility) });
+  }
 
   return { doc, pages, registry };
+}
+
+function placedFragments(page: Page): PlacedFragment[] {
+  return [
+    ...page.background,
+    ...page.absolute,
+    ...page.header,
+    ...page.body,
+    ...page.footer,
+    ...page.foreground,
+  ];
+}
+
+function validateAccessibilityFigures(pages: Page[]): void {
+  const missing = new Set<string>();
+  for (const page of pages) {
+    for (const placed of placedFragments(page)) {
+      const paths = [
+        placed.fragment.structurePath,
+        ...placed.fragment.commands.map((command) => command.structurePath),
+      ];
+      for (const path of paths) {
+        const figure = path?.[path.length - 1];
+        if (figure?.tag === 'Figure' && figure.alt === undefined) missing.add(figure.id);
+      }
+    }
+  }
+  if (missing.size > 0) {
+    throw new Error(
+      `Tagged accessibility output requires alt text for every image, SVG, and chart (${missing.size} missing). Use alt: "" for decorative figures.`,
+    );
+  }
+}
+
+function validatePdfaFonts(pages: Page[]): void {
+  const missing = new Set<string>();
+  for (const page of pages) {
+    for (const placed of placedFragments(page)) {
+      for (const command of placed.fragment.commands) {
+        if (command.op !== 'text') continue;
+        for (const run of command.runs) {
+          if (!run.style.handle.embedded) missing.add(run.style.handle.family);
+        }
+      }
+    }
+  }
+  if (missing.size > 0) {
+    throw new Error(
+      `PDF/A-2b requires embedded fonts. Provide TTF/OTF font files for: ${[...missing].sort().join(', ')}.`,
+    );
+  }
 }
 
 /** Flatten the paginated outline into the rows a `toc` block renders. */

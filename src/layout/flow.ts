@@ -44,7 +44,7 @@ export interface ResolvedShadow {
   opacity: number;
 }
 
-export type DrawCommand =
+export type DrawCommand = (
   | {
       op: 'fillRect';
       x: number;
@@ -92,9 +92,18 @@ export type DrawCommand =
       fillRule?: 'nonzero' | 'evenodd';
       stroke?: { color: RGB; lineWidth: number; dash?: DashPattern };
     }
-  | { op: 'text'; x: number; baselineY: number; runs: PositionedRun[]; gapWidth: number; decorations: Decoration[] }
+  | {
+      op: 'text';
+      x: number;
+      baselineY: number;
+      runs: PositionedRun[];
+      gapWidth: number;
+      decorations: Decoration[];
+      structurePath?: StructureElementRef[];
+    }
   | { op: 'underline'; x1: number; y1: number; x2: number; color: RGB; lineWidth: number; lineThrough?: boolean }
-  | { op: 'image'; x: number; y: number; w: number; h: number; src: string | Uint8Array; radius?: Radius; shadow?: ResolvedShadow };
+  | { op: 'image'; x: number; y: number; w: number; h: number; src: string | Uint8Array; radius?: Radius; shadow?: ResolvedShadow }
+) & { structurePath?: StructureElementRef[] };
 
 /** A heading that becomes a PDF bookmark and a table-of-contents entry. */
 export interface OutlineEntry {
@@ -118,6 +127,8 @@ export interface Fragment {
   before: number;
   after: number;
   commands: DrawCommand[];
+  /** Semantic structure shared by the fragment's meaningful drawn content. */
+  structurePath?: StructureElementRef[];
   breakBefore?: 'auto' | 'page' | 'avoid';
   breakAfter?: 'auto' | 'page' | 'avoid';
   /** Never let this fragment split across pages (single table row, keep-together block). */
@@ -148,6 +159,14 @@ export interface Fragment {
    * when absent, which is what the full-page watermark relies on.
    */
   width?: number;
+}
+
+export interface StructureElementRef {
+  id: string;
+  tag: string;
+  alt?: string;
+  /** Repeated table headers are tagged only on their first physical page. */
+  repeatAsArtifact?: boolean;
 }
 
 /** Box geometry a fragment is painted into; used by borders and backgrounds. */

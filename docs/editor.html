@@ -576,6 +576,12 @@
             </div>
             <div class="toolbar">
               <button class="btn" id="generate" type="button">Generate PDF</button>
+              <label class="check" title="Adds screen-reader-oriented tags. Requires a document language and alt text for informative figures; this does not certify PDF/UA.">
+                <input id="tagged-output" type="checkbox"> Tagged PDF
+              </label>
+              <label class="check" title="Requests PDF/A-2b. All used fonts must be embedded; unembedded standard-font fallbacks are rejected.">
+                <input id="pdfa-output" type="checkbox"> PDF/A-2b
+              </label>
               <a class="btn ghost" id="download" hidden download="report.pdf">Download</a>
               <button class="btn ghost" id="undo" type="button" title="Undo the last palette or panel action (Ctrl+Z when outside the editor)">Undo</button>
               <button class="btn ghost" id="new" type="button" title="Clear the editor to a blank document (undoable)">New</button>

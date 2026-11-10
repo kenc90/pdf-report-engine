@@ -98,6 +98,16 @@ export function layoutBlock(block: Block, ctx: LayoutContext, opts: BlockLayoutO
     default:
       frags = [];
   }
+  if (effective.type === 'paragraph' || effective.type === 'heading') {
+    const tag = effective.type === 'heading'
+      ? `H${Math.min(Math.max(effective.level ?? 1, 1), 6)}`
+      : 'P';
+    const path = [{ id: ctx.nextStructureId(), tag }];
+    for (const fragment of frags) fragment.structurePath = path;
+  } else if (effective.type === 'image' || effective.type === 'svg' || effective.type === 'chart') {
+    const path = [{ id: ctx.nextStructureId(), tag: 'Figure', alt: effective.alt }];
+    for (const fragment of frags) fragment.structurePath = path;
+  }
   // `breakInside: 'avoid'` (CSS `page-break-inside: avoid`) keeps the block on one
   // page. A paragraph becomes one fragment per line, so the cheapest faithful
   // implementation is to chain its fragments: pagination moves a keep-with-next run
@@ -154,6 +164,7 @@ function mergeForRotation(frags: Fragment[], rotate: number, contentWidth: numbe
     keepWithNext: last.keepWithNext,
     anchor: first.anchor,
     outline: first.outline,
+    structurePath: first.structurePath,
     avoidSplit: true,
     rotate,
     width: contentWidth,

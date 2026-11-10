@@ -33,6 +33,10 @@ glyph embedding all happen in-process via [`pdfkit`](https://pdfkit.org) +
 - **Oversized text-row pagination** — top-aligned text-only detail rows can continue at safe
   shared line boundaries when they are taller than a full page; shorter rows still move whole.
   Rich-block cells and vertically merged rows remain atomic.
+- **Opt-in tagged PDFs** — headings, paragraphs, tables and figures receive a PDF structure tree
+  for screen-reader-oriented reading; informative figures require alternative text.
+- **Opt-in PDF/A-2b output** — adds archival metadata and an sRGB output intent, and rejects
+  encryption or unembedded font fallbacks.
 - **Group breaks** with per-group subtotal footers, plus **keep rules** —
   `keepWithNext` chains and `break-inside: avoid`.
 - **Running tokens** `{PAGE}` / `{TOTAL}` (and `$page.number` / `$page.total` in expressions)
@@ -678,6 +682,67 @@ covering the script is *registered*: the CLI auto-loads a CJK face per platform,
 library you add one via `readFontFiles`. Fallback only reaches registered faces, so output
 stays deterministic across machines rather than dipping into whatever the OS happens to have.
 
+## Tagged accessibility output
+
+Tagged output is opt-in; default PDF generation is unchanged.
+
+Tag headings, paragraphs, table headers/cells and figures by passing `accessibility`. Supply the
+document language using `ReportDoc.language` or the option. Informative images, SVGs and charts
+need `alt`; use `alt: ''` for decorative figures.
+
+```ts
+import { writeFileSync } from 'node:fs';
+import { renderToBuffer } from 'pdf-report-engine';
+import type { ReportDoc } from 'pdf-report-engine';
+
+const report: ReportDoc = {
+  language: 'en-US',
+  info: { title: 'Quarterly report' },
+  body: [
+    { type: 'heading', level: 1, content: 'Summary' },
+    { type: 'paragraph', content: 'Revenue increased this quarter.' },
+  ],
+};
+
+const pdf = await renderToBuffer(report, { accessibility: {} });
+writeFileSync('accessible-report.pdf', pdf);
+```
+
+This emits a tagged structure tree but is **not a claim of PDF/UA or Section 508 conformance**.
+Repeated table headers and running page bands are artifacts in the reading order. Validate the
+actual PDFs with your organization's accessibility tooling.
+
+## PDF/A-2b archival output
+
+`pdfa: 'PDF/A-2b'` requests PDF/A-2b output. PDF/A requires embedded fonts, so provide every
+used family/weight/style; the renderer rejects unembedded standard-font fallbacks and encryption
+instead of silently producing an incompatible file. PDF/A-2b is an archival profile, not an
+accessibility guarantee. Validate generated files with a PDF/A validator before relying on formal
+conformance.
+
+```ts
+import { writeFileSync } from 'node:fs';
+import { readFontFiles, renderToBuffer } from 'pdf-report-engine';
+import type { ReportDoc } from 'pdf-report-engine';
+
+const report: ReportDoc = {
+  info: { title: 'Archived quarterly report' },
+  style: { fontFamily: 'Arial' },
+  body: [
+    { type: 'heading', level: 1, content: 'Summary' },
+    { type: 'paragraph', content: 'Revenue increased this quarter.' },
+  ],
+};
+
+const fonts = await readFontFiles([
+  { family: 'Arial', path: 'C:/Windows/Fonts/arial.ttf', weight: 400 },
+  { family: 'Arial', path: 'C:/Windows/Fonts/arialbd.ttf', weight: 700 },
+]);
+
+const archivedPdf = await renderToBuffer(report, { fonts, pdfa: 'PDF/A-2b' });
+writeFileSync('archived-report.pdf', archivedPdf);
+```
+
 ## Running in the browser
 
 > A live, no-build demo is on the docs site: **`docs/browser-demo.html`** (edit HTML → Generate PDF,
@@ -836,7 +901,7 @@ From the package root (`pdf-report-engine`):
 | `createReport(report, options?)` | Build the `pdfkit` doc + paginated `pages`; returns `{ doc, pages, registry }`. |
 | `renderToBuffer(report, options?)` | `createReport` + collect to a `Buffer`. |
 | `renderToStream(report, options?)` | `createReport` wrapped as a `ReadableStream<Uint8Array>` with `bufferPages: false`, so pages flush as they're produced. |
-| `RenderOptions` | `{ fonts?: FontSource[], now?: () => Date, baseStyle?: Partial<StyleProps>, images?: ImageResolveOptions, resolveFonts?: FontResolveOptions, bufferPages?: boolean }`. |
+| `RenderOptions` | `{ fonts?: FontSource[], now?: () => Date, baseStyle?: Partial<StyleProps>, accessibility?: { language?: string }, pdfa?: 'PDF/A-2b', images?: ImageResolveOptions, resolveFonts?: FontResolveOptions, bufferPages?: boolean }`. |
 | `setImageFileReader(reader)` | Install the synchronous reader for path-based image/SVG sources (the Node CLI calls it once). |
 | `setImagePathAccess('allow' \| 'deny')` | Forbid reading image/SVG sources from the host filesystem. Default `'allow'`. |
 | `htmlToReportDoc(html, options?)` | HTML subset → `ReportDoc`. |

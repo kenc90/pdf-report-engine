@@ -30,6 +30,10 @@ human-oriented prose with rendered samples lives in [`README.md`](./README.md).
   `createReport`). WOFF2/WOFF are decoded automatically.
 - **Measure == render:** widths are measured through the exact code path that paints,
   so wrapped lines never overflow their box.
+- Tagged output is opt-in: `renderToBuffer(report, { accessibility: { language: 'en-US' } })`.
+  It adds screen-reader-oriented PDF structure, but is not a PDF/UA or Section 508 claim.
+- Archival output is opt-in: `renderToBuffer(report, { pdfa: 'PDF/A-2b', fonts })`.
+  All used fonts must be embedded; encryption is rejected. Validate formal conformance separately.
 - **No CSS `float`** is modelled anywhere (HTML adapter or IR).
 
 ## Minimal report (JS IR)
@@ -83,6 +87,7 @@ fs.writeFileSync('out.pdf', await renderToBuffer(report));
 ```jsonc
 {
   "info":  { "title": "...", "author": "...", "subject": "...", "keywords": "..." }, // → PDF metadata
+  "language": "en-US",                     // document language for tagged accessibility output
   "page":  { "size": "a4", "margin": 56, "orientation": "portrait" },     // PageSpec
   "style": { "fontFamily": "Helvetica", "fontSize": 11, "color": "#222" },// base, inherited by all
   "data":  { "rows": [ /* arrays/objects for expressions + dataSource */ ] },

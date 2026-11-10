@@ -1189,6 +1189,62 @@ const pdf = await renderToBuffer(report);   // the bytes are encrypted on write<
       </div>
     </section>
 
+    <section id="accessibility">
+      <h2>Tagged PDFs for screen-reader support</h2>
+      <p>This option is opt-in and does not change default output. Provide a document language:</p>
+      <pre data-copy><code>import { writeFileSync } from 'node:fs';
+import { renderToBuffer } from 'pdf-report-engine';
+import type { ReportDoc } from 'pdf-report-engine';
+
+const report: ReportDoc = {
+  language: 'en-US',
+  info: { title: 'Quarterly report' },
+  body: [
+    { type: 'heading', level: 1, content: 'Quarterly report' },
+    { type: 'paragraph', content: 'Revenue increased this quarter.' },
+  ],
+};
+
+const pdf = await renderToBuffer(report, { accessibility: {} });
+writeFileSync('accessible-report.pdf', pdf);</code></pre>
+      <p>
+        Alternatively, set <code>accessibility: { language: 'en-US' }</code>. Informative images,
+        SVGs and charts require <code>alt</code> text; use <code>alt: ''</code> for decorative
+        figures. The HTML adapter carries <code>&lt;html lang&gt;</code> and chart labels into the
+        report. Tagged output is not a claim of PDF/UA or Section 508 conformance.
+      </p>
+    </section>
+
+    <section id="pdfa">
+      <h2>PDF/A-2b archival output</h2>
+      <p>
+        For archival output, request <code>pdfa: 'PDF/A-2b'</code>. Every used font must be
+        embedded, and encryption is rejected. Replace the sample font paths below with installed
+        font files on your system. PDF/A-2b is not an accessibility guarantee; validate files with
+        dedicated validators before relying on formal conformance.
+      </p>
+      <pre data-copy><code>import { writeFileSync } from 'node:fs';
+import { readFontFiles, renderToBuffer } from 'pdf-report-engine';
+import type { ReportDoc } from 'pdf-report-engine';
+
+const fonts = await readFontFiles([
+  { family: 'Arial', path: 'C:/Windows/Fonts/arial.ttf', weight: 400 },
+  { family: 'Arial', path: 'C:/Windows/Fonts/arialbd.ttf', weight: 700 },
+]);
+
+const report: ReportDoc = {
+  info: { title: 'Archived report' },
+  style: { fontFamily: 'Arial' },
+  body: [
+    { type: 'heading', level: 1, content: 'Summary' },
+    { type: 'paragraph', content: 'Revenue increased this quarter.' },
+  ],
+};
+
+const pdf = await renderToBuffer(report, { fonts, pdfa: 'PDF/A-2b' });
+writeFileSync('archived-report.pdf', pdf);</code></pre>
+    </section>
+
     <section id="cli">
       <h2>The CLI</h2>
       <p>Convert authoring HTML files to PDF, or build the bundled demo report.</p>
@@ -1276,6 +1332,8 @@ npm run demo</code></pre>
         <a href="getting-started.html#streaming">Streaming</a>
         <a href="getting-started.html#box-polish">CSS box polish</a>
         <a href="getting-started.html#encryption">Encryption &amp; permissions</a>
+        <a href="getting-started.html#accessibility">Tagged PDFs for screen-reader support</a>
+        <a href="getting-started.html#pdfa">PDF/A-2b archival output</a>
         <a href="getting-started.html#web-fonts">Web fonts &amp; CJK</a>
         <a href="getting-started.html#cli">Command line</a>
       </nav>

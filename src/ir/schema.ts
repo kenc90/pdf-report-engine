@@ -363,6 +363,8 @@ export interface ValueAxisOptions {
 export interface ChartBlock extends BlockBase {
   type: 'chart';
   kind: ChartKind;
+  /** Short screen-reader description used when tagged accessibility output is enabled. */
+  alt?: string;
   /** Heading rendered above the plot, in the inherited style but bold. */
   title?: Content;
   /** Category labels: literal array, CSV string, binding expression, or `Expr`. */
@@ -805,6 +807,8 @@ export interface ReportDoc {
     creator?: string;
     producer?: string;
   };
+  /** Document language used by assistive technology when tagged output is enabled. */
+  language?: string;
   page?: PageSpec;
   /** Applied to every node unless overridden (the report's "base style"). */
   style?: Partial<StyleProps>;

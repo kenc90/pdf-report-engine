@@ -34,6 +34,8 @@ TypeScript declarations (`dist/index.d.ts` and re-exported `dist/ir/schema.d.ts`
   "fonts": [ /* FontSource[]: { family, weight?, style?, buffers: Uint8Array[] } — required for createReport */ ],
   "now": () => new Date(),          // injectable clock for now() (deterministic tests)
   "baseStyle": { /* Partial<StyleProps> */ }, // overrides report.style before inheritance
+  "accessibility": { "language": "en-US" }, // optional tagged output; not a PDF/UA claim
+  "pdfa": "PDF/A-2b",               // optional; requires all fonts embedded, rejects encryption
   "bufferPages": true,              // false = flush each page (renderToStream sets this)
   "images": {                       // how http(s) image src is resolved (async renders)
     "resolveImage": async (url) => Uint8Array,  // custom loader (proxy/auth/cache)
@@ -71,6 +73,7 @@ TypeScript declarations (`dist/index.d.ts` and re-exported `dist/ir/schema.d.ts`
 | Field | Type | Notes |
 | --- | --- | --- |
 | `info` | `{ title?, author?, subject?, keywords?, creator?, producer? }` | `title` may be an `Expr`; written to PDF metadata. |
+| `language` | `string` | Document language used when tagged accessibility output is enabled. |
 | `page` | `PageSpec` | see §3. |
 | `style` | `Partial<StyleProps>` | base style inherited down the whole tree. |
 | `data` | `Record<string, unknown>` | arrays/objects read by expressions (`$data`) and table `dataSource`. |

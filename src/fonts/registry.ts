@@ -112,7 +112,7 @@ export interface FontHandle {
 
 /** pdfkit-backed handle. `widthOf` delegates so measurement == rendering. */
 class PdfFontHandle implements FontHandle {
-  readonly embedded = true;
+  readonly embedded: boolean;
   readonly ascender: number;
   readonly descender: number;
   readonly xHeight: number;
@@ -130,7 +130,9 @@ class PdfFontHandle implements FontHandle {
     readonly style: 'normal' | 'italic',
     font: PdfFontLike,
     readonly embeddedName: string,
+    embedded: boolean,
   ) {
+    this.embedded = embedded;
     this.pdfFont = font;
     // pdfkit normalises ascender/descender/xHeight/capHeight/lineGap by
     // `1000/unitsPerEm`, so they are already "per 1000 units-of-em". We therefore
@@ -332,7 +334,7 @@ export class FontRegistry {
       for (const alias of face.aliases) {
         const key = faceKey(alias, face.weight, face.style);
         if (this.byKey.has(key)) continue;
-        const handle = new PdfFontHandle(key, alias, face.weight, face.style, font, face.name);
+        const handle = new PdfFontHandle(key, alias, face.weight, face.style, font, face.name, false);
         this.faces.push(handle);
         this.byKey.set(key, handle);
       }
@@ -363,7 +365,7 @@ export class FontRegistry {
     // every subsequent `text()` call uses, so measuring through it is exact.
     const pdfFont = (doc as unknown as { _font: PdfFontLike })._font;
 
-    const handle = new PdfFontHandle(key, source.family, weight, style, pdfFont, registeredName);
+    const handle = new PdfFontHandle(key, source.family, weight, style, pdfFont, registeredName, true);
     this.faces.push(handle);
     if (!existing) this.byKey.set(key, handle);
     return handle;

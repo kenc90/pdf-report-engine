@@ -34,7 +34,7 @@ import { typeset, type Line, type InlineSource } from '../text/typeset.js';
 import type { ResolvedStyle } from '../text/style.js';
 import { findBreaks } from '../text/linebreak.js';
 import { resolveBox, parseBorder, borderRGB, borderDash, type Sides } from './box.js';
-import { translateCommands, type Fragment, type DrawCommand } from './flow.js';
+import { translateCommands, type Fragment, type DrawCommand, type StructureElementRef } from './flow.js';
 import { getPath, aggregate } from '../expr/functions.js';
 import { layoutBlock, type BlockLayoutOptions } from './block.js';
 import { applyConditions, isVisible, scaleFillFor } from './condition.js';
@@ -69,6 +69,8 @@ interface UnitCtx {
   contentLeft: number;
   grid: GridSpec;
   groupKey: string;
+  structureTableId: string;
+  structureRowSeq: number;
   scope: ExprContext;
   maxRowHeight?: number;
 }
@@ -97,6 +99,8 @@ export function layoutTable(block: TableBlock, ctx: LayoutContext, opts: BlockLa
     contentLeft: margin.left,
     grid,
     groupKey,
+    structureTableId: ctx.nextStructureId(),
+    structureRowSeq: 0,
     scope: opts.scope,
     maxRowHeight: opts.maxRowHeight,
   };
@@ -332,6 +336,7 @@ interface CellLayout {
   vAlign: 'top' | 'middle' | 'bottom';
   /** Present when the cell is a diagonal split header (see `layoutDiagonal`). */
   diagonal?: DiagonalLayout;
+  structurePath: StructureElementRef[];
 }
 
 /** A diagonal header cell's two typeset label stacks and slash settings. */
@@ -350,6 +355,8 @@ interface DiagonalLayout {
 function layoutRow(unit: Extract<Unit, { t: 'header' | 'footer' | 'detail' }>, uc: UnitCtx, isFirstVisual: boolean): Fragment {
   const { block, ctx, columns, tableStyle, grid } = uc;
   const row = unit.row;
+  const rowId = `${uc.structureTableId}:row:${uc.structureRowSeq++}`;
+  const repeatAsArtifact = unit.t === 'header' && block.repeatHeader !== false;
   const scope: ExprContext = unit.t === 'detail' ? { ...uc.scope, $row: unit.data, $index: unit.index } : uc.scope;
 
   const layouts: CellLayout[] = [];
@@ -397,6 +404,15 @@ function layoutRow(unit: Extract<Unit, { t: 'header' | 'footer' | 'detail' }>, u
       borders: cellSides(cell.border ?? gridShorthand(grid), 0.5),
       vAlign: cell.verticalAlign ?? 'top',
       diagonal: payload.diagonal,
+      structurePath: [
+        { id: uc.structureTableId, tag: 'Table' },
+        { id: rowId, tag: 'TR' },
+        {
+          id: `${rowId}:cell:${c}`,
+          tag: unit.t === 'header' ? 'TH' : 'TD',
+          repeatAsArtifact,
+        },
+      ],
     });
     maxContent = Math.max(maxContent, payload.contentH + pad.top + pad.bottom);
     x += w;
@@ -409,7 +425,7 @@ function layoutRow(unit: Extract<Unit, { t: 'header' | 'footer' | 'detail' }>, u
   for (const cl of layouts) {
     if (cl.fill) commands.push({ op: 'fillRect', x: cl.x, y: 0, w: cl.w, h: rowHeight, color: toRGB(cl.fill) });
     if (cl.diagonal) paintDiagonal(commands, cl.pad, cl.diagonal, cl.x, 0, cl.w, rowHeight, cl.borders.top ?? cl.borders.left);
-    else paintCellContent(commands, cl, contentTop(cl, rowHeight));
+    else paintCellContent(commands, cl, contentTop(cl, rowHeight), cl.structurePath);
     drawSides(commands, cl.borders, cl.x, 0, cl.w, rowHeight);
   }
 
@@ -495,6 +511,7 @@ function splitTextRow(layouts: CellLayout[], rowHeight: number, row: Fragment): 
           runs: line.runs,
           gapWidth: line.gapWidth,
           decorations: [],
+          structurePath: cell.structurePath,
         });
       }
 
@@ -537,14 +554,30 @@ function paintCellContent(
   commands: DrawCommand[],
   cl: { x: number; pad: typeof CELL_PAD; lines: Line[]; blocks: PlacedBlock[] },
   vTop: number,
+  structurePath?: StructureElementRef[],
 ): void {
   let lineY = vTop;
   for (const line of cl.lines) {
-    commands.push({ op: 'text', x: cl.x + cl.pad.left, baselineY: lineY + line.ascent, runs: line.runs, gapWidth: line.gapWidth, decorations: [] });
+    commands.push({
+      op: 'text',
+      x: cl.x + cl.pad.left,
+      baselineY: lineY + line.ascent,
+      runs: line.runs,
+      gapWidth: line.gapWidth,
+      decorations: [],
+      structurePath,
+    });
     lineY += line.height;
   }
   for (const placed of cl.blocks) {
-    commands.push(...translateCommands(placed.fragment.commands, cl.x + cl.pad.left, vTop + placed.y));
+    const nested = translateCommands(placed.fragment.commands, cl.x + cl.pad.left, vTop + placed.y);
+    for (const command of nested) {
+      const nestedPath = command.structurePath ?? placed.fragment.structurePath;
+      if (structurePath && nestedPath) command.structurePath = [...structurePath, ...nestedPath];
+      else if (structurePath && command.op === 'text') command.structurePath = structurePath;
+      else if (nestedPath) command.structurePath = nestedPath;
+    }
+    commands.push(...nested);
   }
 }
 
@@ -748,6 +781,7 @@ function unitScope(unit: RowUnit, uc: UnitCtx): ExprContext {
 interface AnchorCell {
   row: number;
   col: number;
+  cellIndex: number;
   colSpan: number;
   rowSpan: number;
   x: number;
@@ -760,12 +794,14 @@ interface AnchorCell {
   borders: Sides;
   vAlign: 'top' | 'middle' | 'bottom';
   diagonal?: DiagonalLayout;
+  structurePath: StructureElementRef[];
 }
 
 function layoutMergedRun(run: RowUnit[], uc: UnitCtx, isFirstVisual: boolean): Fragment {
   const { block, ctx, columns, tableStyle, grid } = uc;
   const R = run.length;
   const C = Math.max(1, columns.length);
+  const rowIds = run.map(() => `${uc.structureTableId}:row:${uc.structureRowSeq++}`);
 
   const covered: boolean[][] = Array.from({ length: R }, () => Array<boolean>(C).fill(false));
   const anchors: AnchorCell[] = [];
@@ -780,7 +816,8 @@ function layoutMergedRun(run: RowUnit[], uc: UnitCtx, isFirstVisual: boolean): F
     const stripedFill = unit.t === 'detail' && detailIndexOf(unit) % 2 === 1 ? grid.stripedColor : undefined;
 
     let colCursor = 0;
-    for (const cell of row.cells) {
+    for (let cellIndex = 0; cellIndex < row.cells.length; cellIndex += 1) {
+      const cell = row.cells[cellIndex]!;
       while (colCursor < C && covered[r]![colCursor]) colCursor += 1;
       if (colCursor >= C) break; // no room left in this row
 
@@ -821,6 +858,7 @@ function layoutMergedRun(run: RowUnit[], uc: UnitCtx, isFirstVisual: boolean): F
       anchors.push({
         row: r,
         col: startCol,
+        cellIndex,
         colSpan,
         rowSpan,
         x,
@@ -833,6 +871,15 @@ function layoutMergedRun(run: RowUnit[], uc: UnitCtx, isFirstVisual: boolean): F
         borders: cellSides(cell.border ?? gridShorthand(grid), 0.5),
         vAlign: cell.verticalAlign ?? 'top',
         diagonal: payload.diagonal,
+        structurePath: [
+          { id: uc.structureTableId, tag: 'Table' },
+          { id: rowIds[r]!, tag: 'TR' },
+          {
+            id: `${rowIds[r]}:cell:${cellIndex}`,
+            tag: unit.t === 'header' ? 'TH' : 'TD',
+            repeatAsArtifact: unit.t === 'header' && block.repeatHeader !== false,
+          },
+        ],
       });
     }
   }
@@ -868,7 +915,7 @@ function layoutMergedRun(run: RowUnit[], uc: UnitCtx, isFirstVisual: boolean): F
     const ry = yTop[a.row]!;
     if (a.fill) commands.push({ op: 'fillRect', x: a.x, y: ry, w: a.w, h: rectH, color: toRGB(a.fill) });
     if (a.diagonal) paintDiagonal(commands, a.pad, a.diagonal, a.x, ry, a.w, rectH, a.borders.top ?? a.borders.left);
-    else paintCellContent(commands, a, ry + contentTop(a, rectH));
+    else paintCellContent(commands, a, ry + contentTop(a, rectH), a.structurePath);
     drawSides(commands, a.borders, a.x, ry, a.w, rectH);
   }
 

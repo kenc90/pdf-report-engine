@@ -7,7 +7,14 @@
  * page space and paints them one at a time.
  */
 import type { Page, PlacedFragment } from '../pagination/engine.js';
-import type { DrawCommand, DashPattern, Radius, ResolvedGradient, ResolvedShadow } from '../layout/flow.js';
+import type {
+  DrawCommand,
+  DashPattern,
+  Radius,
+  ResolvedGradient,
+  ResolvedShadow,
+  StructureElementRef,
+} from '../layout/flow.js';
 import type { PositionedRun } from '../text/typeset.js';
 import type { RGB, ColorInput } from '../core/color.js';
 import { toRGB, mix } from '../core/color.js';
@@ -18,7 +25,18 @@ type PDFDocument = PDFKit.PDFDocument;
 export interface WritePageOptions {
   /** Emit PDF outline (bookmark) items for this page's headings (default true). */
   outline?: boolean;
+  /** Emit structure tags for this page's semantic content. */
+  accessibility?: boolean;
 }
+
+interface AccessibilityState {
+  root: PDFKit.PDFStructureElement;
+  elements: Map<string, PDFKit.PDFStructureElement>;
+  repeatedOnPage: Map<string, number>;
+  nextAutoId: number;
+}
+
+const accessibilityStates = new WeakMap<PDFDocument, AccessibilityState>();
 
 export function writePage(doc: PDFDocument, page: Page, options: WritePageOptions = {}): void {
   doc.addPage({
@@ -30,6 +48,7 @@ export function writePage(doc: PDFDocument, page: Page, options: WritePageOption
   // positioning; every draw command passes explicit x, y.
   doc.x = 0;
   doc.y = 0;
+  const accessibility = options.accessibility ? accessibilityState(doc) : undefined;
   // Destinations and outline items must be registered while this page is the
   // document's current page — both APIs bind to `doc.page` at call time.
   registerAnchors(doc, page);
@@ -37,16 +56,39 @@ export function writePage(doc: PDFDocument, page: Page, options: WritePageOption
   // Out-of-flow blocks split into a behind-body (`z < 0`) and an in-front-of-body
   // (`z >= 0`) pass; both ascending by `z` so overlapping stamps stack correctly.
   const abs = [...page.absolute].sort((a, b) => (a.z ?? 0) - (b.z ?? 0));
-  for (const pf of page.background) drawFragment(doc, pf, page.width, page.height);
-  for (const pf of abs) if ((pf.z ?? 0) < 0) drawFragment(doc, pf, page.width, page.height);
-  for (const pf of page.header) drawFragment(doc, pf, page.width, page.height);
-  for (const pf of page.body) drawFragment(doc, pf, page.width, page.height);
-  for (const pf of page.footer) drawFragment(doc, pf, page.width, page.height);
-  for (const pf of abs) if ((pf.z ?? 0) >= 0) drawFragment(doc, pf, page.width, page.height);
-  for (const pf of page.foreground) drawFragment(doc, pf, page.width, page.height);
+  for (const pf of page.background) drawFragment(doc, pf, page.width, page.height, accessibility, page.number, true);
+  for (const pf of abs) if ((pf.z ?? 0) < 0) drawFragment(doc, pf, page.width, page.height, accessibility, page.number);
+  for (const pf of page.header) drawFragment(doc, pf, page.width, page.height, accessibility, page.number, true);
+  for (const pf of page.body) drawFragment(doc, pf, page.width, page.height, accessibility, page.number);
+  for (const pf of page.footer) drawFragment(doc, pf, page.width, page.height, accessibility, page.number, true);
+  for (const pf of abs) if ((pf.z ?? 0) >= 0) drawFragment(doc, pf, page.width, page.height, accessibility, page.number);
+  for (const pf of page.foreground) drawFragment(doc, pf, page.width, page.height, accessibility, page.number, true);
 }
 
-function drawFragment(doc: PDFDocument, { fragment, x, y }: PlacedFragment, pageW: number, pageH: number): void {
+function accessibilityState(doc: PDFDocument): AccessibilityState {
+  const existing = accessibilityStates.get(doc);
+  if (existing) return existing;
+  const root = doc.struct('Document');
+  doc.addStructure(root);
+  const state: AccessibilityState = {
+    root,
+    elements: new Map(),
+    repeatedOnPage: new Map(),
+    nextAutoId: 0,
+  };
+  accessibilityStates.set(doc, state);
+  return state;
+}
+
+function drawFragment(
+  doc: PDFDocument,
+  { fragment, x, y }: PlacedFragment,
+  pageW: number,
+  pageH: number,
+  accessibility?: AccessibilityState,
+  pageNumber = 0,
+  forceArtifact = false,
+): void {
   const faded = fragment.opacity !== undefined && fragment.opacity < 1;
   const rotated = fragment.rotate !== undefined && fragment.rotate !== 0;
   if (faded || rotated) {
@@ -63,8 +105,70 @@ function drawFragment(doc: PDFDocument, { fragment, x, y }: PlacedFragment, page
   // through the style cascade, and repainting it per glyph would only add
   // seams — so it is passed down as the "already painted" colour.
   const baseFill = fragmentBaseFill(fragment);
-  for (const cmd of fragment.commands) drawCommand(doc, cmd, x, y, baseFill);
+  for (const cmd of fragment.commands) {
+    if (!accessibility) {
+      drawCommand(doc, cmd, x, y, baseFill);
+      continue;
+    }
+
+    let path: StructureElementRef[] | undefined;
+    if (cmd.op === 'text') {
+      path = cmd.structurePath ?? fragment.structurePath;
+      if (!path) {
+        accessibility.nextAutoId += 1;
+        path = [{ id: `auto-${accessibility.nextAutoId}`, tag: 'P' }];
+      }
+    } else {
+      const commandLeaf = cmd.structurePath?.[cmd.structurePath.length - 1];
+      const fragmentLeaf = fragment.structurePath?.[fragment.structurePath.length - 1];
+      if (commandLeaf?.tag === 'Figure') path = cmd.structurePath;
+      else if (fragmentLeaf?.tag === 'Figure') path = fragment.structurePath;
+    }
+
+    const repeated = path?.some((part) => {
+      if (!part.repeatAsArtifact) return false;
+      const firstPage = accessibility.repeatedOnPage.get(part.id);
+      if (firstPage === undefined) {
+        accessibility.repeatedOnPage.set(part.id, pageNumber);
+        return false;
+      }
+      return firstPage !== pageNumber;
+    });
+
+    const decorative = path?.[path.length - 1]?.tag === 'Figure' && path[path.length - 1]?.alt === '';
+    if (forceArtifact || !path || repeated || decorative) {
+      doc.markContent('Artifact', { type: 'Layout' });
+      drawCommand(doc, cmd, x, y, baseFill);
+      doc.endMarkedContent();
+      continue;
+    }
+
+    const element = ensureStructurePath(doc, accessibility, path);
+    const leaf = path[path.length - 1]!;
+    const content = doc.markStructureContent(leaf.tag);
+    drawCommand(doc, cmd, x, y, baseFill);
+    doc.endMarkedContent();
+    element.add(content);
+  }
   if (faded || rotated) doc.restore();
+}
+
+function ensureStructurePath(
+  doc: PDFDocument,
+  state: AccessibilityState,
+  path: StructureElementRef[],
+): PDFKit.PDFStructureElement {
+  let parent = state.root;
+  for (const part of path) {
+    let element = state.elements.get(part.id);
+    if (!element) {
+      element = doc.struct(part.tag, part.alt === undefined ? {} : { alt: part.alt });
+      parent.add(element);
+      state.elements.set(part.id, element);
+    }
+    parent = element;
+  }
+  return parent;
 }
 
 function fragmentBaseFill(fragment: PlacedFragment['fragment']): RGB | undefined {

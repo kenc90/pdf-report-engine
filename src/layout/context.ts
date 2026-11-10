@@ -46,6 +46,7 @@ export class LayoutContext {
    * between fixed-point pagination passes; layout itself never mutates it.
    */
   tocEntries: TocEntry[] = [];
+  private structureSeq = 0;
 
   constructor(init: LayoutContextInit) {
     this.registry = init.registry;
@@ -73,6 +74,11 @@ export class LayoutContext {
     if (typeof value === 'number') return String(value);
     if (value instanceof Date) return formatDate(value, 'yyyy-MM-dd');
     return String(value);
+  }
+
+  nextStructureId(): string {
+    this.structureSeq += 1;
+    return `structure-${this.structureSeq}`;
   }
 }
 

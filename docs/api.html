@@ -72,6 +72,8 @@
   fonts?: FontSource[];                       // embedded font programs
   now?: () => Date;                           // injectable clock (deterministic tests)
   baseStyle?: Partial&lt;StyleProps&gt;;            // applied before IR style inheritance
+  accessibility?: { language?: string };        // tagged output; language required here or on ReportDoc
+  pdfa?: 'PDF/A-2b';                             // archival output; all used fonts must be embedded
   images?: ImageResolveOptions;               // remote image handling (renderToBuffer only)
   resolveFonts?: FontResolveOptions;          // remote/web-font handling (renderToBuffer only)
   bufferPages?: boolean;                      // default true; false = flush each page as it ends
@@ -84,6 +86,14 @@
         cross-references are resolved by re-paginating before anything is written), so a host that
         pipes the document straight to a caller can pass <code>false</code> and drop that second
         full copy of the document from memory.
+      </p>
+      <p>
+        Both modes are opt-in. <code>accessibility</code> emits tags for headings, paragraphs,
+        tables and figures; informative figures need <code>alt</code> text, and the document
+        language comes from the option or <code>ReportDoc.language</code>. This is not a claim of
+        PDF/UA or Section 508 conformance. <code>pdfa: 'PDF/A-2b'</code> adds PDF/A metadata and
+        an sRGB output intent, and rejects encrypted output or unembedded font fallbacks. Validate
+        files with dedicated accessibility and PDF/A tools before relying on formal conformance.
       </p>
       <h3><code>ImageResolveOptions</code></h3>
       <pre data-copy><code>{
@@ -283,6 +293,7 @@ h1, h2 { margin-bottom: 4pt; }           /* list */</code></pre>
       <p>Everything an adapter produces targets this plain data object.</p>
       <pre data-copy><code>{
   info?:    { title?, author?, subject?, keywords?, creator?, producer? },
+  language?: string,                         // document language for tagged accessibility output
   page?:    { size?, margin?, ... },           // default A4, ~20mm margins
   style?:   Partial&lt;StyleProps&gt;,               // the report's base style
   data?:    Record&lt;string, unknown&gt;,           // $data / bindings

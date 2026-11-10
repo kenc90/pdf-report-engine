@@ -1106,6 +1106,8 @@ function chartFromElement(el: HElement, style: IrBox): ChartBlock {
   const kindAttr = el.attrs['data-chart'];
   const kind = chartKind(kindAttr && kindAttr !== 'true' ? kindAttr : el.attrs['data-kind']);
   const block: ChartBlock = { type: 'chart', kind, series: [], ...(style as Partial<ChartBlock>) };
+  const alt = el.attrs['aria-label'] ?? el.attrs['alt'];
+  if (alt !== undefined) block.alt = alt;
   const title = el.attrs['data-title'] ?? el.attrs['title'];
   if (title) block.title = title;
 
@@ -1161,6 +1163,8 @@ function chartFromTable(table: HElement, style: IrBox): ChartBlock {
     series,
     ...(style as Partial<ChartBlock>),
   };
+  const alt = table.attrs['aria-label'] ?? table.attrs['alt'];
+  if (alt !== undefined) block.alt = alt;
   const title = table.attrs['data-title'] ?? table.attrs['title'];
   if (title) block.title = title;
   applyChartOptions(table, block);
@@ -1968,6 +1972,7 @@ export function htmlToReportDoc(html: string, opts: HtmlOptions = {}): ReportDoc
   }
 
   const htmlPage = pageSpecFromHtml(html, tree);
+  const language = findFirst(tree, 'html')?.attrs['lang'] ?? body.attrs['lang'];
   const page = { ...htmlPage, ...pickDefined(opts.page) };
   const hasPage = Object.keys(page).length > 0;
   const fonts = collectFontRefs(tree);
@@ -1981,6 +1986,7 @@ export function htmlToReportDoc(html: string, opts: HtmlOptions = {}): ReportDoc
     ...(Object.keys(bands).length ? { bands } : {}),
     body: blocks,
     ...(fonts.length ? { fonts } : {}),
+    ...(language ? { language } : {}),
     ...(watermark ? { watermark } : {}),
   };
 }

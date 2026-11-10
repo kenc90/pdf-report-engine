@@ -36,6 +36,15 @@ describe('parseHtml', () => {
 });
 
 describe('htmlToReportDoc: blocks', () => {
+  it('maps the document language and chart alternative text', () => {
+    const doc = htmlToReportDoc(
+      '<html lang="en-US"><body><div data-chart="bar" aria-label="Monthly revenue"></div></body></html>',
+    );
+
+    expect(doc.language).toBe('en-US');
+    expect(doc.body![0]).toMatchObject({ type: 'chart', alt: 'Monthly revenue' });
+  });
+
   it('maps headings and paragraphs with inline spans', () => {
     const doc = htmlToReportDoc('<h2>Title</h2><p>Plain <strong>bold</strong> text</p>');
     expect(doc.body).toHaveLength(2);

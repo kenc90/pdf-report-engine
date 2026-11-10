@@ -838,9 +838,12 @@ async function generate() {
   }
   try {
     const report = htmlToReportDoc(editor.value, opts);
+    const renderOptions = { resolveFonts: { decodeTimeoutMs: 6000 } };
+    if ($('tagged-output').checked) renderOptions.accessibility = {};
+    if ($('pdfa-output').checked) renderOptions.pdfa = 'PDF/A-2b';
     // charset-aware Google Fonts fetching works here exactly as in the demo;
     // text with no font falls back to the base-14 faces.
-    const bytes = await renderToBuffer(report, { resolveFonts: { decodeTimeoutMs: 6000 } });
+    const bytes = await renderToBuffer(report, renderOptions);
     if (lastUrl) URL.revokeObjectURL(lastUrl);
     const blob = new Blob([bytes], { type: 'application/pdf' });
     lastUrl = URL.createObjectURL(blob);
