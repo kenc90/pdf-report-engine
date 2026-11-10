@@ -22,3 +22,22 @@ Notable user-facing changes for each release are listed here.
 ### Fixed
 
 - Corrected the PDF metadata field name from `Creater` to `Creator`.
+
+## [0.1.1] - 2026-11-08
+
+This retrospective entry is reconstructed from the commits leading up to the release tag.
+
+### Added
+
+- Browser-ready library bundle and a visual HTML editor with PDF preview, editable report data, and BYOK AI assistance.
+- Report features including data-driven and rich tables, conditional formatting, charts, barcodes, SVG, flex and multi-column layouts, Gantt charts, links, table of contents, watermarks, and absolute positioning.
+- Embedded and web-font support with per-glyph fallback, plus streaming and encrypted PDF output.
+- CLI tools, examples, browser demo, and documentation site.
+
+### Changed
+
+- Added bounded remote downloads, configurable page buffering, and controls for filesystem image access.
+
+### Fixed
+
+- Improved editor attribute parsing and scroll synchronization, and corrected border rendering around padded boxes.
