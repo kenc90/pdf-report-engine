@@ -1,7 +1,7 @@
 // Tiny, dependency-free helpers for the static docs site.
 // Single source of truth is package.json; `npm version` rewrites this line via
 // scripts/sync-version.mjs. It is stamped into every [data-version] placeholder.
-var VERSION = '0.2.0';
+var VERSION = '0.2.1';
 (function () {
   // Show the current version wherever a [data-version] placeholder exists.
   document.querySelectorAll('[data-version]').forEach(function (el) {
