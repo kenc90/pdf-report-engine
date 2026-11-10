@@ -3,8 +3,9 @@
 > A pure-JavaScript, **paginated PDF report engine**. It turns a report *IR*
 > (`ReportDoc`, a plain JS object) **or** a constrained subset of authoring **HTML**
 > into a **real vector PDF with selectable, searchable text** and Jasper-Reports-style
-> pagination. No Chromium, no headless browser, no screenshots — layout, line-breaking,
-> pagination and glyph embedding all run in-process on top of `pdfkit` + `fontkit`.
+> pagination. No Chromium, headless browser, or screenshots are needed. A prebuilt browser
+> ESM bundle is available; layout, line-breaking, pagination and glyph embedding run in
+> process on top of `pdfkit` + `fontkit`.
 
 This file is a compact, AI-agent-oriented reference. Read it before writing
 report code — the parts an LLM tends to hallucinate (the `ReportDoc` shape, the IR
@@ -14,7 +15,8 @@ human-oriented prose with rendered samples lives in [`README.md`](./README.md).
 
 ## Ground rules (know these first)
 
-- **ESM-only** (`"type": "module"`); **Node ≥ 18**. `import { ... } from 'pdf-report-engine'`.
+- **Node entry point:** ESM-only (`"type": "module"`); **Node ≥ 18**. This Node requirement
+  does not apply to the separate browser bundle.
 - A report is **one plain object** (`ReportDoc`). There is no builder/class flow — you
   hand a `{ ... }` literal to a render function and get PDF bytes back.
 - **Two entry points, both return bytes:**
@@ -35,6 +37,33 @@ human-oriented prose with rendered samples lives in [`README.md`](./README.md).
 - Archival output is opt-in: `renderToBuffer(report, { pdfa: 'PDF/A-2b', fonts })`.
   All used fonts must be embedded; encryption is rejected. Validate formal conformance separately.
 - **No CSS `float`** is modelled anywhere (HTML adapter or IR).
+
+## Browser ESM bundle
+
+- A prebuilt browser bundle is available at `browser/pdf-report-engine.js` and mirrored to
+  `docs/browser/pdf-report-engine.js`. Build it with `npm run build:browser`.
+- Import it from an ESM script: `import { htmlToReportDoc, renderToBuffer } from './browser/pdf-report-engine.js'`.
+  The bundle includes pdfkit's browser build, so this prebuilt file does not need a separate
+  application bundler. Use `<script type="module">` or `import()`; a classic script is unsupported.
+- `renderToBuffer(report)` returns PDF bytes. Wrap them in a Blob to preview or download.
+- Keep sibling `wawoff2-decoder.js` beside the bundle when using WOFF2 web fonts.
+- The npm package's published `files` do not include the prebuilt `browser/` directory. For
+  direct CDN use, serve the repository's `browser/` files and keep the decoder beside the bundle.
+- Browser reports can use `renderToBuffer`; pass font bytes for local fonts. Browser execution
+  does not require Node or Chromium. Heavy reports should run in a Web Worker.
+
+```js
+import { htmlToReportDoc, renderToBuffer } from './browser/pdf-report-engine.js';
+
+const report = htmlToReportDoc('<h1>Hello from the browser</h1>');
+const bytes = await renderToBuffer(report);
+const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+const link = document.createElement('a');
+link.href = url;
+link.download = 'report.pdf';
+link.click();
+URL.revokeObjectURL(url);
+```
 
 ## Minimal report (JS IR)
 

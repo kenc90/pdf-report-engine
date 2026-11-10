@@ -5,11 +5,45 @@ for the mental model; use this file when you need every option for a specific bl
 table, chart, font or encryption setting. All content is derived from the shipped
 TypeScript declarations (`dist/index.d.ts` and re-exported `dist/ir/schema.d.ts`).
 
-- ESM-only, Node ≥ 18. `import { ... } from 'pdf-report-engine'`.
+- The npm Node entry point is ESM-only and requires Node ≥ 18. This Node requirement
+  does not apply to the separate prebuilt browser bundle.
 - Geometry: a `Length` is a `number` (points) or a unit string (`'12pt'`, `'5mm'`,
   `'1in'`, `'24px'`, `'50%'`). pt = 1/72 in; mm/cm/in/px are converted for you.
 - Colors (`ColorInput`): `'#rgb'`, `'#rrggbb'`, `'#rrggbbaa'`, `'rgb()'`/`'rgba()'`,
   `'hsl()'`/`'hsla()'`, a `number`, or a named CSS colour.
+
+---
+
+## Browser ESM bundle
+
+- The prebuilt browser bundle is `browser/pdf-report-engine.js`; `npm run build:browser`
+  generates it and mirrors it to `docs/browser/pdf-report-engine.js`.
+- The bundle includes pdfkit's browser build and can be loaded with `<script type="module">`
+  or `import()`. A classic non-module script is unsupported. It runs in a browser; Node ≥ 18
+  applies only to the npm package's Node entry point.
+- `import { htmlToReportDoc, renderToBuffer } from './browser/pdf-report-engine.js'`.
+  Convert HTML with `htmlToReportDoc` (or construct a `ReportDoc`), then call
+  `await renderToBuffer(report)` to get PDF bytes. Use `new Blob([bytes], { type: 'application/pdf' })`
+  to preview or download the result.
+- Keep `wawoff2-decoder.js` beside the bundle when WOFF2 decoding may be needed. Browser font
+  files must be fetched and passed as bytes; the browser cannot read installed system fonts.
+- The npm package's published `files` list omits the prebuilt `browser/` directory. When using
+  the package source in a browser app, bundle it with the required pdfkit polyfills; alternatively,
+  serve the prebuilt browser files from the repository/CDN. No Chromium or headless browser is
+  required. Move heavy rendering to a Web Worker to avoid blocking the UI.
+
+```js
+import { htmlToReportDoc, renderToBuffer } from './browser/pdf-report-engine.js';
+
+const report = htmlToReportDoc('<h1>Hello from the browser</h1>');
+const bytes = await renderToBuffer(report);
+const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+const link = document.createElement('a');
+link.href = url;
+link.download = 'report.pdf';
+link.click();
+URL.revokeObjectURL(url);
+```
 
 ---
 

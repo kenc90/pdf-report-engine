@@ -20,6 +20,9 @@ glyph embedding all happen in-process via [`pdfkit`](https://pdfkit.org) +
 > [`llms-full.txt`](./llms-full.txt) (exhaustive). They capture the `ReportDoc` shape,
 > the IR `block` union, the expression grammar and the HTML `data-*` attributes, so you
 > don't have to scan the source.
+> The online editor's AI assistant retrieves relevant sections from the full reference as
+> needed, avoiding sending the entire reference on every turn. Run `npm run sync:llms` after
+> editing either reference to publish the updated docs-site copies.
 
 ## Features
 

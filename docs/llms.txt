@@ -1,0 +1,269 @@
+# pdf-report-engine
+
+> A pure-JavaScript, **paginated PDF report engine**. It turns a report *IR*
+> (`ReportDoc`, a plain JS object) **or** a constrained subset of authoring **HTML**
+> into a **real vector PDF with selectable, searchable text** and Jasper-Reports-style
+> pagination. No Chromium, headless browser, or screenshots are needed. A prebuilt browser
+> ESM bundle is available; layout, line-breaking, pagination and glyph embedding run in
+> process on top of `pdfkit` + `fontkit`.
+
+This file is a compact, AI-agent-oriented reference. Read it before writing
+report code — the parts an LLM tends to hallucinate (the `ReportDoc` shape, the IR
+`block` union, the expression grammar, and the HTML `data-*` attributes) are spelled
+out here. An exhaustive field-by-field reference lives in [`llms-full.txt`](./llms-full.txt);
+human-oriented prose with rendered samples lives in [`README.md`](./README.md).
+
+## Ground rules (know these first)
+
+- **Node entry point:** ESM-only (`"type": "module"`); **Node ≥ 18**. This Node requirement
+  does not apply to the separate browser bundle.
+- A report is **one plain object** (`ReportDoc`). There is no builder/class flow — you
+  hand a `{ ... }` literal to a render function and get PDF bytes back.
+- **Two entry points, both return bytes:**
+  - `renderToBuffer(report, options?)` → `Promise<Buffer>` (one-shot; also resolves
+    remote `http(s)` images and declarative `report.fonts`). **The default choice.**
+  - `createReport(report, options?)` → `{ doc, pages, registry }` (synchronous; returns
+    the live pdfkit `doc` and the paginated `pages` array for streaming/inspection).
+  - Also: `renderToStream(report, options?)` → `Promise<ReadableStream<Uint8Array>>`
+    (server response streaming; forces `bufferPages: false`).
+- **Fonts are required for non-base-14 text.** Without registered fonts only the 14
+  PDF standard fonts (Helvetica/Times/Courier) render. For arbitrary Unicode/CJK you
+  must supply fonts (via `report.fonts` + `renderToBuffer`, or `options.fonts` +
+  `createReport`). WOFF2/WOFF are decoded automatically.
+- **Measure == render:** widths are measured through the exact code path that paints,
+  so wrapped lines never overflow their box.
+- Tagged output is opt-in: `renderToBuffer(report, { accessibility: { language: 'en-US' } })`.
+  It adds screen-reader-oriented PDF structure, but is not a PDF/UA or Section 508 claim.
+- Archival output is opt-in: `renderToBuffer(report, { pdfa: 'PDF/A-2b', fonts })`.
+  All used fonts must be embedded; encryption is rejected. Validate formal conformance separately.
+- **No CSS `float`** is modelled anywhere (HTML adapter or IR).
+
+## Browser ESM bundle
+
+- A prebuilt browser bundle is available at `browser/pdf-report-engine.js` and mirrored to
+  `docs/browser/pdf-report-engine.js`. Build it with `npm run build:browser`.
+- Import it from an ESM script: `import { htmlToReportDoc, renderToBuffer } from './browser/pdf-report-engine.js'`.
+  The bundle includes pdfkit's browser build, so this prebuilt file does not need a separate
+  application bundler. Use `<script type="module">` or `import()`; a classic script is unsupported.
+- `renderToBuffer(report)` returns PDF bytes. Wrap them in a Blob to preview or download.
+- Keep sibling `wawoff2-decoder.js` beside the bundle when using WOFF2 web fonts.
+- The npm package's published `files` do not include the prebuilt `browser/` directory. For
+  direct CDN use, serve the repository's `browser/` files and keep the decoder beside the bundle.
+- Browser reports can use `renderToBuffer`; pass font bytes for local fonts. Browser execution
+  does not require Node or Chromium. Heavy reports should run in a Web Worker.
+
+```js
+import { htmlToReportDoc, renderToBuffer } from './browser/pdf-report-engine.js';
+
+const report = htmlToReportDoc('<h1>Hello from the browser</h1>');
+const bytes = await renderToBuffer(report);
+const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+const link = document.createElement('a');
+link.href = url;
+link.download = 'report.pdf';
+link.click();
+URL.revokeObjectURL(url);
+```
+
+## Minimal report (JS IR)
+
+```js
+import fs from 'node:fs';
+import { renderToBuffer } from 'pdf-report-engine';
+
+const report = {
+  info: { title: 'Hello, PDF' },
+  page: { size: 'a4', margin: 56 },          // margin in points; or '36pt'/'12mm'/[t,r,b,l]
+  style: { fontFamily: 'Helvetica', fontSize: 11, color: '#222' }, // base style, inherited
+  body: [
+    { type: 'heading', level: 1, content: 'Quarterly Snapshot', fontSize: 20, color: '#1a3d6d' },
+    { type: 'paragraph', content: 'Built from the report IR — no HTML, no browser.' },
+    {
+      type: 'table',
+      showGrid: true,
+      striped: true,
+      columns: [{ key: 'label', grow: 2 }, { key: 'value', width: 120, align: 'right' }],
+      headerRows: [{ kind: 'header', cells: [
+        { content: 'Metric', style: { fontWeight: 'bold', color: '#fff' }, backgroundColor: '#1a3d6d' },
+        { content: 'Value', align: 'right', style: { fontWeight: 'bold', color: '#fff' }, backgroundColor: '#1a3d6d' },
+      ] }],
+      staticRows: [
+        { cells: [{ content: 'Revenue' }, { content: '$1,240,000' }] },
+        { cells: [{ content: 'Units shipped' }, { content: '18,402' }] },
+      ],
+    },
+  ],
+};
+
+fs.writeFileSync('out.pdf', await renderToBuffer(report));
+```
+
+## Minimal report (from HTML)
+
+```js
+import { renderToBuffer, htmlToReportDoc } from 'pdf-report-engine';
+
+const html = `<h1>Invoice #A-1001</h1>
+  <p>Rendered from <b>HTML</b> through the built-in adapter.</p>
+  <table><tr><th>Item</th><th>Qty</th></tr><tr><td>Widget</td><td>2</td></tr></table>`;
+
+const report = htmlToReportDoc(html, { style: { fontFamily: 'Helvetica', fontSize: 11 } });
+fs.writeFileSync('out.pdf', await renderToBuffer(report));
+```
+
+## `ReportDoc` — the whole IR root
+
+```jsonc
+{
+  "info":  { "title": "...", "author": "...", "subject": "...", "keywords": "..." }, // → PDF metadata
+  "language": "en-US",                     // document language for tagged accessibility output
+  "page":  { "size": "a4", "margin": 56, "orientation": "portrait" },     // PageSpec
+  "style": { "fontFamily": "Helvetica", "fontSize": 11, "color": "#222" },// base, inherited by all
+  "data":  { "rows": [ /* arrays/objects for expressions + dataSource */ ] },
+  "variables": { "$anyName": 123 },                                       // extra symbols as $vars.<name>
+  "bands": { "pageHeader": {...}, "pageFooter": {...}, "title": {...}, "summary": {...}, "background": {...} },
+  "body":  [ /* Block[] — the flowing content */ ],
+  "fonts": [ /* FontReference[] — remote/Google/@font-face */ ],
+  "outline": true,                         // PDF bookmarks from headings (auto-on when headings exist)
+  "watermark": { "text": "DRAFT", "rotate": -35, "opacity": 0.15 },
+  "encrypt": { "userPassword": "...", "ownerPassword": "...", "permissions": { "printing": false } }
+}
+```
+
+- **`bands`** are Jasper-style regions that repeat/pin: `title` (once at start),
+  `pageHeader`/`pageFooter` (every page), `summary` (once at end), `background`
+  (behind every page). Each `BandContent` = `{ blocks?: Block[], text?: Content, style?, height? }`.
+  Running tokens `{PAGE}`/`{TOTAL}` and `$page.number`/`$page.total` resolve **only inside bands**.
+- **`body`** is the array of flowing blocks (see below).
+
+## `block` union — `type` discriminator (the 12 block kinds)
+
+| `type` | Purpose | Key fields (beyond common block props) |
+| --- | --- | --- |
+| `paragraph` | text block | `content: Content` |
+| `heading` | title, feeds outline/TOC | `content`, `level?`, `outline?: {level,numbering}\|false` |
+| `table` | grid / data region | `columns`, `headerRows`, `footerRows`, `staticRows`, `dataSource`, `detail`, `groups`, `repeatHeader`, `striped`, `showGrid` |
+| `spacer` | vertical gap | `size?` |
+| `pageBreak` | start next page | (never breaks at top of page; consecutive breaks won't blank a page) |
+| `image` | raster PNG/JPEG/GIF/BMP | `src` (path/`data:`/bytes), `intrinsic?`, `alt?` |
+| `svg` | inline SVG as real PDF paths | `src` (`<svg>`/`data:`/path/url), `intrinsic?`, `alt?` |
+| `chart` | vector data chart | `kind`, `series[]`, `categories?`, `stacked?`, `legend?`, `valueAxis?` … |
+| `toc` | table of contents from headings | `title?`, `maxLevel?`, `leaders?`, `pageNumbers?` |
+| `barcode` | QR / Code 128 / EAN-13 | `symbology`, `value`, `moduleSize?`, `showText?` |
+| `flex` | CSS flexbox (atomic fragment) | `direction`, `wrap`, `justify`, `alignItems`, `gap`, `children: FlexItem[]` |
+| `columns` | multi-column flow | `count?`, `gap?`, `rule?`, `children: Block[]` |
+
+Every block also accepts **`BoxProps`** (`width/height/margin*/padding*/border*/
+background*/breakBefore/breakAfter/breakInside/keepWithNext/position/left/top/
+zIndex/page/rotate`) and **`StyleProps`** (`fontFamily/fontSize/fontWeight/fontStyle/
+color/backgroundColor/opacity/lineHeight/letterSpacing/align/verticalAlign/
+textDecoration/features/fontVariant/whiteSpace/textTransform`), plus `id`,
+`visible` (bool or Expr) and `styleWhen` (conditional styling).
+
+### `chart.kind` values
+`bar | line | area | pie | donut | combo | waterfall | scatter | bubble | radar | gauge | heatmap | gantt`
+(any other value falls back to `bar`). Series: `{ name, values, color? }` where `values`
+is a number array, a comma-separated string `'12,18,9'`, or a binding string
+`'$data.revenue'`. `stacked` may be `true` or `'100%'`. `referenceLines`, `range`
+(high–low bars), `gaugeValue/gaugeMax`, `heatmapLabels/heatmapColors`, and
+`ganttTasks/ganttStart/ganttEnd/ganttUnit` extend specific kinds.
+
+### Common block style extras
+- **Background polish:** `borderRadius` (fill only, straight borders never curve),
+  `boxShadow` (`{offsetX,offsetY,blur,color,opacity}`; `inset`/`spread` ignored),
+  `backgroundImage` (two-stop `linear-gradient`; direction snaps to 4 axes).
+- **Absolute positioning:** `position: 'absolute'|'fixed'` + `left`/`top` (page space,
+  `%` allowed) removes the block from flow; `zIndex` orders overlays (negative = behind
+  body); `fixed` repeats every page, `page`/`data-page` scopes an `absolute` block;
+  `rotate` turns a block about its own centre (kept atomic).
+
+## Expression language
+
+Field values accept `{ bind: "<expr>" }` (IR) or `data-bind="<expr>"` (HTML).
+Only these symbols are visible; there is **no raw `eval`** (a `Proxy` whitelists scope).
+
+**Variables:** `$data`/`$report` (report `data`), `$vars` (report `variables`),
+`$row.<col>` (current table row, bound columns unprefixable), `$item` (`data-each` item),
+`$group.<colKey>_<fn>` and `$index` (group context), `$page.number`/`$page.total`
+(bands only), and `$value` (cell context — bare `{bind}` in a cell or `<td data-bind>`).
+
+**Functions:** `sum avg min max count rows rowCount groupCount isFirst isFirstRow
+isLast isLastRow cond format money percent number date now abs round floor ceil
+length lower upper trim concat`
+- `$group.amount_sum` = `sum($row.amount)` over the current group; also `_avg _min
+_max _count`; `$group.rowCount` = row count; `$index` = 0-based row index in the group.
+- `format($value,'yyyy-MM-dd')` = date pattern (`yy yyyy M MM MMM d dd HH hh mm ss a`);
+  `format($value,'#,##0.00')` = number pattern (`0 . , % $ () -/+ ;` and `'text'`).
+
+## HTML adapter (`htmlToReportDoc`) — supported subset
+
+It is **not** a general HTML engine. Understands only markup that maps to a
+paginated report. No DOM library, no full CSS cascade. Special blocks are triggered
+by **`data-*` attributes on an element**, not by a `type=` attribute.
+
+- **Blocks:** `h1..h6, p, div/section/article/header/footer/main, ul/ol/li, table, hr,
+  blockquote, img, inline <svg>`.
+- **Inline:** `b/strong, i/em, u/ins, span, font, a, mark, br` (br → line separator).
+- **Style:** a flat subset of inline `style`; `<style>` class rules (e.g. `.toc { outline: true }`) are honoured.
+- **Page:** `<meta name="pdf-page" content="size=...; margin=...">` or `@page { size: A4 landscape; margin: 15mm }`.
+- **Fonts:** `<link href="fonts.googleapis.com/…">` and `@import` become `report.fonts`.
+- **Watermark:** `data-watermark="DRAFT"` on `<body>` (with `data-watermark-rotate`,
+  `-color`, `-size`, `-opacity`, `-font`, `-layer`) or `<meta name="watermark" content="…">`.
+- **Bands:** `data-band="pageHeader|pageFooter|title|summary|background"` lifts an
+  element into that region.
+- **Data tables:** `data-each="item in $data.list"` **or** `data-bind="$data.list"` on
+  `<table>` makes it a bound region; the `<tbody>` first `<tr>` is the row template and
+  each cell's `data-bind="<field>"` both binds text *and* names the column (`key`);
+  `data-format` applies a pattern. `data-striped` / `data-striped-color` shade rows.
+  **Row grouping is JS-IR only — there is no HTML group attribute.**
+- **Conditional formatting:** `data-if="<expr>"` (visibility / per-row filter) and
+  `data-when="<expr>"` + `data-when-style="<css>"` (conditional style). Numeric heatmap:
+  `data-color-scale="min=0;max=100;from=#eef4ff;to=#1e3a8a;text=false"` (omit `min`/`max`
+  to derive per column). Diagonal split header: `data-diagonal` (+ `data-diagonal-top`/`-bottom`/`-line`).
+- **Barcode:** an element with `data-barcode="qr|code128|ean13"` (default `code128`) and
+  `data-value="…"` (or `data-bind`/`data-format`); also `data-error-correction`,
+  `data-module-size`, `data-quiet-zone`, `data-show-text`, `data-color`.
+- **Chart:** an element (or `<table>`) with `data-chart="<kind>"` (`bar|line|area|pie|donut|
+  combo|waterfall|scatter|bubble|radar|gauge|heatmap|gantt`); data via `data-categories`,
+  `data-series`/`data-name`/`data-values`/`data-color`; options include `data-title`,
+  `data-colors` (palette), `data-stacked`, `data-legend`, `data-show-values`, `data-min`/
+  `data-max`/`data-ticks`/`data-value-format`, combo `data-series-types`/`data-series-axes`,
+  scatter/bubble/range `data-series-x`/`-r`/`-low`/`-high`, `data-reference-lines`, gauge
+  `data-gauge-value`/`-max`, heatmap `data-heatmap-colors`/`-labels`, gantt
+  `data-gantt-tasks`/`-start`/`-end`/`-unit`.
+- **TOC:** an element with `data-toc` (+ `data-title`, `data-max-level`, `data-leaders`,
+  `data-indent`, `data-page-numbers`, `data-gap`).
+- **Multi-column:** `data-columns="N"` (+ `data-column-gap`, `data-column-rule`) or CSS `column-count: N`.
+- **Links/anchors:** `<a href="https:…">` → external PDF link; `<a href="#id">` → internal
+  destination resolved against any element's **`id`** attribute.
+- **Positioning/rotation:** `position: fixed|absolute` in CSS + `data-page` (target page)
+  and `data-rotate="<deg>"`.
+
+## Streaming (server-side)
+
+```js
+import { renderToStream } from 'pdf-report-engine';
+const stream = await renderToStream(report, { images: { allowedHosts: ['cdn.example.com'] } });
+return new Response(stream, { headers: { 'content-type': 'application/pdf' } });
+```
+
+`createReport` is the synchronous, offline equivalent — it does **not** resolve remote
+images/fonts, so pass local `options.fonts` / file paths to it.
+
+## Common pitfalls
+
+- `{PAGE}`/`{TOTAL}` only work inside **bands**, never in `body`.
+- Without registered fonts, CJK and other non-base-14 glyphs render as blanks/tofu.
+- `createReport` is offline — a remote image URL or `report.fonts` entry is ignored
+  there; use `renderToBuffer`/`renderToStream` for automatic resolution.
+- Table numeric alignment: use `features: { tnum: true }` (or `fontVariant:
+  'tabular-nums'`) to keep digits vertically aligned.
+- Deprecated-and-ignored IR fields: `subtotal` on cells, `pageBreak.always`,
+  `group.label`, `rowPageCountFooter` — read totals with `$group.<key>_sum`.
+
+## Examples
+
+Runnable, annotated scripts in [`examples/`](./examples):
+`01-basic.mjs` (JS IR) · `02-data-table.mjs` (grouping + subtotals + running totals)
+· `03-from-html.mjs` (HTML adapter) · `04-create-report-stream.mjs` (streaming)
+· `05-images.mjs` (embedded images).

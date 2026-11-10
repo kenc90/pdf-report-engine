@@ -12,6 +12,8 @@
 // model can only imitate markup the adapter actually accepts.
 
 import { parseHtml, serializeHtml, BLOCKS } from './editor-defs.js';
+import { selectDetailedReference } from './ai-reference.js';
+import { extractHtmlFromReply } from './ai-reply.js';
 
 // ---------------------------------------------------------------------------
 // Provider presets
@@ -36,6 +38,26 @@ const PRESETS = {
 
 const CFG_KEY = 'pdf-report-engine:ai:cfg';
 const SECRET_KEY = 'pdf-report-engine:ai:key';
+const libraryReferencePromises = new Map();
+
+function loadLibraryReference(file) {
+  if (!libraryReferencePromises.has(file)) {
+    const promise = fetch(new URL(`./${file}`, import.meta.url), { cache: 'no-cache' })
+      .then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.text();
+      })
+      .then((reference) => {
+        if (!reference.trim()) throw new Error('The reference file is empty');
+        return reference;
+      });
+    libraryReferencePromises.set(file, promise);
+  }
+  return libraryReferencePromises.get(file).catch((error) => {
+    libraryReferencePromises.delete(file);
+    throw error;
+  });
+}
 
 // ---------------------------------------------------------------------------
 // The dialect reference handed to the model
@@ -55,6 +77,8 @@ function buildSystemPrompt() {
   const rules = [
     'You author reports for `pdf-report-engine`, a pure-JavaScript paginated PDF report engine.',
     'You are a helpful assistant embedded in a visual PDF-report editor. Chat with the user about the report they want.',
+    'Answer questions about using the library from the supplied library reference. Keep editor HTML authoring rules distinct from the Node.js API. If the reference does not cover a detail, say so rather than guess.',
+    'For library/API explanations or other questions that do not ask to create or change a report, answer normally without HTML report or JSON dataset blocks.',
     'Keep your prose short and friendly. Whenever you create or change the report, ALWAYS output the FULL document (not a diff, not a fragment) inside a single ```html fenced block, so it can replace the editor contents. If the report binds data (reads `$data`), ALSO output a single ```json fenced block containing that dataset. It is fine to add a one- or two-sentence note around the blocks.',
     'For PDFs, use the extracted text and rendered page images to understand content and layout.',
     'For JRXML/XML, translate the attached source markup into the supported HTML report dialect.',
@@ -132,23 +156,6 @@ function buildContextMessage(currentHtml, currentData) {
   };
 }
 
-/**
- * Pull the report HTML out of a model reply. Prefers an explicit ```html fence,
- * otherwise the first fenced block that is NOT ```json; with no fences at all the
- * whole reply is treated as markup (back-compat for unfenced output).
- */
-function extractHtml(text) {
-  const t = String(text || '').trim();
-  const explicit = t.match(/```html\s*([\s\S]*?)```/i);
-  if (explicit) return explicit[1].trim();
-  const fences = [...t.matchAll(/```(\w*)\s*([\s\S]*?)```/gi)];
-  if (fences.length) {
-    const htmlFence = fences.find((f) => !/^json$/i.test(f[1] || ''));
-    return htmlFence ? htmlFence[2].trim() : '';
-  }
-  return t;
-}
-
 /** Pull the ```json dataset out of a reply; returns the parsed value or null. */
 function extractJson(text) {
   const t = String(text || '').trim();
@@ -158,8 +165,9 @@ function extractJson(text) {
 }
 
 /** Strip fenced html/json blocks (and their fences) from a reply, leaving prose. */
-function stripFences(text) {
-  return String(text || '').replace(/```(?:html|json)[\s\S]*?```/gi, '').trim();
+function stripFences(text, html = '') {
+  const prose = String(text || '').replace(/```(?:html|json)[\s\S]*?```/gi, '').trim();
+  return html && prose === html.trim() ? '' : prose;
 }
 
 /**
@@ -1013,9 +1021,9 @@ export function initAiAssist({ getEditorValue, getEditorData, applyGenerated, st
   function finalizeAssistant(bubble, raw, reasoningText, secs) {
     bubble.hidden = false;
     bubble.textContent = ''; // drop the streamed raw text before rendering
-    const html = extractHtml(raw);
+    const html = extractHtmlFromReply(raw);
     const data = extractJson(raw);
-    const prose = stripFences(raw);
+    const prose = stripFences(raw, html);
     const md = document.createElement('div');
     md.className = 'md';
     md.innerHTML = renderMarkdown(prose || 'Here is the updated report.');
@@ -1148,17 +1156,41 @@ export function initAiAssist({ getEditorValue, getEditorData, applyGenerated, st
     addUserBubble(text || 'Attached files', attachments, images);
     history.push({ role: 'user', content: messageContent, images, documents });
 
+    controller?.abort();
+    controller = new AbortController();
+    const requestController = controller;
+    busy = true;
+    sendBtn.disabled = true;
+    aiStatus('Loading library reference…');
+    let detailedReference = '';
+    try {
+      const fullReference = await loadLibraryReference('llms-full.txt');
+      detailedReference = selectDetailedReference(fullReference, text);
+    } catch (err) {
+      if (!requestController.signal.aborted) {
+        addBubble('sys', `Detailed library reference unavailable; continuing without it (${err.message}).`);
+      }
+    }
+    if (requestController.signal.aborted) {
+      busy = false;
+      sendBtn.disabled = false;
+      aiStatus('Stopped.');
+      return;
+    }
+
     const messages = [{ role: 'system', content: buildSystemPrompt() }];
+    if (detailedReference) {
+      messages.push({
+        role: 'system',
+        content: `## Relevant detailed library reference\nUse these sections for additional detail relevant to the user's question.\n\n${detailedReference}`,
+      });
+    }
     if (contextEl.checked) {
       const ctx = buildContextMessage(getEditorValue(), getEditorData ? getEditorData() : '');
       if (ctx) messages.push(ctx);
     }
     messages.push(...history);
 
-    controller?.abort();
-    controller = new AbortController();
-    busy = true;
-    sendBtn.disabled = true;
     aiStatus('');
     const think = createThinkingBox();
     const ans = addBubble('assistant', ''); // hidden until the first token, then fills live
@@ -1167,7 +1199,7 @@ export function initAiAssist({ getEditorValue, getEditorData, applyGenerated, st
     let reasoning = '';
     let sawText = false;
     try {
-      const raw = await callProvider(preset, form, messages, controller.signal, {
+      const raw = await callProvider(preset, form, messages, requestController.signal, {
         reasoning: form.reasoning,
         onReasoning: (t) => { reasoning += t; think.addReasoning(t); think.setPhase('Thinking…'); },
         onText: (t) => { full += t; if (!sawText) { sawText = true; think.setPhase('Writing…'); ans.hidden = false; } ans.textContent += t; messagesEl.scrollTop = messagesEl.scrollHeight; },
