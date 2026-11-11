@@ -381,12 +381,56 @@ function geminiMessage(m) {
   return { role: m.role === 'assistant' ? 'model' : 'user', parts };
 }
 
+function validTokenCount(value) {
+  return Number.isFinite(value) && value >= 0 ? Math.floor(value) : null;
+}
+
+function sumTokenCounts(...values) {
+  const counts = values.map(validTokenCount).filter((value) => value !== null);
+  return counts.length ? counts.reduce((total, count) => total + count, 0) : null;
+}
+
+export function normalizeTokenUsage(kind, usage) {
+  if (!usage || typeof usage !== 'object') return null;
+
+  let inputTokens;
+  let outputTokens;
+  let totalTokens;
+  if (kind === 'anthropic') {
+    inputTokens = sumTokenCounts(
+      usage.input_tokens,
+      usage.cache_creation_input_tokens,
+      usage.cache_read_input_tokens,
+    );
+    outputTokens = validTokenCount(usage.output_tokens);
+  } else if (kind === 'gemini') {
+    inputTokens = validTokenCount(usage.promptTokenCount);
+    outputTokens = validTokenCount(usage.candidatesTokenCount);
+    totalTokens = validTokenCount(usage.totalTokenCount);
+  } else {
+    inputTokens = validTokenCount(usage.prompt_tokens);
+    outputTokens = validTokenCount(usage.completion_tokens);
+    totalTokens = validTokenCount(usage.total_tokens);
+  }
+
+  if (totalTokens === undefined || totalTokens === null) {
+    totalTokens = inputTokens !== null && inputTokens !== undefined
+      && outputTokens !== null && outputTokens !== undefined
+      ? inputTokens + outputTokens
+      : null;
+  }
+  if (inputTokens === null || inputTokens === undefined) inputTokens = null;
+  if (outputTokens === null || outputTokens === undefined) outputTokens = null;
+  if (inputTokens === null && outputTokens === null && totalTokens === null) return null;
+  return { inputTokens, outputTokens, totalTokens };
+}
+
 /**
  * OpenAI Chat Completions — also any OpenAI-compatible base URL (incl. Ollama /v1).
  * When `handlers` is supplied it streams and forwards reasoning deltas
  * (`reasoning_content` / `reasoning`, emitted by DeepSeek-R1 / Ollama / etc.).
  */
-async function callOpenAI({ base, key, model }, messages, signal, handlers) {
+async function callOpenAI({ base, key, model, includeUsage }, messages, signal, handlers) {
   const url = `${base.replace(/\/$/, '')}/chat/completions`;
   const headers = { 'Content-Type': 'application/json' };
   if (key) headers.Authorization = `Bearer ${key}`;
@@ -395,15 +439,24 @@ async function callOpenAI({ base, key, model }, messages, signal, handlers) {
     method: 'POST',
     signal,
     headers,
-    body: JSON.stringify({ model, temperature: 0.2, messages: messages.map(openAIMessage), ...(stream ? { stream: true } : {}) }),
+    body: JSON.stringify({
+      model,
+      temperature: 0.2,
+      messages: messages.map(openAIMessage),
+      ...(stream ? { stream: true, ...(includeUsage ? { stream_options: { include_usage: true } } : {}) } : {}),
+    }),
   });
   if (!res.ok) throw await readError(res);
   if (!stream) {
     const data = await res.json();
+    const usage = normalizeTokenUsage('openai', data.usage);
+    if (usage) handlers?.onUsage?.(usage);
     return data.choices?.[0]?.message?.content ?? '';
   }
   let full = '';
   await sseTokens(res, (d) => {
+    const usage = normalizeTokenUsage('openai', d.usage);
+    if (usage) handlers.onUsage?.(usage);
     const delta = d.choices?.[0]?.delta || {};
     const r = delta.reasoning_content || delta.reasoning;
     if (r) handlers.onReasoning?.(r);
@@ -442,10 +495,20 @@ async function callAnthropic({ base, key, model }, messages, signal, handlers) {
   if (!res.ok) throw await readError(res);
   if (!handlers) {
     const data = await res.json();
+    const usage = normalizeTokenUsage('anthropic', data.usage);
+    if (usage) handlers?.onUsage?.(usage);
     return (data.content || []).map((c) => c.text || '').join('');
   }
   let full = '';
+  let rawUsage = {};
   await sseTokens(res, (d) => {
+    if (d.type === 'message_start' && d.message?.usage) {
+      rawUsage = { ...rawUsage, ...d.message.usage };
+    } else if (d.type === 'message_delta' && d.usage) {
+      rawUsage = { ...rawUsage, ...d.usage };
+    }
+    const usage = normalizeTokenUsage('anthropic', rawUsage);
+    if (usage) handlers.onUsage?.(usage);
     if (d.type === 'content_block_delta') {
       const dl = d.delta || {};
       if (dl.type === 'thinking_delta') handlers.onReasoning?.(dl.thinking || '');
@@ -475,10 +538,14 @@ async function callGemini({ base, key, model }, messages, signal, handlers) {
   if (!res.ok) throw await readError(res);
   if (!handlers) {
     const data = await res.json();
+    const usage = normalizeTokenUsage('gemini', data.usageMetadata);
+    if (usage) handlers?.onUsage?.(usage);
     return (data.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
   }
   let full = '';
   await sseTokens(res, (d) => {
+    const usage = normalizeTokenUsage('gemini', d.usageMetadata);
+    if (usage) handlers.onUsage?.(usage);
     for (const p of (d.candidates?.[0]?.content?.parts || [])) {
       if (p.thought) handlers.onReasoning?.(p.text || '');
       else if (p.text) { full += p.text; handlers.onText?.(p.text); }
@@ -489,7 +556,12 @@ async function callGemini({ base, key, model }, messages, signal, handlers) {
 
 /** `handlers` (onReasoning/onText/reasoning) ⇒ streaming; omitted ⇒ single JSON reply. */
 function callProvider(preset, cfg, messages, signal, handlers) {
-  const args = { base: cfg.baseUrl || preset.base, key: cfg.apiKey, model: cfg.model };
+  const args = {
+    base: cfg.baseUrl || preset.base,
+    key: cfg.apiKey,
+    model: cfg.model,
+    includeUsage: cfg.provider === 'openai' || cfg.provider === 'openrouter',
+  };
   if (preset.kind === 'anthropic') return callAnthropic(args, messages, signal, handlers);
   if (preset.kind === 'gemini') return callGemini(args, messages, signal, handlers);
   return callOpenAI(args, messages, signal, handlers);
@@ -1018,7 +1090,7 @@ export function initAiAssist({ getEditorValue, getEditorData, applyGenerated, st
   }
 
   /** Turn a streaming bubble (holding the raw reply) into a finalized assistant message. */
-  function finalizeAssistant(bubble, raw, reasoningText, secs) {
+  function finalizeAssistant(bubble, raw, reasoningText, secs, usage) {
     bubble.hidden = false;
     bubble.textContent = ''; // drop the streamed raw text before rendering
     const html = extractHtmlFromReply(raw);
@@ -1030,6 +1102,16 @@ export function initAiAssist({ getEditorValue, getEditorData, applyGenerated, st
     bubble.appendChild(md);
     if (reasoningText && reasoningText.trim()) bubble.appendChild(buildReasoningDetails(reasoningText.trim(), secs));
     if (html) buildDocPanel(bubble, html, data);
+    const usageEl = document.createElement('div');
+    usageEl.className = 'ai-usage';
+    usageEl.textContent = usage
+      ? `Token usage · ${[
+        usage.inputTokens !== null ? `input ${usage.inputTokens}` : '',
+        usage.outputTokens !== null ? `output ${usage.outputTokens}` : '',
+        usage.totalTokens !== null ? `total ${usage.totalTokens}` : '',
+      ].filter(Boolean).join(' · ')}`
+      : 'Token usage not reported by provider';
+    bubble.appendChild(usageEl);
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
 
@@ -1197,22 +1279,24 @@ export function initAiAssist({ getEditorValue, getEditorData, applyGenerated, st
     ans.hidden = true;
     let full = '';
     let reasoning = '';
+    let usage = null;
     let sawText = false;
     try {
       const raw = await callProvider(preset, form, messages, requestController.signal, {
         reasoning: form.reasoning,
         onReasoning: (t) => { reasoning += t; think.addReasoning(t); think.setPhase('Thinking…'); },
         onText: (t) => { full += t; if (!sawText) { sawText = true; think.setPhase('Writing…'); ans.hidden = false; } ans.textContent += t; messagesEl.scrollTop = messagesEl.scrollHeight; },
+        onUsage: (reported) => { usage = reported; },
       });
       const secs = think.remove();
       const finalText = String(raw || full || '');
       if (!finalText.trim() && !reasoning.trim()) { ans.remove(); addBubble('err', 'The model returned no content.'); return; }
       history.push({ role: 'assistant', content: finalText });
-      finalizeAssistant(ans, finalText, reasoning, secs);
+      finalizeAssistant(ans, finalText, reasoning, secs, usage);
     } catch (err) {
       const secs = think.remove();
       if (err && err.name === 'AbortError') {
-        if (full.trim() || reasoning.trim()) { history.push({ role: 'assistant', content: full }); finalizeAssistant(ans, full, reasoning, secs); }
+        if (full.trim() || reasoning.trim()) { history.push({ role: 'assistant', content: full }); finalizeAssistant(ans, full, reasoning, secs, usage); }
         else ans.remove();
         aiStatus('Stopped.');
       } else {
