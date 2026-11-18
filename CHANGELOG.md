@@ -2,6 +2,23 @@
 
 Notable user-facing changes for each release are listed here.
 
+## [Unreleased]
+
+### Added
+
+- Browser-only live DOM capture from current computed styles, including canvas snapshots as PNG images.
+- Interactive live DOM demo covering supported captures, layout limitations, and intentional failures.
+
+### Changed
+
+- Made live DOM capture a standalone Getting Started section and added demo links to documentation footers.
+
+### Fixed
+
+- Preserve inline content alongside block elements without duplicating the parent container's box styling.
+- Extend paragraph background fills through vertical padding and preserve rounded backgrounds on flex items.
+- Include text nested in flex and container blocks when collecting remote-font subsets.
+
 ## [0.2.1] - 2026-11-10
 
 ### Added
