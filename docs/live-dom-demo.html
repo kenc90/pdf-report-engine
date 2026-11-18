@@ -104,7 +104,7 @@
     .comprehensive-assets svg { width: 150px; height: 80px; }
     .comprehensive-list { margin: 4px 0 12px; }
     .comprehensive-list li { margin: 3px 0; }
-    .comprehensive-barcode { width: 210px; height: 38px; margin: 4px 0 12px; }
+    .comprehensive-barcode { display: block; width: 220px; height: 60px; margin: 4px 0 12px; }
     .hidden-panel .demo-target { display: none; }
     .code-caption { margin: 10px 0 0; color: var(--muted); font-size: .86rem; }
     .pdf-preview { width: 100%; height: min(76vh, 850px); min-height: 480px; border: 1px solid var(--line); border-radius: 8px; background: #f2f4f7; }
@@ -299,7 +299,7 @@ const bytes = await renderToBuffer(report);</code></pre>
 
       <section class="demo-panel" id="panel-comprehensive" role="tabpanel" aria-labelledby="tab-comprehensive" data-status="good" data-example="comprehensive">
         <h3 id="comprehensive-capture">Full operations report · feature showcase</h3>
-        <p>A longer, multi-page capture combining common supported DOM blocks and layout: computed CSS, flex cards, a striped table, a canvas chart captured as an image, a data-bound barcode, two-column text, image, inline SVG, list, table of contents, and repeating page bands.</p>
+        <p>A longer, multi-page capture combining common supported DOM blocks and layout: computed CSS, flex cards, a striped table, a canvas chart and barcode captured as images, two-column text, image, inline SVG, list, table of contents, and repeating page bands.</p>
         <div class="sample-sheet">
           <div class="demo-target comprehensive-report" id="comprehensive-report">
             <header class="comprehensive-cover">
@@ -366,19 +366,16 @@ const bytes = await renderToBuffer(report);</code></pre>
               <li>Review automation results at the monthly operations meeting.</li>
             </ul>
             <p><strong>Document reference:</strong> OPS-2026-Q3-026</p>
-            <div class="comprehensive-barcode" data-barcode="code128" data-bind="$data.reference" data-color="#174a73" aria-label="Report reference barcode"></div>
+            <canvas class="comprehensive-barcode" id="comprehensive-barcode" width="660" height="180" aria-label="Code 128 barcode for report reference OPS-2026-Q3-026"></canvas>
           </div>
         </div>
-        <p class="code-caption">The chart is already drawn in the DOM canvas; capture the element to include its pixels as an image in the report:</p>
+        <p class="code-caption">The chart and barcode are drawn in DOM canvases; capture the element to include their pixels as images in the report:</p>
         <pre data-copy><code>const report = htmlElementToReportDoc(
   document.querySelector('#comprehensive-report'),
   {
     page: { size: 'a4', margin: 36 },
     header: '&lt;div style="font-size:9px;font-weight:bold;color:#174a73;border-bottom:1px solid #dbe5ef;padding-bottom:6px"&gt;NORTHWIND STUDIO · QUARTERLY SERVICE REVIEW&lt;/div&gt;',
     footer: '&lt;div style="font-size:8px;color:#586c80;text-align:right;border-top:1px solid #dbe5ef;padding-top:5px"&gt;Internal use · Page {PAGE} of {TOTAL}&lt;/div&gt;',
-    data: {
-      reference: 'OPS-2026-Q3-026',
-    },
   },
 );
 const bytes = await renderToBuffer(report);</code></pre>

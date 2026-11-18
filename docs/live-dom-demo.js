@@ -10,6 +10,7 @@ const preview = document.getElementById('preview');
 const download = document.getElementById('download');
 let currentUrl;
 let generation = 0;
+const comprehensiveReference = 'OPS-2026-Q3-026';
 
 function activePanel() {
   return document.querySelector('.demo-panel.active');
@@ -46,13 +47,6 @@ async function generateActiveReport(scrollToPreview = false) {
           footer: example === 'bands'
             ? '<div style="font-size:8px;color:#586c80;text-align:right;border-top:1px solid #dbe5ef;padding-top:5px">Confidential · Page {PAGE} of {TOTAL}</div>'
             : '<div style="font-size:8px;color:#586c80;text-align:right;border-top:1px solid #dbe5ef;padding-top:5px">Internal use · Page {PAGE} of {TOTAL}</div>',
-          ...(example === 'comprehensive'
-            ? {
-                data: {
-                  reference: 'OPS-2026-Q3-026',
-                },
-              }
-            : {}),
         }
       : {};
     const report = htmlElementToReportDoc(target, options);
@@ -225,6 +219,27 @@ if (comprehensiveContext) {
     comprehensiveContext.fillStyle = '#526579';
     comprehensiveContext.fillText(item.name, x + 15, 199);
   });
+}
+
+const comprehensiveBarcode = document.getElementById('comprehensive-barcode');
+const barcodeContext = comprehensiveBarcode.getContext('2d');
+if (barcodeContext) {
+  // Code 128 modules for the fixed reference shown in this demo.
+  const modules = '11010010000100011101101110111011011011101000100110111001100111001010011101100110011100101100111010010011011100110100011101100101110010011011100100111011001100111001011001110100111010011001100011101011';
+  const quietZone = 10;
+  const moduleWidth = comprehensiveBarcode.width / (modules.length + quietZone * 2);
+  const barHeight = 126;
+  barcodeContext.fillStyle = '#fff';
+  barcodeContext.fillRect(0, 0, comprehensiveBarcode.width, comprehensiveBarcode.height);
+  barcodeContext.fillStyle = '#174a73';
+  for (let index = 0; index < modules.length; index += 1) {
+    if (modules[index] === '1') {
+      barcodeContext.fillRect((quietZone + index) * moduleWidth, 0, moduleWidth, barHeight);
+    }
+  }
+  barcodeContext.font = '30px Arial';
+  barcodeContext.textAlign = 'center';
+  barcodeContext.fillText(comprehensiveReference, comprehensiveBarcode.width / 2, 164);
 }
 
 void generateActiveReport();
