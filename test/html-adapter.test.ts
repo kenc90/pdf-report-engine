@@ -309,6 +309,7 @@ describe('htmlElementToReportDoc', () => {
       ownerDocument,
       {
         'font-size': '18px',
+        'line-height': '28.8px',
         'font-family': '"Times New Roman", Arial',
         color: 'rgb(200, 0, 0)',
         'background-color': 'rgba(0, 0, 0, 0)',
@@ -338,6 +339,7 @@ describe('htmlElementToReportDoc', () => {
     expect(report.language).toBe('en-US');
     expect(block.content).toBe('Updated by page code');
     expect(block.fontSize).toBeCloseTo(13.5, 1);
+    expect(block.lineHeight).toBeCloseTo(1.6, 5);
     expect(block.fontFamily).toEqual(['Times New Roman', 'Arial']);
     expect(block.color).toBe('rgb(200, 0, 0)');
     expect(block.backgroundColor).toBeUndefined();

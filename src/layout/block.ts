@@ -24,7 +24,7 @@ import { toPt } from '../core/units.js';
 import { toRGB } from '../core/color.js';
 import { probeImageSize, pxToPt } from '../core/image.js';
 import { resolveContent, type LayoutContext } from './context.js';
-import { typeset, type Line } from '../text/typeset.js';
+import { lineBaseline, typeset, type Line } from '../text/typeset.js';
 import type { ResolvedStyle } from '../text/style.js';
 import { resolveBox, resolveBorders, resolveRadius, resolveShadow, resolveGradient, borderRGB, borderDash, type EdgeInsets } from './box.js';
 import { translateCommands, type Fragment, type DrawCommand, type OutlineEntry, type Radius, type ResolvedGradient, type ResolvedShadow, type PolyPoint } from './flow.js';
@@ -427,7 +427,7 @@ export function fragmentsFromLines(lines: Line[], p: FragParams): Fragment[] {
     commands.push({
       op: 'text',
       x: textX,
-      baselineY: line.ascent,
+      baselineY: lineBaseline(line),
       runs: line.runs,
       gapWidth: line.gapWidth,
       decorations: [],

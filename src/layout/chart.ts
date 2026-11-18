@@ -10,7 +10,7 @@
  */
 import type { ChartBlock, ChartSeries, Expr, ValueAxisOptions, GanttTask } from '../ir/schema.js';
 import type { ResolvedStyle } from '../text/style.js';
-import { typeset } from '../text/typeset.js';
+import { lineBaseline, typeset } from '../text/typeset.js';
 import { resolveContent, type LayoutContext } from './context.js';
 import type { BlockLayoutOptions } from './block.js';
 import { resolveBox, type EdgeInsets } from './box.js';
@@ -126,7 +126,7 @@ export function layoutChart(
       commands.push({
         op: 'text',
         x: left,
-        baselineY: titleHeight + line.ascent,
+        baselineY: titleHeight + lineBaseline(line),
         runs: line.runs,
         gapWidth: 0,
         decorations: [],
@@ -1241,7 +1241,7 @@ function layoutGantt(
     const titleStyle = ctx.style({ fontWeight: 700, fontSize: style.fontSize + 1 }, style);
     const titleResult = typeset(resolveContent(block.title, ctx, titleStyle, opts.scope), width);
     for (const line of titleResult.lines) {
-      commands.push({ op: 'text', x: left, baselineY: titleH + line.ascent, runs: line.runs, gapWidth: 0, decorations: [] });
+      commands.push({ op: 'text', x: left, baselineY: titleH + lineBaseline(line), runs: line.runs, gapWidth: 0, decorations: [] });
       titleH += line.height;
     }
     if (titleH > 0) titleH += LABEL_GAP;

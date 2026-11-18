@@ -68,6 +68,11 @@ export interface Line {
   gapWidth: number;
 }
 
+/** Baseline position within the line box, with leading split above and below the glyphs. */
+export function lineBaseline(line: Pick<Line, 'height' | 'ascent' | 'descent'>): number {
+  return line.ascent + (line.height - line.ascent - line.descent) / 2;
+}
+
 export interface TypesetResult {
   lines: Line[];
   maxLineWidth: number;

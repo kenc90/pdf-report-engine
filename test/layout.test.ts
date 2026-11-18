@@ -59,6 +59,18 @@ describe('block layout', () => {
     expect(frags.at(-1)!.after).toBeGreaterThanOrEqual(0);
   });
 
+  it('centers text within extra line-height leading', () => {
+    const fragment = layoutBlock(
+      { type: 'paragraph', content: 'hi', lineHeight: 2 },
+      makeCtx(),
+      opts(100),
+    )[0]!;
+    const text = fragment.commands.find((command) => command.op === 'text');
+
+    expect(fragment.height).toBeCloseTo(20);
+    expect(text?.op === 'text' && text.baselineY).toBeCloseTo(12.5);
+  });
+
   it('extends paragraph backgrounds through vertical padding', () => {
     const paragraph: ParagraphBlock = {
       type: 'paragraph',
@@ -118,6 +130,21 @@ describe('table layout', () => {
     expect(frags.some((fragment) =>
       fragment.commands.some((command) => command.op === 'line' && command.x1 === command.x2 && command.lineWidth === 2),
     )).toBe(true);
+  });
+
+  it('centers table-cell text within extra line-height leading', () => {
+    const table = {
+      type: 'table',
+      columns: [{ width: 80 }],
+      staticRows: [{
+        kind: 'detail',
+        cells: [{ content: 'item', style: { lineHeight: 2 } }],
+      }],
+    } as unknown as TableBlock;
+    const fragment = layoutBlock(table, makeCtx(), opts(80))[0]!;
+    const text = fragment.commands.find((command) => command.op === 'text');
+
+    expect(text?.op === 'text' && text.baselineY).toBeCloseTo(13.5);
   });
 
   function sampleTable(): TableBlock {

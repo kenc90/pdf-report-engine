@@ -30,7 +30,7 @@ import { exprSource, type ExprContext } from '../expr/eval.js';
 import { toPt } from '../core/units.js';
 import { toRGB, type ColorInput, type RGB } from '../core/color.js';
 import { resolveContent, type LayoutContext } from './context.js';
-import { typeset, type Line, type InlineSource } from '../text/typeset.js';
+import { lineBaseline, typeset, type Line, type InlineSource } from '../text/typeset.js';
 import type { ResolvedStyle } from '../text/style.js';
 import { findBreaks } from '../text/linebreak.js';
 import { resolveBox, parseBorder, borderRGB, borderDash, type Sides } from './box.js';
@@ -507,7 +507,7 @@ function splitTextRow(layouts: CellLayout[], rowHeight: number, row: Fragment): 
         commands.push({
           op: 'text',
           x: cell.x + cell.pad.left,
-          baselineY: lineTop - top + line.ascent,
+          baselineY: lineTop - top + lineBaseline(line),
           runs: line.runs,
           gapWidth: line.gapWidth,
           decorations: [],
@@ -561,7 +561,7 @@ function paintCellContent(
     commands.push({
       op: 'text',
       x: cl.x + cl.pad.left,
-      baselineY: lineY + line.ascent,
+      baselineY: lineY + lineBaseline(line),
       runs: line.runs,
       gapWidth: line.gapWidth,
       decorations: [],
@@ -650,13 +650,13 @@ function paintDiagonal(
   const topX = x + pad.left + (topFlushRight ? Math.max(0, innerW - diag.topW) : 0);
   let lineY = y + pad.top;
   for (const line of diag.top) {
-    commands.push({ op: 'text', x: topX, baselineY: lineY + line.ascent, runs: line.runs, gapWidth: line.gapWidth, decorations: [] });
+    commands.push({ op: 'text', x: topX, baselineY: lineY + lineBaseline(line), runs: line.runs, gapWidth: line.gapWidth, decorations: [] });
     lineY += line.height;
   }
   const bottomX = x + pad.left + (bottomFlushRight ? Math.max(0, innerW - diag.bottomW) : 0);
   let bottomY = y + h - pad.bottom - diag.bottomH;
   for (const line of diag.bottom) {
-    commands.push({ op: 'text', x: bottomX, baselineY: bottomY + line.ascent, runs: line.runs, gapWidth: line.gapWidth, decorations: [] });
+    commands.push({ op: 'text', x: bottomX, baselineY: bottomY + lineBaseline(line), runs: line.runs, gapWidth: line.gapWidth, decorations: [] });
     bottomY += line.height;
   }
   if (!diag.line) return;
@@ -954,7 +954,7 @@ function layoutGroupBand(unit: Extract<Unit, { t: 'groupHeader' | 'groupFooter' 
   if (style.backgroundColor) commands.push({ op: 'fillRect', x: uc.contentLeft, y: 0, w: totalW, h: height, color: toRGB(style.backgroundColor) });
   let lineY = pad.top;
   for (const line of result.lines) {
-    commands.push({ op: 'text', x: uc.contentLeft + pad.left, baselineY: lineY + line.ascent, runs: line.runs, gapWidth: line.gapWidth, decorations: [] });
+    commands.push({ op: 'text', x: uc.contentLeft + pad.left, baselineY: lineY + lineBaseline(line), runs: line.runs, gapWidth: line.gapWidth, decorations: [] });
     lineY += line.height;
   }
 

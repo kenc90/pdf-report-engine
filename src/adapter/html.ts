@@ -327,8 +327,9 @@ function applyDecl(prop: string, value: string, set: (k: string, v: unknown) => 
       return;
     case 'line-height':
       // Only a unitless ratio or `normal` is meaningful to the IR resolver; a
-      // fixed `px` line-height without a known font size cannot be scaled, so it
-      // is ignored rather than silently mis-multiplied.
+      // live snapshot converts computed px values to a ratio before parsing.
+      // Fixed `px` line-height from authored HTML without a known font size is
+      // ignored rather than silently mis-multiplied.
       if (/^\d*\.?\d+$/.test(value)) set('lineHeight', Number(value));
       else if (value === 'normal') set('lineHeight', 'normal');
       return;
@@ -2232,7 +2233,14 @@ function domNodeToHNode(
   if (computed) {
     const style = COMPUTED_STYLE_PROPERTIES
       .map((property) => [property, computed.getPropertyValue(property)] as const)
-      .map(([property, value]) => [property, property === 'transform' ? reportRotation(value) : value] as const)
+      .map(([property, value]) => [
+        property,
+        property === 'transform'
+          ? reportRotation(value)
+          : property === 'line-height'
+            ? normalizeComputedLineHeight(value, computed)
+            : value,
+      ] as const)
       .filter(([property, value]) => {
         const keyword = value.trim().toLowerCase();
         return !(
@@ -2266,6 +2274,15 @@ function domNodeToHNode(
   }
   if (computed && !textVisible && children.length === 0) return undefined;
   return { type: 'element', tag: isCanvas ? 'img' : element.localName.toLowerCase(), attrs, children };
+}
+
+function normalizeComputedLineHeight(value: string, computed: CSSStyleDeclaration): string {
+  const match = /^\s*(-?(?:\d+\.?\d*|\.\d+))px\s*$/i.exec(value);
+  if (!match) return value;
+  const fontSize = Number.parseFloat(computed.getPropertyValue('font-size'));
+  const lineHeight = Number(match[1]);
+  if (!Number.isFinite(fontSize) || fontSize <= 0 || !Number.isFinite(lineHeight)) return value;
+  return String(lineHeight / fontSize);
 }
 
 function reportRotation(transform: string): string {

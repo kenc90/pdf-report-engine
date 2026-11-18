@@ -11,6 +11,7 @@ Notable user-facing changes for each release are listed here.
 
 ### Fixed
 
+- Preserve browser-computed line-height and center text within the line box in live-DOM reports.
 - Preserve inline content alongside block elements without duplicating the parent container's box styling.
 - Extend paragraph background fills through vertical padding and preserve rounded backgrounds on flex items.
 - Include text nested in flex and container blocks when collecting remote-font subsets.

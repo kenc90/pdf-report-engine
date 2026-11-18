@@ -9,7 +9,7 @@
  */
 import type { BarcodeBlock } from '../ir/schema.js';
 import type { ResolvedStyle } from '../text/style.js';
-import { typeset } from '../text/typeset.js';
+import { lineBaseline, typeset } from '../text/typeset.js';
 import type { LayoutContext } from './context.js';
 import type { BlockLayoutOptions } from './block.js';
 import { resolveBox } from './box.js';
@@ -87,7 +87,7 @@ export function layoutBarcode(
     const text = clipText(label, labelStyle, Math.max(1, codeWidth));
     const line = typeset([{ text, style: labelStyle }], UNBOUNDED).lines[0];
     if (line) {
-      textCommand = { op: 'text', x: 0, baselineY: barHeight + 3 + line.ascent, runs: line.runs, gapWidth: 0, decorations: [] };
+      textCommand = { op: 'text', x: 0, baselineY: barHeight + 3 + lineBaseline(line), runs: line.runs, gapWidth: 0, decorations: [] };
       codeHeight += 3 + line.height;
     }
   }

@@ -13,7 +13,7 @@
  */
 import type { TocBlock } from '../ir/schema.js';
 import type { ResolvedStyle } from '../text/style.js';
-import { typeset, type PositionedRun } from '../text/typeset.js';
+import { lineBaseline, typeset, type PositionedRun } from '../text/typeset.js';
 import type { LayoutContext } from './context.js';
 import type { BlockLayoutOptions } from './block.js';
 import { resolveBox } from './box.js';
@@ -111,7 +111,7 @@ export function layoutToc(block: TocBlock, ctx: LayoutContext, opts: BlockLayout
         {
           op: 'text',
           x: left,
-          baselineY: line.ascent,
+          baselineY: lineBaseline(line),
           runs: line.runs,
           gapWidth: 0,
           decorations: [],
