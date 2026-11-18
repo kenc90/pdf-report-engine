@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Live DOM to PDF demo · pdf-report-engine</title>
+  <meta name="description" content="Try converting live browser elements and their current computed styles into selectable, paginated PDF reports." />
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('pre-theme');
+        if (t !== 'light' && t !== 'dark') {
+          t = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Symbols&display=swap" />
+  <style>
+    .demo-main { max-width: 1040px; margin: 0 auto; padding: 26px 20px 56px; }
+    .demo-main h1 { margin: 0 0 8px; color: var(--heading); font-size: clamp(1.7rem, 3vw, 2.3rem); }
+    .demo-main h2 { margin: 0 0 6px; color: var(--heading); font-size: 1.15rem; }
+    .demo-main p { max-width: 78ch; }
+    .demo-card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px; margin: 18px 0; }
+    .demo-tabs { display: flex; gap: 6px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 12px; }
+    .demo-tab, .demo-button {
+      border: 1px solid var(--line); border-radius: 8px; padding: 8px 13px;
+      background: var(--card); color: var(--heading); font: 650 13px/1.2 inherit; cursor: pointer;
+    }
+    .demo-tab:hover, .demo-button:hover { background: var(--toc-hover); }
+    .demo-tab[aria-selected="true"] { border-color: var(--brand); background: var(--brand); color: var(--on-brand); }
+    .demo-panel { display: none; padding-top: 16px; }
+    .demo-panel.active { display: block; }
+    .demo-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 16px 0; }
+    .demo-controls .spacer { flex: 1 1 auto; }
+    .demo-status { min-height: 24px; color: var(--muted); font-size: .92rem; }
+    .demo-status.error { color: #b4232a; }
+    .demo-status.success { color: #167447; }
+    .demo-status.warning { color: #9a5b00; }
+    .demo-target { background: #fff; color: #263445; font-family: Arial, Helvetica, sans-serif; }
+    .sample-sheet { max-width: 760px; margin: 0 auto; padding: 26px; border: 1px solid #dfe5ec; border-radius: 12px; box-shadow: 0 8px 24px rgba(27,39,51,.08); }
+    .invoice-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; border-bottom: 2px solid #dbe5ef; padding-bottom: 16px; }
+    .invoice-head h2 { color: #174a73; font-size: 25px; margin: 0; }
+    .invoice-head p { margin: 2px 0; }
+    .invoice-meta { text-align: right; color: #526579; font-size: 13px; }
+    .bill-to { margin: 20px 0 12px; }
+    .bill-to strong { display: block; color: #174a73; }
+    .demo-target table { width: 100%; border-collapse: collapse; margin: 14px 0; }
+    .demo-target th { background: #eaf2f8; color: #174a73; text-align: left; }
+    .demo-target th, .demo-target td { padding: 9px 10px; border-bottom: 1px solid #dbe5ef; }
+    .demo-target .money { text-align: right; font-variant-numeric: tabular-nums; }
+    .invoice-total { text-align: right; color: #174a73; font-weight: 700; font-size: 18px; }
+    .invoice-note { margin-top: 20px; padding: 11px 13px; border-left: 4px solid #e29b38; background: #fff7e8; }
+    .live-color { color: #174a73; transition: color .2s; }
+    .kpi-row { display: flex; gap: 14px; align-items: stretch; }
+    .kpi-card { flex: 1 1 0; min-width: 0; border: 1px solid #dce5ef; border-radius: 10px; padding: 16px; background: #f7fafc; }
+    .kpi-label { margin: 0 0 6px; color: #586c80; font-size: 13px; }
+    .kpi-value { margin: 0; color: #174a73; font-size: 25px; font-weight: 750; line-height: 1.15; }
+    .kpi-change { margin: 8px 0 0; color: #16834d; font-size: 12px; }
+    .kpi-change .trend-arrow { font-family: "Noto Sans Symbols", sans-serif; font-size: 15px; }
+    .report-title { margin: 0 0 14px; color: #174a73; }
+    .grid-sample { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .grid-tile { min-height: 90px; padding: 13px; border-radius: 8px; background: #edf3fa; border: 1px solid #d5e0ed; }
+    .grid-tile strong { display: block; color: #174a73; margin-bottom: 5px; }
+    .loss-note { padding: 12px 14px; border: 1px solid var(--note-line); border-radius: 9px; background: var(--note-bg); color: var(--note-ink); }
+    .unavailable { display: none; }
+    .pseudo-card { position: relative; padding: 20px; border: 1px solid #dce5ef; border-radius: 10px; background: #f7fafc; }
+    .pseudo-card::before { content: "Generated by CSS ::before — not a DOM node"; display: block; padding: 8px; margin-bottom: 10px; color: #9c2c50; background: #fde7ee; font-weight: 700; }
+    .canvas-wrap { display: flex; justify-content: center; padding: 12px; background: #f8fafc; }
+    #sample-canvas { width: 520px; max-width: 100%; height: 190px; }
+    .hidden-panel .demo-target { display: none; }
+    .code-caption { margin: 10px 0 0; color: var(--muted); font-size: .86rem; }
+    .pdf-preview { width: 100%; height: min(76vh, 850px); min-height: 480px; border: 1px solid var(--line); border-radius: 8px; background: #f2f4f7; }
+    .preview-title { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    @media (max-width: 620px) {
+      .invoice-head { flex-direction: column; }
+      .invoice-meta { text-align: left; }
+      .kpi-row { flex-direction: column; }
+      .grid-sample { grid-template-columns: repeat(2, 1fr); }
+      .sample-sheet { padding: 17px; }
+      .demo-card { padding: 13px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header" id="top">
+    <div class="wrap">
+      <span class="brand">pdf-report-engine<span class="dot">.</span><span class="vtag" data-version></span></span>
+      <nav class="nav">
+        <a href="index.html">Home</a>
+        <a href="getting-started.html">Getting started</a>
+        <a href="examples.html">Examples</a>
+        <a href="api.html">API</a>
+        <a href="browser-demo.html">Browser demo</a>
+      </nav>
+      <button class="search-trigger" type="button" aria-label="Search documentation">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
+        <span>Search</span><kbd>⌘K</kbd>
+      </button>
+      <button class="theme-toggle" type="button" aria-label="Toggle light or dark theme" title="Toggle light / dark theme">
+        <svg class="i-moon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="demo-main">
+    <h1>Live DOM → PDF</h1>
+    <p>
+      Choose an example to see what the browser DOM adapter can capture. It reads the
+      selected element's current content and computed styles, then hands them to the
+      report engine. The page JavaScript is not rerun by the converter.
+    </p>
+    <div class="note">
+      <strong>Expect a report, not a screenshot.</strong> Text stays selectable and the
+      report engine paginates it. Supported styles translate well; unsupported browser
+      layout and generated content may be lost. The tabs below include both good fits
+      and deliberate limitations.
+    </div>
+
+    <section class="demo-card" id="live-dom-examples" aria-label="Live DOM examples">
+      <h2>Live DOM examples</h2>
+      <p>Each tab captures the active element from the current page state.</p>
+      <div class="demo-tabs" role="tablist" aria-label="Choose a live DOM example">
+        <button class="demo-tab" id="tab-invoice" role="tab" aria-selected="true" aria-controls="panel-invoice" data-example="invoice" type="button">Invoice · good fit</button>
+        <button class="demo-tab" id="tab-kpi" role="tab" aria-selected="false" aria-controls="panel-kpi" data-example="kpi" type="button">KPI cards · good fit</button>
+        <button class="demo-tab" id="tab-grid" role="tab" aria-selected="false" aria-controls="panel-grid" data-example="grid" type="button">CSS Grid · lossy</button>
+        <button class="demo-tab" id="tab-generated" role="tab" aria-selected="false" aria-controls="panel-generated" data-example="generated" type="button">Canvas + pseudo · partial</button>
+        <button class="demo-tab" id="tab-hidden" role="tab" aria-selected="false" aria-controls="panel-hidden" data-example="hidden" type="button">Hidden element · error</button>
+      </div>
+
+      <section class="demo-panel active" id="panel-invoice" role="tabpanel" aria-labelledby="tab-invoice" data-status="good">
+        <h3 id="invoice-capture">Invoice · good fit</h3>
+        <p>A report-shaped section with external stylesheet rules, table cells, and a live style update. The surrounding sample card is demo chrome; only the report content is captured.</p>
+        <div class="sample-sheet">
+          <div class="demo-target" id="invoice-report">
+            <div class="invoice-head">
+              <div>
+                <h2 class="live-color" id="live-title">Northwind Studio</h2>
+                <p>Design and consulting</p>
+              </div>
+              <div class="invoice-meta"><strong>INVOICE</strong><br />INV-2026-041<br />November 18, 2026</div>
+            </div>
+            <div class="bill-to"><span>Bill to</span><strong>Contoso Research</strong><span>88 Market Street · Seattle, WA</span></div>
+            <table>
+              <thead><tr><th>Service</th><th class="money">Hours</th><th class="money">Amount</th></tr></thead>
+              <tbody>
+                <tr><td>Report design</td><td class="money">12</td><td class="money">$1,800.00</td></tr>
+                <tr><td>Data integration</td><td class="money">8</td><td class="money">$1,200.00</td></tr>
+                <tr><td>Review and delivery</td><td class="money">3</td><td class="money">$450.00</td></tr>
+              </tbody>
+            </table>
+            <p class="invoice-total">Total due: $3,450.00</p>
+            <p class="invoice-note">Thank you. Payment is due within 30 days.</p>
+          </div>
+        </div>
+        <p class="code-caption">Click “Run page JS style update”, then generate the PDF to capture the changed heading color.</p>
+      </section>
+
+      <section class="demo-panel" id="panel-kpi" role="tabpanel" aria-labelledby="tab-kpi" data-status="good">
+        <h3 id="flexbox-capture">Flexbox KPI cards · good fit</h3>
+        <p>Flexbox is part of the engine's supported layout subset, so this row should stay side-by-side in the PDF.</p>
+        <p>The trend arrows use an embedded symbol font; base PDF fonts do not contain every Unicode character.</p>
+        <div class="sample-sheet">
+          <div class="demo-target" id="kpi-report">
+            <h2 class="report-title">Quarterly overview</h2>
+            <div class="kpi-row">
+              <div class="kpi-card"><p class="kpi-label">Net revenue</p><p class="kpi-value">$2.48M</p><p class="kpi-change"><span class="trend-arrow" aria-hidden="true">↑</span> 12.4% year over year</p></div>
+              <div class="kpi-card"><p class="kpi-label">Operating margin</p><p class="kpi-value">31.8%</p><p class="kpi-change"><span class="trend-arrow" aria-hidden="true">↑</span> 2.1 points</p></div>
+              <div class="kpi-card"><p class="kpi-label">Active customers</p><p class="kpi-value">8,420</p><p class="kpi-change"><span class="trend-arrow" aria-hidden="true">↑</span> 6.7% this quarter</p></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="demo-panel" id="panel-grid" role="tabpanel" aria-labelledby="tab-grid" data-status="lossy">
+        <h3 id="css-grid-limit">CSS Grid · lossy layout</h3>
+        <p>This example still produces a PDF, but the report engine does not preserve the three-column Grid arrangement.</p>
+        <div class="sample-sheet">
+          <div class="demo-target" id="grid-report">
+            <h2 class="report-title">Operations summary</h2>
+            <div class="grid-sample">
+              <div class="grid-tile"><strong>North</strong>On target · 98%</div>
+              <div class="grid-tile"><strong>South</strong>On target · 94%</div>
+              <div class="grid-tile"><strong>East</strong>Needs review · 81%</div>
+              <div class="grid-tile"><strong>West</strong>On target · 96%</div>
+              <div class="grid-tile"><strong>Central</strong>On target · 92%</div>
+              <div class="grid-tile"><strong>International</strong>Needs review · 78%</div>
+            </div>
+          </div>
+        </div>
+        <p class="loss-note"><strong>Expected:</strong> the cards appear in normal document flow instead of a faithful three-column grid. Use the supported flex layout or author the report layout explicitly when placement matters.</p>
+      </section>
+
+      <section class="demo-panel" id="panel-generated" role="tabpanel" aria-labelledby="tab-generated" data-status="lossy">
+        <h3 id="canvas-pseudo-limit">Canvas image and pseudo-elements · partial capture</h3>
+        <p>The current canvas pixels are captured as a PNG image. Text drawn into the canvas is part of that image, not selectable PDF text; the banner below comes from <code>::before</code> and remains unavailable as DOM content.</p>
+        <div class="sample-sheet">
+          <div class="demo-target" id="generated-report">
+            <h2 class="report-title">Visual-only metrics</h2>
+            <div class="canvas-wrap"><canvas id="sample-canvas" width="520" height="190" aria-label="Canvas chart showing monthly revenue"></canvas></div>
+            <div class="pseudo-card"><strong>Quarterly notes</strong><p>The CSS banner above this card is generated content. This paragraph is real DOM text and can be captured.</p></div>
+          </div>
+        </div>
+        <p class="loss-note"><strong>Expected:</strong> the plotted canvas appears as a PNG image, the pseudo-element text is omitted, and the real paragraph is captured. Use a supported chart block when chart labels and marks need to remain vector/selectable.</p>
+      </section>
+
+      <section class="demo-panel hidden-panel" id="panel-hidden" role="tabpanel" aria-labelledby="tab-hidden" data-status="error">
+        <h3 id="hidden-element-error">Hidden element · capture error</h3>
+        <p>The target is deliberately hidden even when this tab is selected. The adapter rejects hidden root elements rather than silently returning an empty report.</p>
+        <div class="sample-sheet">
+          <div class="demo-target" id="hidden-report">
+            <h2>This text is hidden</h2><p>It should not be included in the PDF.</p>
+          </div>
+        </div>
+        <p class="loss-note"><strong>Expected:</strong> generation fails with an explicit error. Make the element visible before capturing it.</p>
+      </section>
+
+      <div class="demo-controls">
+        <button class="demo-button" id="update-style" type="button">Run page JS style update</button>
+        <button class="demo-button" id="generate" type="button">Capture active element → PDF</button>
+        <a class="demo-button" id="download" href="#" download="live-dom-report.pdf" hidden>Download PDF</a>
+        <span class="spacer"></span>
+        <span id="status" class="demo-status" role="status" aria-live="polite">Ready. Choose an example and capture it.</span>
+      </div>
+    </section>
+
+    <section class="demo-card" id="preview-section" aria-label="Generated PDF">
+      <div class="preview-title"><h2>Generated PDF</h2><span id="result-label" class="demo-status">No PDF yet.</span></div>
+      <iframe class="pdf-preview" id="preview" title="Live DOM generated PDF preview"></iframe>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <div class="fabout">
+        <a class="fbrand" href="index.html">pdf-report-engine<span class="dot">.</span></a>
+        <p>Constrained HTML or a plain-data IR in — a vector, selectable, fully paginated PDF out. No headless browser, no native bindings.</p>
+        <pre class="finstall" data-copy><code>npm install pdf-report-engine</code></pre>
+        <p class="fbadges"><span class="badge" data-version></span>
+          <span class="badge">MIT</span>
+          <a class="badge" href="https://github.com/kenc90/pdf-report-engine">GitHub</a>
+          <span class="badge">pdfkit + fontkit</span>
+          <span class="badge">Node ≥ 18</span>
+        </p>
+      </div>
+      <nav aria-label="Guides">
+        <h4>Guides</h4>
+        <a href="getting-started.html">Getting started</a>
+        <a href="getting-started.html#first-report">Your first report</a>
+        <a href="getting-started.html#live-dom-capture">Live DOM capture</a>
+        <a href="live-dom-demo.html">Live DOM demo</a>
+        <a href="getting-started.html#charts">Charts</a>
+        <a href="getting-started.html#navigation">TOC, bookmarks &amp; links</a>
+        <a href="getting-started.html#breaks">Breaks &amp; keep-together</a>
+        <a href="getting-started.html#barcodes">Barcodes</a>
+        <a href="getting-started.html#web-fonts">Web fonts &amp; CJK</a>
+        <a href="getting-started.html#cli">Command line</a>
+      </nav>
+      <nav aria-label="Reference">
+        <h4>Reference</h4>
+        <a href="api.html">API reference</a>
+        <a href="api.html#ir">IR block types</a>
+        <a href="api.html#options">Render options</a>
+        <a href="api.html#html-options">HTML adapter options</a>
+        <a href="api.html#hosting">Hosting untrusted payloads</a>
+        <a href="api.html#expr">Expression language</a>
+        <a href="api.html#style">Style &amp; box properties</a>
+        <a href="examples.html">Example recipes</a>
+        <a href="examples.html#ex-tour">Full worked example</a>
+        <a href="browser-demo.html">Browser demo</a>
+        <a href="editor.html">Online editor</a>
+      </nav>
+    </div>
+    <div class="fbar">
+      <div class="wrap">
+        <span>© <span data-year>2026</span> pdf-report-engine contributors · released under the MIT license</span>
+      </div>
+    </div>
+  </footer>
+  <script src="assets/site.js"></script>
+  <script type="module" src="live-dom-demo.js"></script>
+</body>
+</html>

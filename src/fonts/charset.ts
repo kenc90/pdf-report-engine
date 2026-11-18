@@ -84,6 +84,13 @@ function walkBlocks(blocks: Block[] | undefined, set: Set<string>): void {
       case 'table':
         walkTable(b, set);
         break;
+      case 'container':
+      case 'columns':
+        walkBlocks(b.children, set);
+        break;
+      case 'flex':
+        walkBlocks(b.children.map((item) => item.block), set);
+        break;
       default:
         // spacer, pageBreak, image — no text.
         break;

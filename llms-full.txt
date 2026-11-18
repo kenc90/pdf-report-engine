@@ -443,6 +443,20 @@ the characters actually used. With `createReport` (offline) instead pre-resolve 
     only adds heading section-numbering; the block itself needs `data-toc`.
   - **Multi-column:** `data-columns="N"` (+ `data-column-gap`, `data-column-rule`) or CSS `column-count`.
 
+## Live browser DOM capture
+
+`htmlElementToReportDoc(element: Element, options?: HtmlOptions): ReportDoc` is a browser-only entry
+point for converting an existing live DOM element to the report IR. The browser's current computed
+styles are sampled at call time, so styles from external CSS and styles already applied by page
+JavaScript are included to the extent they map to the engine's supported style/layout subset. The
+caller must wait for the desired DOM state before calling; the adapter does not execute or wait for
+page scripts.
+
+Only the selected element and its descendants are captured. This is not a screenshot or complete
+browser layout implementation: CSS Grid and other unsupported layout modes are not preserved, canvas
+drawing pixels and pseudo-element content are absent from the DOM snapshot, and hidden root elements
+are rejected. The demo in `docs/live-dom-demo.html` shows successful, lossy, and rejected examples.
+
 ## 14. Conditional formatting
 
 - **`styleWhen: StyleCondition[]`** on blocks, rows and cells:

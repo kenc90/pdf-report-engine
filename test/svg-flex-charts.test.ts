@@ -14,7 +14,7 @@ import { layoutBlock } from '../src/layout/block.js';
 import { parseSvg, svgSourceToText } from '../src/core/svg.js';
 import { htmlToReportDoc } from '../src/adapter/html.js';
 import { renderToBuffer } from '../src/index.js';
-import type { Block, ChartBlock, FlexBlock, ReportDoc, SvgBlock } from '../src/ir/schema.js';
+import type { Block, ChartBlock, FlexBlock, ReportDoc, SvgBlock, ContainerBlock } from '../src/ir/schema.js';
 import type { Fragment } from '../src/layout/flow.js';
 
 function makeCtx(): LayoutContext {
@@ -146,6 +146,32 @@ describe('flex layout', () => {
     expect(f.commands.filter((c) => c.op === 'text').length).toBe(2);
   });
 
+  it('keeps stretched flex-card fills and borders rounded', () => {
+    const radius = [7.5, 7.5, 7.5, 7.5] as [number, number, number, number];
+    const card: ContainerBlock = {
+      type: 'container',
+      backgroundColor: '#f7fafc',
+      border: [1, 'solid', '#dce5ef'],
+      borderRadius: radius,
+      children: [para('Net revenue')],
+    };
+    const block: FlexBlock = {
+      type: 'flex',
+      children: [{
+        block: card,
+        grow: 1,
+        backgroundColor: '#f7fafc',
+        borderRadius: radius,
+      }],
+    };
+    const fragment = layoutBlock(block, makeCtx(), opts(200))[0]!;
+    const stretchedBackground = fragment.commands.find((command) => command.op === 'fillRect');
+
+    expect(stretchedBackground?.op).toBe('fillRect');
+    if (stretchedBackground?.op === 'fillRect') expect(stretchedBackground.radius).toEqual(radius);
+    expect(fragment.commands.some((command) => command.op === 'path' && command.stroke?.lineWidth === 1)).toBe(true);
+  });
+
   it('stacks column items vertically', () => {
     const block: FlexBlock = {
       type: 'flex',
@@ -156,6 +182,24 @@ describe('flex layout', () => {
     const ys = f.commands.filter((c) => c.op === 'text').map((c) => (c.op === 'text' ? c.baselineY : 0));
     expect(ys.length).toBe(2);
     expect(ys[1]! - ys[0]!).toBeGreaterThan(0);
+  });
+
+  it('keeps wrapped lines apart in flex items and paints container borders', () => {
+    for (const direction of ['row', 'column'] as const) {
+      const block: FlexBlock = {
+        type: 'flex',
+        direction,
+        borderBottom: [1, 'solid', '#174a73'],
+        children: [{ block: para('first\u2028second') }],
+      };
+      const f = layoutBlock(block, makeCtx(), opts(200))[0]!;
+      const textCommands = f.commands.filter((c) => c.op === 'text');
+      const ys = textCommands.map((c) => c.baselineY);
+
+      expect(ys).toHaveLength(2);
+      expect(ys[1]).toBeGreaterThan(ys[0]!);
+      expect(f.commands.some((c) => c.op === 'line')).toBe(true);
+    }
   });
 
   it('grows items to fill the row without overflowing the container', () => {

@@ -585,6 +585,10 @@ export interface CellNode {
   style?: Partial<StyleProps>;
   /** Cell-level box overrides (a group footer usually spans and shades). */
   border?: BorderShorthand;
+  borderTop?: BorderShorthand;
+  borderRight?: BorderShorthand;
+  borderBottom?: BorderShorthand;
+  borderLeft?: BorderShorthand;
   paddingTop?: number;
   paddingRight?: number;
   paddingBottom?: number;
@@ -711,6 +715,12 @@ export interface FlexItem extends BlockBase {
   alignSelf?: 'auto' | 'flex-start' | 'center' | 'flex-end' | 'stretch';
 }
 
+/** A styled, pageable block wrapper around ordinary vertical-flow content. */
+export interface ContainerBlock extends BlockBase {
+  type: 'container';
+  children: Block[];
+}
+
 /** A multi-column layout block: children flow into N equal-width columns. */
 export interface ColumnBlock extends BlockBase {
   type: 'columns';
@@ -724,7 +734,7 @@ export interface ColumnBlock extends BlockBase {
   children: Block[];
 }
 
-export type Block = ParagraphBlock | HeadingBlock | TableBlock | SpacerBlock | PageBreakBlock | ImageBlock | SvgBlock | ChartBlock | TocBlock | BarcodeBlock | FlexBlock | ColumnBlock;
+export type Block = ParagraphBlock | HeadingBlock | TableBlock | SpacerBlock | PageBreakBlock | ImageBlock | SvgBlock | ChartBlock | TocBlock | BarcodeBlock | FlexBlock | ContainerBlock | ColumnBlock;
 
 export type BandType = 'pageHeader' | 'pageFooter' | 'title' | 'summary' | 'background';
 

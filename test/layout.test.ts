@@ -7,7 +7,7 @@ import { FontRegistry, HeuristicFontHandle } from '../src/fonts/registry.js';
 import { resolveStyle } from '../src/text/style.js';
 import { LayoutContext } from '../src/layout/context.js';
 import { layoutBlock } from '../src/layout/block.js';
-import type { ReportDoc, TableBlock, ParagraphBlock, ImageBlock } from '../src/ir/schema.js';
+import type { ReportDoc, TableBlock, ParagraphBlock, ImageBlock, ContainerBlock } from '../src/ir/schema.js';
 import type { Fragment } from '../src/layout/flow.js';
 import { probeImageSize } from '../src/core/image.js';
 
@@ -21,6 +21,35 @@ function makeCtx(): LayoutContext {
 const opts = (contentWidth: number) => ({ contentWidth, scope: {} });
 
 describe('block layout', () => {
+  it('paints styled containers around pageable child fragments', () => {
+    const ctx = makeCtx();
+    const wrapper: ContainerBlock = {
+      type: 'container',
+      backgroundColor: '#fff',
+      border: [1, 'solid', '#f00'],
+      borderRadius: 4,
+      paddingTop: 2,
+      paddingRight: 2,
+      paddingBottom: 3,
+      paddingLeft: 2,
+      children: [{ type: 'paragraph', content: 'aaa bbb ccc' }],
+    };
+
+    const frags = layoutBlock(wrapper, ctx, opts(30));
+
+    expect(frags.length).toBeGreaterThan(1);
+    expect(frags[0]!.before).toBeCloseTo(3);
+    expect(frags.at(-1)!.after).toBeCloseTo(4);
+    const borders = frags.map((fragment) =>
+      fragment.commands.find((command) => command.op === 'path' && command.stroke?.lineWidth === 1),
+    );
+    expect(borders.every((border) => border?.op === 'path')).toBe(true);
+    expect(borders[0]?.op === 'path' && borders[0].subpaths).toHaveLength(3);
+    expect(borders.at(-1)?.op === 'path' && borders.at(-1)!.subpaths).toHaveLength(3);
+    expect(frags[0]!.commands.some((command) => command.op === 'fillRect' && command.radius?.[0] === 4)).toBe(true);
+    expect(frags[0]!.commands.filter((command) => command.op === 'fillRect')).toHaveLength(1);
+  });
+
   it('emits one fragment per wrapped paragraph line', () => {
     const ctx = makeCtx();
     const para: ParagraphBlock = { type: 'paragraph', content: 'aaa bbb ccc' };
@@ -28,6 +57,28 @@ describe('block layout', () => {
     const frags = layoutBlock(para, ctx, opts(20));
     expect(frags.length).toBe(3);
     expect(frags.at(-1)!.after).toBeGreaterThanOrEqual(0);
+  });
+
+  it('extends paragraph backgrounds through vertical padding', () => {
+    const paragraph: ParagraphBlock = {
+      type: 'paragraph',
+      content: 'Thank you. Payment is due within 30 days.',
+      backgroundColor: '#fff7e8',
+      borderLeft: [3, 'solid', '#e29b38'],
+      paddingTop: 8,
+      paddingBottom: 8,
+    };
+    const fragment = layoutBlock(paragraph, makeCtx(), opts(300))[0]!;
+    const background = fragment.commands.find((command) => command.op === 'fillRect');
+
+    expect(background?.op).toBe('fillRect');
+    if (background?.op === 'fillRect') {
+      expect(background.y).toBe(-8);
+      expect(background.h).toBeCloseTo(fragment.height + 16);
+    }
+    expect(fragment.commands.some((command) =>
+      command.op === 'line' && command.x1 === command.x2 && command.y1 === -8,
+    )).toBe(true);
   });
 
   it('applies paragraph margins as before/after spacing', () => {
@@ -51,6 +102,24 @@ describe('block layout', () => {
 });
 
 describe('table layout', () => {
+  it('renders cell edge borders in addition to the table grid', () => {
+    const ctx = makeCtx();
+    const table: TableBlock = {
+      type: 'table',
+      columns: [{ key: 'name', width: 80 }],
+      staticRows: [{
+        kind: 'detail',
+        cells: [{ content: 'item', borderLeft: [2, 'solid', '#f60'] }],
+      }],
+    };
+
+    const frags = layoutBlock(table, ctx, opts(100));
+
+    expect(frags.some((fragment) =>
+      fragment.commands.some((command) => command.op === 'line' && command.x1 === command.x2 && command.lineWidth === 2),
+    )).toBe(true);
+  });
+
   function sampleTable(): TableBlock {
     return {
       type: 'table',

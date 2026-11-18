@@ -20,7 +20,7 @@ import { toPt } from '../core/units.js';
 import { toRGB } from '../core/color.js';
 import type { LayoutContext } from './context.js';
 import { layoutBlock, type BlockLayoutOptions } from './block.js';
-import { resolveBox } from './box.js';
+import { borderDash, borderRGB, resolveBorders, resolveBox, resolveRadius } from './box.js';
 import { translateCommands, type DrawCommand, type Fragment } from './flow.js';
 
 /** Effectively infinite main axis: used to read a child's max-content width. */
@@ -130,15 +130,30 @@ export function layoutFlex(
   const contentH = cursorY;
 
   const boxW = innerW + padding.left + padding.right;
+  const boxH = contentH + padding.top + padding.bottom;
+  const borders = resolveBorders(block);
   const framed: DrawCommand[] = [];
   if (style.backgroundColor !== undefined) {
-    framed.push({ op: 'fillRect', x: margin.left, y: 0, w: boxW, h: contentH + padding.top + padding.bottom, color: toRGB(style.backgroundColor) });
+    framed.push({ op: 'fillRect', x: margin.left, y: 0, w: boxW, h: boxH, color: toRGB(style.backgroundColor) });
   }
   framed.push(...commands.map((c) => translateOne(c, 0, padding.top)));
+  const drawBorder = (
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    border: NonNullable<typeof borders.top>,
+  ): void => {
+    framed.push({ op: 'line', x1, y1, x2, y2, color: borderRGB(border), lineWidth: border.width, dash: borderDash(border) });
+  };
+  if (borders.top) drawBorder(margin.left, borders.top.width / 2, margin.left + boxW, borders.top.width / 2, borders.top);
+  if (borders.bottom) drawBorder(margin.left, boxH - borders.bottom.width / 2, margin.left + boxW, boxH - borders.bottom.width / 2, borders.bottom);
+  if (borders.left) drawBorder(margin.left + borders.left.width / 2, 0, margin.left + borders.left.width / 2, boxH, borders.left);
+  if (borders.right) drawBorder(margin.left + boxW - borders.right.width / 2, 0, margin.left + boxW - borders.right.width / 2, boxH, borders.right);
 
   return [
     {
-      height: contentH + padding.top + padding.bottom,
+      height: boxH,
       before: margin.top,
       after: margin.bottom,
       commands: framed,
@@ -212,9 +227,23 @@ function layoutRowLine(
     // `stretch`: paint the item's background across the full line height.
     if (mode === 'stretch') {
       const bg = itemBackground(m.item);
-      if (bg !== undefined) commands.push({ op: 'fillRect', x, y: 0, w: m.base, h: lineCross, color: toRGB(bg) });
+      if (bg !== undefined) {
+        commands.push({
+          op: 'fillRect',
+          x,
+          y: 0,
+          w: m.base,
+          h: lineCross,
+          color: toRGB(bg),
+          radius: resolveRadius(m.item),
+        });
+      }
     }
-    for (const f of m.frags) for (const c of f.commands) commands.push(translateOne(c, x, dy + f.before));
+    let itemY = 0;
+    for (const f of m.frags) {
+      for (const c of f.commands) commands.push(translateOne(c, x, dy + itemY + f.before));
+      itemY += f.before + f.height + f.after;
+    }
     x += m.base + spacing;
   }
   return { commands, cross: lineCross };
@@ -245,7 +274,11 @@ function layoutColumnLine(
     const mode: AlignMode = m.item.alignSelf && m.item.alignSelf !== 'auto' ? (m.item.alignSelf as AlignMode) : alignMode;
     // In a column, the cross axis is horizontal; `stretch` fills the full width.
     const dx = mode === 'center' ? (innerW - m.cross) / 2 : mode === 'flex-end' ? innerW - w : 0;
-    for (const f of m.frags) for (const c of f.commands) commands.push(translateOne(c, dx, y + f.before));
+    let itemY = 0;
+    for (const f of m.frags) {
+      for (const c of f.commands) commands.push(translateOne(c, dx, y + itemY + f.before));
+      itemY += f.before + f.height + f.after;
+    }
     y += m.base + gap;
   }
   return { commands, cross: Math.max(0, y - gap) };

@@ -19,7 +19,15 @@ export {
   type ImagePathAccess,
 } from './core/image.js';
 
-export { htmlToReportDoc, parseHtml, type HtmlOptions, type HElement, type HNode, type HText } from './adapter/html.js';
+export {
+  htmlToReportDoc,
+  htmlElementToReportDoc,
+  parseHtml,
+  type HtmlOptions,
+  type HElement,
+  type HNode,
+  type HText,
+} from './adapter/html.js';
 
 export { readFontFiles, FontRegistry, type FontSource, type FontFileEntry, type FontHandle } from './fonts/registry.js';
 
@@ -38,6 +46,7 @@ export type {
   SvgBlock,
   FlexBlock,
   FlexItem,
+  ContainerBlock,
   ColumnBlock,
   ChartBlock,
   ChartKind,

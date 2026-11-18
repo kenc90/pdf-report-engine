@@ -51,6 +51,7 @@
           <tr><td><code>renderToBuffer(report, options?)</code></td><td><code>createReport</code> + collect to a <code>Buffer</code>. Async; resolves remote images and web fonts first.</td></tr>
           <tr><td><code>renderToStream(report, options?)</code></td><td>Returns a <code>ReadableStream&lt;Uint8Array&gt;</code> that flushes pages incrementally (<code>bufferPages: false</code>). Async; ideal for HTTP streaming.</td></tr>
           <tr><td><code>htmlToReportDoc(html, options?)</code></td><td>HTML subset → <code>ReportDoc</code>.</td></tr>
+          <tr><td><code>htmlElementToReportDoc(element, options?)</code></td><td>Live browser element + current computed styles → <code>ReportDoc</code>.</td></tr>
           <tr><td><code>parseHtml(html)</code></td><td>HTML subset → element tree (<code>HElement</code>) without converting.</td></tr>
           <tr><td><code>readFontFiles(entries)</code></td><td>Load <code>FontFileEntry[]</code> (paths or bytes) → <code>FontSource[]</code>.</td></tr>
           <tr><td><code>resolveRemoteImages(report, opts)</code></td><td>Run the URL→bytes image pre-pass yourself (advanced).</td></tr>
@@ -233,6 +234,11 @@ h1, h2 { margin-bottom: 4pt; }           /* list */</code></pre>
             <td><code>&lt;div style="<wbr>display:flex"&gt;</code></td>
             <td><code>FlexBlock</code></td>
             <td>A flex container; its children become flex items. Supported CSS: <code>flex-direction</code>, <code>flex-wrap</code>, <code>justify-content</code>, <code>align-items</code>, <code>gap</code>/<code>row-gap</code>/<code>column-gap</code>, and per-item <code>flex-grow</code>/<code>flex-shrink</code>/<code>flex-basis</code>/<code>flex</code>/<code>align-self</code>.</td>
+          </tr>
+          <tr>
+            <td>A styled block wrapper with block children</td>
+            <td><code>ContainerBlock</code></td>
+            <td>Background, padding, borders, radius and shadow remain around the flow content, and the wrapper can split across pages. A browser text line that already fits on one line is kept together to reduce font-metric reflow.</td>
           </tr>
           <tr>
             <td><code>&lt;table data-chart="…"&gt;</code></td>
@@ -974,7 +980,7 @@ formatNumber(Infinity, '#,##0.00')                // ∞</code></pre>
         <code>DiagonalHeader</code>,
         <code>FontReference</code>, <code>RenderOptions</code>, <code>ImageResolveOptions</code>,
         <code>FontResolveOptions</code>, <code>HtmlOptions</code>, <code>ImagePathAccess</code>,
-        <code>ColumnBlock</code>, <code>WatermarkSpec</code>, <code>GanttTask</code>.
+        <code>ContainerBlock</code>, <code>ColumnBlock</code>, <code>WatermarkSpec</code>, <code>GanttTask</code>.
       </p>
     </section>
 
@@ -1029,6 +1035,7 @@ formatNumber(Infinity, '#,##0.00')                // ∞</code></pre>
         <h4>Guides</h4>
         <a href="getting-started.html">Getting started</a>
         <a href="getting-started.html#first-report">Your first report</a>
+        <a href="live-dom-demo.html">Live DOM demo</a>
         <a href="getting-started.html#charts">Charts</a>
         <a href="getting-started.html#navigation">TOC, bookmarks &amp; links</a>
         <a href="getting-started.html#breaks">Breaks &amp; keep-together</a>

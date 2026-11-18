@@ -417,6 +417,29 @@ const pdf = await renderToBuffer(report, { fonts: await readFontFiles([
 ]) });
 ```
 
+In a browser, convert an element from the **current live page**. External stylesheets
+and styles applied by page JavaScript are read from the browser's computed styles when
+the function is called:
+
+```ts
+import { htmlElementToReportDoc, renderToBuffer } from 'pdf-report-engine';
+
+const reportElement = document.querySelector('#report');
+if (!reportElement) throw new Error('Report element not found');
+
+// Call after the page has applied the state you want in the PDF.
+const report = htmlElementToReportDoc(reportElement);
+const pdf = await renderToBuffer(report);
+```
+
+This browser-only adapter captures the selected element and its descendants; it does
+not execute page scripts or include surrounding UI. Computed styles are translated
+into the styles and layouts supported by the report engine, not rendered by a full
+browser layout engine. For example, unsupported CSS layout features and pseudo-elements
+are not reproduced. Canvas elements are captured as PNG images from their current pixels;
+canvas-drawn text is raster content, and exporting a cross-origin-tainted canvas fails.
+Relative image paths resolve against the document URL.
+
 **What the HTML adapter understands** (deliberately narrow — anything outside this is ignored):
 
 - **Blocks:** `h1..h6`, `p`, `div`/`section`/`article`/`header`/`footer`/`main`,
@@ -908,6 +931,7 @@ From the package root (`pdf-report-engine`):
 | `setImageFileReader(reader)` | Install the synchronous reader for path-based image/SVG sources (the Node CLI calls it once). |
 | `setImagePathAccess('allow' \| 'deny')` | Forbid reading image/SVG sources from the host filesystem. Default `'allow'`. |
 | `htmlToReportDoc(html, options?)` | HTML subset → `ReportDoc`. |
+| `htmlElementToReportDoc(element, options?)` | Live browser DOM element + computed styles → `ReportDoc`. |
 | `parseHtml(html)` | HTML subset → element tree (`HElement`). |
 | `readFontFiles(entries)` | Load `FontFileEntry[]` (paths or bytes) → `FontSource[]`. |
 | `FontRegistry` | Lower-level face registration / measurement. |

@@ -758,7 +758,6 @@ const pdf = await renderToBuffer(report);</code></pre>
       <code>[w h]</code> in any unit, plus <code>portrait</code>/<code>landscape</code>; <code>margin</code> =
       a CSS 1&ndash;4 value shorthand. A <code>page</code> passed to <code>htmlToReportDoc(html, { page })</code>
       from JS overrides whatever the HTML declares.</p>
-
       <h3>Stylesheets, classes and highlights</h3>
       <p>
         A <code>&lt;style&gt;</code> element is parsed into a small but real cascade. Supported
@@ -842,6 +841,24 @@ const pdf = await renderToBuffer(report);</code></pre>
       <p>
         See it together in <a href="examples.html#ex-polish"><code>samples/box-polish.html</code></a>.
       </p>
+    </section>
+
+    <section id="live-dom-capture">
+      <h2>Capture a live browser element</h2>
+      <p>In a browser, <code>htmlElementToReportDoc</code> reads the selected element's current content
+      and computed styles, including external CSS and styles applied by page JavaScript. Call it after
+      the page has reached the state to capture. It maps those styles into the engine's supported
+      report layout; it does not execute scripts or reproduce unsupported browser-only CSS.
+      Canvas elements are snapshotted as PNG images at capture time, so their pixels appear but
+      canvas-drawn text is not selectable. Exporting a cross-origin-tainted canvas fails explicitly.
+      <a href="live-dom-demo.html">Try the multi-example live DOM demo</a> to see successful captures,
+      layout limitations, and an intentional capture error.</p>
+      <pre data-copy><code>import { htmlElementToReportDoc, renderToBuffer } from 'pdf-report-engine';
+
+const element = document.querySelector('#report');
+if (!element) throw new Error('Report element not found');
+const report = htmlElementToReportDoc(element);
+const pdf = await renderToBuffer(report);</code></pre>
     </section>
 
     <section id="images">
@@ -1318,6 +1335,8 @@ npm run demo</code></pre>
         <h4>Guides</h4>
         <a href="getting-started.html">Getting started</a>
         <a href="getting-started.html#first-report">Your first report</a>
+        <a href="getting-started.html#live-dom-capture">Live DOM capture</a>
+        <a href="live-dom-demo.html">Live DOM demo</a>
         <a href="getting-started.html#charts">Charts</a>
         <a href="getting-started.html#navigation">TOC, bookmarks &amp; links</a>
         <a href="getting-started.html#breaks">Breaks &amp; keep-together</a>

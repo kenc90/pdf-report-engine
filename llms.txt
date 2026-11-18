@@ -201,6 +201,12 @@ It is **not** a general HTML engine. Understands only markup that maps to a
 paginated report. No DOM library, no full CSS cascade. Special blocks are triggered
 by **`data-*` attributes on an element**, not by a `type=` attribute.
 
+For a live browser `Element`, use `htmlElementToReportDoc(element, options?)`. It snapshots
+the selected element and descendants with the browser's current computed styles; call it
+after page JavaScript has updated the DOM. It does not execute scripts or capture pixels.
+Unsupported layouts such as CSS Grid and generated content such as `::before` are not
+reproduced. See `docs/live-dom-demo.html` for working and intentionally lossy examples.
+
 - **Blocks:** `h1..h6, p, div/section/article/header/footer/main, ul/ol/li, table, hr,
   blockquote, img, inline <svg>`.
 - **Inline:** `b/strong, i/em, u/ins, span, font, a, mark, br` (br → line separator).

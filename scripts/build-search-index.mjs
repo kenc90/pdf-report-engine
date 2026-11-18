@@ -24,6 +24,7 @@ const PAGES = [
   'examples.html',
   'api.html',
   'browser-demo.html',
+  'live-dom-demo.html',
 ];
 
 /** Character budget for the snippet stored per entry. */

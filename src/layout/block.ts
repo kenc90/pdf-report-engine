@@ -17,6 +17,7 @@ import type {
   SpacerBlock,
   ImageBlock,
   Content,
+  ContainerBlock,
 } from '../ir/schema.js';
 import type { ExprContext } from '../expr/eval.js';
 import { toPt } from '../core/units.js';
@@ -26,7 +27,7 @@ import { resolveContent, type LayoutContext } from './context.js';
 import { typeset, type Line } from '../text/typeset.js';
 import type { ResolvedStyle } from '../text/style.js';
 import { resolveBox, resolveBorders, resolveRadius, resolveShadow, resolveGradient, borderRGB, borderDash, type EdgeInsets } from './box.js';
-import type { Fragment, DrawCommand, OutlineEntry, Radius, ResolvedGradient, ResolvedShadow, PolyPoint } from './flow.js';
+import { translateCommands, type Fragment, type DrawCommand, type OutlineEntry, type Radius, type ResolvedGradient, type ResolvedShadow, type PolyPoint } from './flow.js';
 import { applyConditions, isVisible } from './condition.js';
 // `block <-> table` is a genuine cycle (a table lays out cell paragraphs via this
 // module, and this module dispatches table blocks to the table layout). Both sides
@@ -76,6 +77,9 @@ export function layoutBlock(block: Block, ctx: LayoutContext, opts: BlockLayoutO
       break;
     case 'flex':
       frags = layoutFlex(effective, ctx, opts, inherited);
+      break;
+    case 'container':
+      frags = layoutContainer(effective, ctx, opts, inherited);
       break;
     case 'columns':
       frags = layoutColumns(effective, ctx, opts, inherited);
@@ -271,6 +275,90 @@ export function layoutParagraphCore(
   return frags;
 }
 
+function layoutContainer(block: ContainerBlock, ctx: LayoutContext, opts: BlockLayoutOptions, inherited: ResolvedStyle): Fragment[] {
+  const style = ctx.style(block, inherited);
+  const { margin, padding } = resolveBox(block);
+  const borders = resolveBorders(block);
+  const width = Math.max(1, opts.contentWidth - margin.left - margin.right);
+  const borderLeft = borders.left?.width ?? 0;
+  const borderRight = borders.right?.width ?? 0;
+  const borderTop = borders.top?.width ?? 0;
+  const borderBottom = borders.bottom?.width ?? 0;
+  const innerWidth = Math.max(1, width - padding.left - padding.right - borderLeft - borderRight);
+  const childStyle = block.backgroundColor !== undefined
+    ? { ...style, backgroundColor: undefined }
+    : style;
+  const children = block.children.flatMap((child) =>
+    layoutBlock(child, ctx, { ...opts, contentWidth: innerWidth, inherited: childStyle }),
+  );
+  if (children.length === 0) return [];
+
+  const contentHeight = children.reduce((sum, fragment) => sum + fragment.before + fragment.height + fragment.after, 0);
+  const boxHeight = borderTop + padding.top + contentHeight + padding.bottom + borderBottom;
+  const radius = resolveRadius(block);
+  const gradient = resolveGradient(block);
+  const shadow = resolveShadow(block);
+  const fill = style.backgroundColor;
+  let boxTop = 0;
+  const lastIndex = children.length - 1;
+
+  return children.map((fragment, index) => {
+    const first = index === 0;
+    const last = index === lastIndex;
+    const contentBefore = fragment.before;
+    const contentAfter = fragment.after;
+    const yTop = first ? -(borderTop + padding.top + contentBefore) : -contentBefore;
+    const yBottom = fragment.height + contentAfter + (last ? padding.bottom + borderBottom : 0);
+    const commands: DrawCommand[] = [];
+
+    if (fill !== undefined || gradient) {
+      const background: DrawCommand = {
+        op: 'fillRect',
+        x: margin.left,
+        y: yTop,
+        w: width,
+        h: Math.max(0, yBottom - yTop),
+        color: fill !== undefined ? toRGB(fill) : [0, 0, 0],
+      };
+      if (radius) background.radius = outerCorners(radius, first, last);
+      if (gradient) background.gradient = { ...gradient, boxTop, boxHeight };
+      if (shadow && first) {
+        background.shadow = shadow;
+        background.shadowH = boxHeight;
+        if (radius) background.shadowRadius = radius;
+      }
+      commands.push(background);
+    }
+
+    commands.push(...translateCommands(fragment.commands, margin.left + borderLeft + padding.left, 0));
+    drawBorders(
+      commands,
+      borders,
+      margin.left,
+      yTop,
+      width,
+      Math.max(0, yBottom - yTop),
+      first,
+      last,
+      false,
+      radius,
+    );
+
+    const wrapped: Fragment = {
+      ...fragment,
+      before: contentBefore + (first ? margin.top + borderTop + padding.top : 0),
+      after: contentAfter + (last ? margin.bottom + padding.bottom + borderBottom : 0),
+      commands,
+      breakBefore: first ? block.breakBefore ?? fragment.breakBefore : fragment.breakBefore,
+      breakAfter: last ? block.breakAfter ?? fragment.breakAfter : fragment.breakAfter,
+      keepWithNext: last ? block.keepWithNext ?? fragment.keepWithNext : fragment.keepWithNext,
+    };
+    if (block.breakInside === 'avoid' && !last) wrapped.keepWithNext = true;
+    boxTop += contentBefore + fragment.height + contentAfter + (first ? borderTop + padding.top : 0);
+    return wrapped;
+  });
+}
+
 export interface FragParams {
   style: ResolvedStyle;
   margin: EdgeInsets;
@@ -302,21 +390,23 @@ export function fragmentsFromLines(lines: Line[], p: FragParams): Fragment[] {
   // The background box is painted as one `fillRect` per line (so it can split
   // across pages); the gradient and corner rounding need the *whole* box's
   // height and each slice's offset to stay continuous across the stack.
-  const boxHeight = lines.reduce((sum, l) => sum + l.height, 0);
+  const boxHeight = lines.reduce((sum, l) => sum + l.height, 0) + p.padding.top + p.padding.bottom;
   let boxTop = 0;
 
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i]!;
     const commands: DrawCommand[] = [];
     const height = line.height;
+    const topPadding = i === first ? p.padding.top : 0;
+    const bottomPadding = i === last ? p.padding.bottom : 0;
 
     if (p.fill !== undefined || p.gradient) {
       const cmd: DrawCommand = {
         op: 'fillRect',
         x: boxX,
-        y: 0,
+        y: -topPadding,
         w: boxW,
-        h: height,
+        h: height + topPadding + bottomPadding,
         color: p.fill !== undefined ? toRGB(p.fill) : [0, 0, 0],
       };
       if (p.radius) cmd.radius = outerCorners(p.radius, i === first, i === last);
@@ -352,7 +442,7 @@ export function fragmentsFromLines(lines: Line[], p: FragParams): Fragment[] {
     const cell = p.borderMode === 'cell';
     const yTop = cell || i !== first ? 0 : -p.padding.top;
     const yBot = cell || i !== last ? height : height + p.padding.bottom;
-    drawBorders(commands, p.borders, boxX, yTop, boxW, yBot - yTop, i === first, i === last, cell);
+    drawBorders(commands, p.borders, boxX, yTop, boxW, yBot - yTop, i === first, i === last, cell, p.radius);
 
     frags.push({
       height,
@@ -363,7 +453,7 @@ export function fragmentsFromLines(lines: Line[], p: FragParams): Fragment[] {
       breakAfter: i === last ? p.breakAfter : undefined,
       keepWithNext: i === last ? p.keepWithNext : false,
     });
-    boxTop += height;
+    boxTop += height + topPadding;
   }
   return frags;
 }
@@ -388,7 +478,20 @@ function drawBorders(
   top: boolean,
   bottom: boolean,
   cell: boolean,
+  radius?: Radius,
 ): void {
+  const sides = [borders.top, borders.right, borders.bottom, borders.left];
+  const uniform = sides[0] !== undefined && sides.every((border) =>
+    border !== undefined &&
+    border.width === sides[0]!.width &&
+    border.style === sides[0]!.style &&
+    JSON.stringify(border.color) === JSON.stringify(sides[0]!.color),
+  );
+  if (!cell && uniform && radius?.some((corner) => corner > 0.01)) {
+    drawRoundedBorders(commands, borders.top!, x, y, w, h, top, bottom, radius);
+    return;
+  }
+
   const line = (x1: number, y1: number, x2: number, y2: number, b: NonNullable<ReturnType<typeof resolveBorders>['top']>) =>
     commands.push({ op: 'line', x1, y1, x2, y2, color: borderRGB(b), lineWidth: b.width, dash: borderDash(b) });
 
@@ -396,6 +499,71 @@ function drawBorders(
   if (borders.bottom && (bottom || cell)) line(x, y + h - borders.bottom.width / 2, x + w, y + h - borders.bottom.width / 2, borders.bottom);
   if (borders.left) line(x + borders.left.width / 2, y, x + borders.left.width / 2, y + h, borders.left);
   if (borders.right) line(x + w - borders.right.width / 2, y, x + w - borders.right.width / 2, y + h, borders.right);
+}
+
+function drawRoundedBorders(
+  commands: DrawCommand[],
+  border: NonNullable<ReturnType<typeof resolveBorders>['top']>,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  top: boolean,
+  bottom: boolean,
+  radius: Radius,
+): void {
+  const inset = border.width / 2;
+  x += inset;
+  y += inset;
+  w = Math.max(0, w - border.width);
+  h = Math.max(0, h - border.width);
+  const [tl, tr, br, bl] = radius.map((corner) =>
+    Math.max(0, Math.min(corner - inset, w / 2, h / 2)),
+  ) as Radius;
+  const subpaths: Array<{ points: PolyPoint[]; closed: boolean }> = [];
+  const addPath = (points: PolyPoint[]): void => {
+    if (points.length > 1) subpaths.push({ points, closed: false });
+  };
+  const arc = (cx: number, cy: number, r: number, start: number, end: number): PolyPoint[] => {
+    if (r <= 0.01) return [];
+    const steps = 6;
+    return Array.from({ length: steps + 1 }, (_, index) => {
+      const angle = start + ((end - start) * index) / steps;
+      return [cx + Math.cos(angle) * r, cy + Math.sin(angle) * r] as PolyPoint;
+    });
+  };
+
+  if (top) {
+    addPath([
+      [x + tl, y],
+      [x + w - tr, y],
+      ...arc(x + w - tr, y + tr, tr, -Math.PI / 2, 0).slice(1),
+    ]);
+  }
+  const right: PolyPoint[] = [
+    [x + w, y + (top ? tr : 0)],
+    [x + w, y + h - (bottom ? br : 0)],
+  ];
+  if (bottom) right.push(...arc(x + w - br, y + h - br, br, 0, Math.PI / 2).slice(1));
+  addPath(right);
+  if (bottom) {
+    addPath([
+      [x + w - br, y + h],
+      [x + bl, y + h],
+      ...arc(x + bl, y + h - bl, bl, Math.PI / 2, Math.PI).slice(1),
+    ]);
+  }
+  const left: PolyPoint[] = [
+    [x, y + h - (bottom ? bl : 0)],
+    [x, y + (top ? tl : 0)],
+  ];
+  if (top) left.push(...arc(x + tl, y + tl, tl, Math.PI, Math.PI * 1.5).slice(1));
+  addPath(left);
+  commands.push({
+    op: 'path',
+    subpaths,
+    stroke: { color: borderRGB(border), lineWidth: border.width, dash: borderDash(border) },
+  });
 }
 
 function layoutSpacer(block: SpacerBlock, ctx: LayoutContext, opts: BlockLayoutOptions, inherited: ResolvedStyle): Fragment[] {
@@ -455,7 +623,7 @@ function layoutImage(block: ImageBlock, _ctx: LayoutContext, opts: BlockLayoutOp
   const commands: DrawCommand[] = [imgCmd];
   const borders = resolveBorders(block);
   if (borders.top || borders.bottom || borders.left || borders.right) {
-    drawBorders(commands, borders, x, 0, w, h, true, true, false);
+    drawBorders(commands, borders, x, 0, w, h, true, true, false, radius);
   }
 
   return [

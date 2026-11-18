@@ -401,7 +401,7 @@ function layoutRow(unit: Extract<Unit, { t: 'header' | 'footer' | 'detail' }>, u
       blocks: payload.blocks,
       contentH: payload.contentH,
       fill: cell.backgroundColor ?? props.backgroundColor ?? scaled?.fill ?? stripedFill,
-      borders: cellSides(cell.border ?? gridShorthand(grid), 0.5),
+      borders: cellSides(cell, gridShorthand(grid), 0.5),
       vAlign: cell.verticalAlign ?? 'top',
       diagonal: payload.diagonal,
       structurePath: [
@@ -868,7 +868,7 @@ function layoutMergedRun(run: RowUnit[], uc: UnitCtx, isFirstVisual: boolean): F
         blocks: payload.blocks,
         contentH: payload.contentH,
         fill: cell.backgroundColor ?? props.backgroundColor ?? scaled?.fill ?? stripedFill,
-        borders: cellSides(cell.border ?? gridShorthand(grid), 0.5),
+        borders: cellSides(cell, gridShorthand(grid), 0.5),
         vAlign: cell.verticalAlign ?? 'top',
         diagonal: payload.diagonal,
         structurePath: [
@@ -1026,9 +1026,14 @@ function gridShorthand(grid: GridSpec): BorderShorthand | undefined {
   return [grid.border.width, grid.border.style, grid.border.color];
 }
 
-function cellSides(shorthand: BorderShorthand | undefined, defaultWidth: number): Sides {
-  const b = parseBorder(shorthand, defaultWidth);
-  return { top: b, right: b, bottom: b, left: b };
+function cellSides(cell: CellNode, fallback: BorderShorthand | undefined, defaultWidth: number): Sides {
+  const base = parseBorder(cell.border ?? fallback, defaultWidth);
+  return {
+    top: parseBorder(cell.borderTop, defaultWidth) ?? base,
+    right: parseBorder(cell.borderRight, defaultWidth) ?? base,
+    bottom: parseBorder(cell.borderBottom, defaultWidth) ?? base,
+    left: parseBorder(cell.borderLeft, defaultWidth) ?? base,
+  };
 }
 
 function resolveGrid(block: TableBlock): GridSpec {

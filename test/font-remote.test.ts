@@ -7,6 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { parseFontFace, resolveRemoteFonts } from '../src/fonts/remote.js';
+import { collectCharset } from '../src/fonts/charset.js';
 import { htmlToReportDoc } from '../src/adapter/html.js';
 import type { ReportDoc } from '../src/ir/schema.js';
 
@@ -49,6 +50,22 @@ describe('parseFontFace', () => {
 });
 
 describe('resolveRemoteFonts', () => {
+  it('includes text nested under flex and container blocks in Google font subsets', () => {
+    const report: ReportDoc = {
+      body: [{
+        type: 'flex',
+        children: [{
+          block: {
+            type: 'container',
+            children: [{ type: 'paragraph', content: '↑ 12.4%' }],
+          },
+        }],
+      }],
+    };
+
+    expect(collectCharset(report)).toContain('↑');
+  });
+
   it('resolves a Google reference through the CSS into one face per URL', async () => {
     let decoded = false;
     const sources = await resolveRemoteFonts(

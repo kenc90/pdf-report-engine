@@ -4,13 +4,32 @@
  */
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
-import { parseHtml, htmlToReportDoc, type HElement } from '../src/adapter/html.js';
+import { parseHtml, htmlToReportDoc, htmlElementToReportDoc, type HElement } from '../src/adapter/html.js';
 import { resolvePage } from '../src/core/page.js';
 import { MM_TO_PT } from '../src/core/units.js';
 import { renderToBuffer } from '../src/index.js';
-import type { TableBlock, Block, ParagraphBlock, HeadingBlock, ImageBlock, ContentSpan } from '../src/ir/schema.js';
+import type { TableBlock, Block, ParagraphBlock, HeadingBlock, ImageBlock, ContentSpan, ContainerBlock, FlexBlock } from '../src/ir/schema.js';
 
 const ARIAL = 'C:/Windows/Fonts/arial.ttf';
+
+function mockElement(
+  tag: string,
+  attrs: Record<string, string>,
+  children: Node[],
+  ownerDocument: Document,
+  computed: Record<string, string>,
+  computedStyles: WeakMap<Element, Record<string, string>>,
+): Element {
+  const element = {
+    nodeType: 1,
+    localName: tag,
+    ownerDocument,
+    attributes: Object.entries(attrs).map(([name, value]) => ({ name, value })),
+    childNodes: children,
+  } as unknown as Element;
+  computedStyles.set(element, computed);
+  return element;
+}
 
 describe('parseHtml', () => {
   it('builds a nested tree with attributes and text', () => {
@@ -67,12 +86,327 @@ describe('htmlToReportDoc: blocks', () => {
     expect(p.align).toBe('right');
   });
 
+  it('does not turn transparent backgrounds into opaque colors', () => {
+    for (const background of ['transparent', 'rgba(0, 0, 0, 0)', 'rgb(0 0 0 / 0)']) {
+      const doc = htmlToReportDoc(`<p style="background-color:${background}">x</p>`);
+      expect((doc.body![0] as ParagraphBlock).backgroundColor).toBeUndefined();
+    }
+  });
+
   it('rewrites {PAGE} and {TOTAL} into $page bindings', () => {
     const doc = htmlToReportDoc('<p>Page {PAGE} of {TOTAL}</p>');
     const p = doc.body![0] as ParagraphBlock;
     const binds = (p.content as ContentSpan[]).filter((c) => typeof c === 'object').map((c) => (c as ContentSpan).bind);
     expect(binds).toContain('$page.number');
     expect(binds).toContain('$page.total');
+  });
+});
+
+describe('htmlElementToReportDoc', () => {
+  it('maps rounded flex-item styles onto the stretch background box', () => {
+    const report = htmlToReportDoc(`
+      <style>
+        .kpi-row { display: flex; align-items: stretch; }
+        .kpi-card { flex: 1 1 0; border: 1px solid #dce5ef; border-radius: 10px; padding: 16px; background: #f7fafc; }
+      </style>
+      <div class="kpi-row"><div class="kpi-card"><p>Net revenue</p></div></div>
+    `);
+    const flex = report.body![0] as FlexBlock;
+
+    expect(flex.children[0]!.borderRadius).toEqual([7.5, 7.5, 7.5, 7.5]);
+  });
+
+  it('keeps styled block wrappers and edge-specific table borders', () => {
+    const report = htmlToReportDoc(
+      '<div style="background-color:#fff;padding:12px;border:1px solid #ccc;border-radius:8px">' +
+      '<table><tr><td style="border-left:2px solid #f60">Item</td></tr></table></div>',
+    );
+    const wrapper = report.body![0] as ContainerBlock;
+    const table = wrapper.children[0] as TableBlock;
+
+    expect(wrapper.type).toBe('container');
+    expect(wrapper.paddingTop).toBeCloseTo(9);
+    expect(wrapper.borderRadius).toEqual([6, 6, 6, 6]);
+    expect(table.staticRows![0]!.cells[0]!.borderLeft).toEqual([1.5, 'solid', '#f60']);
+  });
+
+  it('preserves inline children around block children in styled wrappers', () => {
+    const source = '<div style="padding:12px;background-color:#f7fafc">' +
+      '<strong>Quarterly notes</strong><p>Real DOM paragraph</p></div>';
+    const report = htmlToReportDoc(source);
+    const wrapper = report.body![0] as ContainerBlock;
+    const heading = wrapper.children[0] as ParagraphBlock;
+
+    expect(wrapper.children.map((child) => child.type)).toEqual(['paragraph', 'paragraph']);
+    expect(JSON.stringify(heading.content)).toContain('Quarterly notes');
+    expect(JSON.stringify(heading.content)).toContain('"fontWeight":700');
+    expect(heading.backgroundColor).toBeUndefined();
+    expect(heading.paddingTop).toBeUndefined();
+    expect(JSON.stringify(heading.content)).not.toContain('border');
+  });
+
+  it('collects Google font references for Unicode glyphs outside base PDF fonts', () => {
+    const url = 'https://fonts.googleapis.com/css2?family=Noto+Sans+Symbols&display=swap';
+    const report = htmlToReportDoc(
+      `<html><head><link rel="stylesheet" href="${url}"></head><body><p>↑ 12.4%</p></body></html>`,
+    );
+
+    expect(report.fonts).toEqual([{ type: 'google', url }]);
+    expect((report.body![0] as ParagraphBlock).content).toContain('↑');
+  });
+
+  it('keeps a single browser line unwrapped when PDF font metrics differ', () => {
+    const computedStyles = new WeakMap<Element, Record<string, string>>();
+    let selected: Element | undefined;
+    let heading: Element;
+    let cell: Element;
+    const ownerDocument = {
+      defaultView: {
+        getComputedStyle: (element: Element) => ({
+          getPropertyValue: (property: string) => computedStyles.get(element)?.[property] ?? '',
+          get display() { return computedStyles.get(element)?.display ?? ''; },
+          get whiteSpace() { return computedStyles.get(element)?.['white-space'] ?? ''; },
+          get visibility() { return computedStyles.get(element)?.visibility ?? ''; },
+        }),
+      },
+      head: { children: [] },
+      documentElement: {},
+      baseURI: 'https://example.test/page.html',
+      createRange: () => ({
+        selectNodeContents: (element: Element) => { selected = element; },
+        getClientRects: () => selected === heading || selected === cell
+          ? [{ top: 10, width: 180, height: 28 }, { top: 10, width: 24, height: 28 }]
+          : [],
+      }),
+    };
+    const text = { nodeType: 3, nodeValue: 'Northwind Studio', childNodes: [] } as unknown as Node;
+    heading = mockElement(
+      'h2',
+      {},
+      [text],
+      ownerDocument as unknown as Document,
+      { display: 'block', 'white-space': 'normal', 'font-size': '25px' },
+      computedStyles,
+    );
+    const cellText = { nodeType: 3, nodeValue: 'Review and delivery', childNodes: [] } as unknown as Node;
+    cell = mockElement(
+      'td',
+      {},
+      [cellText],
+      ownerDocument as unknown as Document,
+      { display: 'table-cell', 'white-space': 'normal' },
+      computedStyles,
+    );
+    const row = mockElement('tr', {}, [cell], ownerDocument as unknown as Document, { display: 'table-row' }, computedStyles);
+    const tableElement = mockElement('table', {}, [row], ownerDocument as unknown as Document, { display: 'table' }, computedStyles);
+    const root = mockElement(
+      'div',
+      {},
+      [heading, tableElement],
+      ownerDocument as unknown as Document,
+      { display: 'block', 'white-space': 'normal' },
+      computedStyles,
+    );
+
+    const report = htmlElementToReportDoc(root);
+
+    expect((report.body![0] as HeadingBlock).whiteSpace).toBe('nowrap');
+    expect((report.body![1] as TableBlock).staticRows![0]!.cells[0]!.style?.whiteSpace).toBe('nowrap');
+  });
+
+  it('captures and renders live canvas pixels as a labelled PNG image', async () => {
+    const computedStyles = new WeakMap<Element, Record<string, string>>();
+    const view = {
+      getComputedStyle: () => ({ getPropertyValue: () => '' }),
+    } as unknown as Window;
+    const ownerDocument = {
+      defaultView: view,
+      head: { children: [] },
+      documentElement: {},
+      baseURI: 'https://example.test/page.html',
+    } as unknown as Document;
+    const dataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGP4DwQACfsD/fteaysAAAAASUVORK5CYII=';
+    let requestedType = '';
+    const canvas = Object.assign(
+      mockElement(
+        'canvas',
+        { width: '320', height: '180', 'aria-label': 'Monthly revenue chart' },
+        [],
+        ownerDocument,
+        {},
+        computedStyles,
+      ),
+      {
+        width: 320,
+        height: 180,
+        toDataURL: (type: string) => {
+          requestedType = type;
+          return dataUrl;
+        },
+      },
+    ) as unknown as HTMLCanvasElement;
+
+    const report = htmlElementToReportDoc(canvas);
+    const image = report.body![0] as ImageBlock;
+
+    expect(requestedType).toBe('image/png');
+    expect(image.src).toBe(dataUrl);
+    expect(image.width).toBe('320px');
+    expect(image.height).toBe('180px');
+    expect(image.alt).toBe('Monthly revenue chart');
+    const pdf = Buffer.from(await renderToBuffer(report));
+    expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
+    expect(pdf.toString('latin1')).toContain('/Subtype /Image');
+  });
+
+  it('rejects canvases with zero intrinsic dimensions before encoding', () => {
+    const computedStyles = new WeakMap<Element, Record<string, string>>();
+    const ownerDocument = {
+      defaultView: { getComputedStyle: () => ({ getPropertyValue: () => '' }) },
+      head: { children: [] },
+      documentElement: {},
+      baseURI: 'https://example.test/page.html',
+    } as unknown as Document;
+    let encoded = false;
+    const canvas = Object.assign(
+      mockElement('canvas', {}, [], ownerDocument, {}, computedStyles),
+      {
+        width: 0,
+        height: 180,
+        toDataURL: () => { encoded = true; return ''; },
+      },
+    ) as unknown as HTMLCanvasElement;
+
+    expect(() => htmlElementToReportDoc(canvas)).toThrow(/zero intrinsic width or height/);
+    expect(encoded).toBe(false);
+  });
+
+  it('captures live content and computed styles from the page document', () => {
+    const computedStyles = new WeakMap<Element, Record<string, string>>();
+    const view = {
+      getComputedStyle: (element: Element) => ({
+        getPropertyValue: (property: string) => computedStyles.get(element)?.[property] ?? '',
+      }),
+    } as unknown as Window;
+    const headChildren: Element[] = [];
+    const ownerDocument = {
+      defaultView: view,
+      head: { children: headChildren },
+      documentElement: { lang: 'en-US' },
+      baseURI: 'https://example.test/reports/page.html',
+    } as unknown as Document;
+    const stylesheetText = {
+      nodeType: 3,
+      nodeValue: '.sample { margin: 0 auto; }',
+      childNodes: [],
+    } as unknown as Node;
+    headChildren.push(mockElement('style', {}, [stylesheetText], ownerDocument, {}, computedStyles));
+    const text = { nodeType: 3, nodeValue: 'Updated by page code', childNodes: [] } as unknown as Node;
+    const paragraph = mockElement(
+      'p',
+      { class: 'report-text', style: 'color: blue' },
+      [text],
+      ownerDocument,
+      {
+        'font-size': '18px',
+        'font-family': '"Times New Roman", Arial',
+        color: 'rgb(200, 0, 0)',
+        'background-color': 'rgba(0, 0, 0, 0)',
+        border: '0px none rgb(200, 0, 0)',
+        'border-top': '0px none rgb(200, 0, 0)',
+        transform: 'matrix(0, 1, -1, 0, 0, 0)',
+        'min-height': 'auto',
+        'flex-basis': 'auto',
+        left: 'auto',
+        top: 'auto',
+        'letter-spacing': 'normal',
+      },
+      computedStyles,
+    );
+    const root = mockElement(
+      'div',
+      {},
+      [paragraph],
+      ownerDocument,
+      { display: 'block', 'background-color': 'rgba(0, 0, 0, 0)' },
+      computedStyles,
+    );
+
+    const report = htmlElementToReportDoc(root);
+    const block = report.body![0] as ParagraphBlock;
+
+    expect(report.language).toBe('en-US');
+    expect(block.content).toBe('Updated by page code');
+    expect(block.fontSize).toBeCloseTo(13.5, 1);
+    expect(block.fontFamily).toEqual(['Times New Roman', 'Arial']);
+    expect(block.color).toBe('rgb(200, 0, 0)');
+    expect(block.backgroundColor).toBeUndefined();
+    expect(block.border).toBeUndefined();
+    expect(block.borderTop).toBeUndefined();
+    expect(block.rotate).toBeCloseTo(90, 1);
+  });
+
+  it('preserves line breaks for elements with computed block display', () => {
+    const computedStyles = new WeakMap<Element, Record<string, string>>();
+    const view = {
+      getComputedStyle: (element: Element) => ({
+        getPropertyValue: (property: string) => computedStyles.get(element)?.[property] ?? '',
+        get display() { return computedStyles.get(element)?.display ?? ''; },
+        get visibility() { return computedStyles.get(element)?.visibility ?? ''; },
+      }),
+    } as unknown as Window;
+    const ownerDocument = {
+      defaultView: view,
+      head: { children: [] },
+      documentElement: {},
+      baseURI: 'https://example.test/page.html',
+    } as unknown as Document;
+    const before = { nodeType: 3, nodeValue: 'Bill to', childNodes: [] } as unknown as Node;
+    const nameText = { nodeType: 3, nodeValue: 'Contoso Research', childNodes: [] } as unknown as Node;
+    const after = { nodeType: 3, nodeValue: '88 Market Street', childNodes: [] } as unknown as Node;
+    const label = mockElement('span', {}, [before], ownerDocument, { display: 'inline' }, computedStyles);
+    const name = mockElement('strong', {}, [nameText], ownerDocument, { display: 'block' }, computedStyles);
+    const address = mockElement('span', {}, [after], ownerDocument, { display: 'inline' }, computedStyles);
+    const root = mockElement('div', {}, [label, name, address], ownerDocument, { display: 'block' }, computedStyles);
+
+    const report = htmlElementToReportDoc(root);
+
+    expect(JSON.stringify((report.body![0] as ParagraphBlock).content)).toContain('\u2028');
+  });
+
+  it('omits elements hidden by the page styles', () => {
+    const computedStyles = new WeakMap<Element, Record<string, string>>();
+    const view = {
+      getComputedStyle: (element: Element) => ({
+        getPropertyValue: (property: string) => computedStyles.get(element)?.[property] ?? '',
+        get display() { return computedStyles.get(element)?.display ?? ''; },
+        get visibility() { return computedStyles.get(element)?.visibility ?? ''; },
+      }),
+    } as unknown as Window;
+    const ownerDocument = {
+      defaultView: view,
+      head: { children: [] },
+      documentElement: {},
+      baseURI: 'https://example.test/page.html',
+    } as unknown as Document;
+    const hiddenText = { nodeType: 3, nodeValue: 'Do not render', childNodes: [] } as unknown as Node;
+    const visibleText = { nodeType: 3, nodeValue: 'Keep this', childNodes: [] } as unknown as Node;
+    const hidden = mockElement('p', {}, [hiddenText], ownerDocument, { display: 'none' }, computedStyles);
+    const visible = mockElement('p', {}, [visibleText], ownerDocument, { display: 'block' }, computedStyles);
+    const root = mockElement('div', {}, [hidden, visible], ownerDocument, { display: 'block' }, computedStyles);
+
+    const report = htmlElementToReportDoc(root);
+
+    expect(report.body).toHaveLength(1);
+    expect((report.body![0] as ParagraphBlock).content).toBe('Keep this');
+  });
+
+  it('requires an element attached to a document window', () => {
+    const element = {
+      nodeType: 1,
+      ownerDocument: { defaultView: null },
+    } as unknown as Element;
+    expect(() => htmlElementToReportDoc(element)).toThrow(/document with a window/);
   });
 });
 

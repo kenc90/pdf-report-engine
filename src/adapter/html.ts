@@ -208,6 +208,49 @@ function declarationsToIr(style: string): IrBox {
   return out as IrBox;
 }
 
+function parseFontFamilies(value: string): string[] {
+  const families: string[] = [];
+  let family = '';
+  let quote = '';
+  let escaped = false;
+  for (const ch of value) {
+    if (escaped) {
+      family += ch;
+      escaped = false;
+    } else if (quote && ch === '\\') {
+      escaped = true;
+    } else if (quote) {
+      if (ch === quote) quote = '';
+      else family += ch;
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+    } else if (ch === ',') {
+      if (family.trim()) families.push(family.trim());
+      family = '';
+    } else {
+      family += ch;
+    }
+  }
+  if (family.trim()) families.push(family.trim());
+  return families;
+}
+
+function isTransparentColor(value: string): boolean {
+  const color = value.trim().toLowerCase();
+  if (color === 'transparent') return true;
+  const fn = /^rgba?\((.*)\)$/.exec(color);
+  if (!fn) return false;
+  const parts = fn[1]!.split('/');
+  const alpha = parts.length > 1
+    ? parts[parts.length - 1]!.trim()
+    : fn[1]!.split(',').length === 4
+      ? fn[1]!.split(',')[3]!.trim()
+      : undefined;
+  if (alpha === undefined) return false;
+  const opacity = alpha.endsWith('%') ? Number.parseFloat(alpha) / 100 : Number.parseFloat(alpha);
+  return Number.isFinite(opacity) && opacity === 0;
+}
+
 const ALIGN: Record<string, StyleProps['align']> = {
   left: 'left',
   center: 'center',
@@ -221,7 +264,7 @@ function applyDecl(prop: string, value: string, set: (k: string, v: unknown) => 
       set('fontSize', toPt(value));
       return;
     case 'font-family':
-      set('fontFamily', value.split(',').map((f) => f.trim()));
+      set('fontFamily', parseFontFamilies(value));
       return;
     case 'font-weight':
       set('fontWeight', value === 'bold' ? 700 : value === 'normal' ? 400 : Number(value) || undefined);
@@ -233,7 +276,7 @@ function applyDecl(prop: string, value: string, set: (k: string, v: unknown) => 
       set('color', value);
       return;
     case 'background-color':
-      set('backgroundColor', value.trim());
+      if (!isTransparentColor(value)) set('backgroundColor', value.trim());
       return;
     case 'background':
       // `background: linear-gradient(...)` sets a gradient; any other background
@@ -241,9 +284,13 @@ function applyDecl(prop: string, value: string, set: (k: string, v: unknown) => 
       if (/(?:-\w+-)?linear-gradient\(/i.test(value)) {
         const g = parseLinearGradient(value);
         if (g) set('backgroundImage', g);
-        else set('backgroundColor', value.split(/\s+/)[0]);
+        else {
+          const color = value.split(/\s+/)[0]!;
+          if (!isTransparentColor(color)) set('backgroundColor', color);
+        }
       } else {
-        set('backgroundColor', value.split(/\s+/)[0]);
+        const color = value.split(/\s+/)[0]!;
+        if (!isTransparentColor(color)) set('backgroundColor', color);
       }
       return;
     case 'background-image':
@@ -368,8 +415,14 @@ function applyDecl(prop: string, value: string, set: (k: string, v: unknown) => 
     case 'border-top':
       set('borderTop', parseBorderShorthand(value));
       return;
+    case 'border-right':
+      set('borderRight', parseBorderShorthand(value));
+      return;
     case 'border-bottom':
       set('borderBottom', parseBorderShorthand(value));
+      return;
+    case 'border-left':
+      set('borderLeft', parseBorderShorthand(value));
       return;
     case 'break-before':
     case 'page-break-before':
@@ -477,16 +530,18 @@ function applyBox(value: string, set: (k: string, v: unknown) => void, kind: 'ma
 
 function parseBorderShorthand(value: string): BorderShorthand | undefined {
   if (!value || value === 'none' || value === '0') return undefined;
-  const parts = value.split(/\s+/).filter(Boolean);
+  const parts = splitOutsideParens(value, ' ');
   let width = 1;
   let style: 'solid' | 'dashed' | 'dotted' | 'double' = 'solid';
+  let visible = true;
   let color = 'black';
   for (const p of parts) {
     if (/px|pt|em|rem|cm|mm|in|%$/.test(p) && /^\d/.test(p)) width = toPt(p);
     else if (p === 'solid' || p === 'dashed' || p === 'dotted' || p === 'double') style = p;
+    else if (p === 'none' || p === 'hidden') visible = false;
     else color = p;
   }
-  return [width, style, color];
+  return visible && width > 0 ? [width, style, color] : undefined;
 }
 
 // --- border-radius / box-shadow / linear-gradient --------------------------
@@ -759,6 +814,18 @@ function textToContent(text: string, style: IrBox | undefined): Content {
   return pieces.length === 1 && typeof pieces[0] === 'string' ? pieces[0] : pieces;
 }
 
+function hasBlockDisplay(el: HElement): boolean {
+  const declarations = (el.attrs['style'] ?? '').split(';');
+  let display = '';
+  for (const declaration of declarations) {
+    const colon = declaration.indexOf(':');
+    if (colon >= 0 && declaration.slice(0, colon).trim().toLowerCase() === 'display') {
+      display = declaration.slice(colon + 1).trim().toLowerCase();
+    }
+  }
+  return /^(block|flow-root|list-item|table|table-caption|table-cell|table-row|flex|grid)$/.test(display);
+}
+
 function elementStyle(el: HElement, opts: HtmlOptions): IrBox {
   const classes = (el.attrs['class'] ?? '').split(/\s+/).filter(Boolean);
   const classStyles = classes.map((c) => opts.styles?.[c] ?? {}).filter(Boolean);
@@ -791,6 +858,50 @@ function mergeIr(base: IrBox, over: IrBox): IrBox {
   const out: Record<string, unknown> = { ...base };
   for (const [k, v] of Object.entries(over)) if (v !== undefined) out[k] = v;
   return out as IrBox;
+}
+
+function inheritedTextStyle(style: IrBox): IrBox {
+  return {
+    align: style.align,
+    color: style.color,
+    features: style.features,
+    fontFamily: style.fontFamily,
+    fontSize: style.fontSize,
+    fontStyle: style.fontStyle,
+    fontVariant: style.fontVariant,
+    fontWeight: style.fontWeight,
+    letterSpacing: style.letterSpacing,
+    lineHeight: style.lineHeight,
+    textDecoration: style.textDecoration,
+    textTransform: style.textTransform,
+    whiteSpace: style.whiteSpace,
+  };
+}
+
+function hasVisibleBox(style: IrBox): boolean {
+  const nonZero = (value: unknown): boolean => {
+    if (typeof value === 'number') return value !== 0;
+    return Array.isArray(value) && value.some((part) => typeof part === 'number' && part !== 0);
+  };
+  return Boolean(
+    style.backgroundColor ||
+    style.backgroundImage ||
+    style.boxShadow ||
+    style.border ||
+    style.borderTop ||
+    style.borderRight ||
+    style.borderBottom ||
+    style.borderLeft ||
+    nonZero(style.borderRadius) ||
+    nonZero(style.paddingTop) ||
+    nonZero(style.paddingRight) ||
+    nonZero(style.paddingBottom) ||
+    nonZero(style.paddingLeft) ||
+    nonZero(style.marginTop) ||
+    nonZero(style.marginRight) ||
+    nonZero(style.marginBottom) ||
+    nonZero(style.marginLeft)
+  );
 }
 
 function isBlock(node: HNode): node is HElement {
@@ -851,7 +962,18 @@ function inlineContent(el: HElement, opts: HtmlOptions, inherited: IrBox): Conte
     if (Object.keys(delta).length || node.tag !== 'span') span.style = delta as Partial<StyleProps>;
     push(span);
   };
-  for (const child of el.children) walk(child, inherited);
+  for (let i = 0; i < el.children.length; i += 1) {
+    const child = el.children[i]!;
+    if (child.type === 'element' && hasBlockDisplay(child)) {
+      if (out.length > 0) push('\u2028');
+      walk(child, inherited);
+      if (el.children.slice(i + 1).some((next) => next.type === 'element' || /\S/.test(next.text))) {
+        push('\u2028');
+      }
+    } else {
+      walk(child, inherited);
+    }
+  }
   return out.length === 1 ? out[0]! : out;
 }
 
@@ -1268,6 +1390,7 @@ function flexItemFromStyle(itemStyle: IrBox, b: Block): FlexItem {
   if (s.width !== undefined) item.width = s.width as number | string;
   if (s.height !== undefined) item.height = s.height as number | string;
   if (s.backgroundColor !== undefined) item.backgroundColor = s.backgroundColor as FlexItem['backgroundColor'];
+  if (s.borderRadius !== undefined) item.borderRadius = s.borderRadius as FlexItem['borderRadius'];
   return item;
 }
 
@@ -1425,12 +1548,38 @@ function elToBlockCore(el: HElement, opts: HtmlOptions): Block[] {
   const blockChildren = el.children.filter(isBlock);
   if (blockChildren.length > 0) {
     const nested: Block[] = [];
+    const textStyle = inheritedTextStyle(style);
+    let inlineRun: HNode[] = [];
+    const flushInline = (): void => {
+      if (inlineRun.length === 0) return;
+      const wrapper: HElement = { type: 'element', tag: 'span', attrs: {}, children: inlineRun };
+      const content = inlineContent(wrapper, opts, textStyle);
+      const nonEmpty = typeof content === 'string'
+        ? content.trim().length > 0
+        : Array.isArray(content) ? content.length > 0 : true;
+      if (nonEmpty) nested.push({ type: 'paragraph', content, ...textStyle } as Block);
+      inlineRun = [];
+    };
     for (const c of el.children) {
-      if (c.type === 'element' && isBlock(c)) nested.push(...elToBlock(c, opts));
-      else if (c.type === 'text' && /\S/.test(c.text)) nested.push({ type: 'paragraph', content: textToContent(c.text, style), ...style } as Block);
+      if (isBlock(c)) {
+        flushInline();
+        nested.push(...elToBlock(c, opts));
+      } else {
+        inlineRun.push(c);
+      }
     }
+    flushInline();
     // A wrapper with an id anchors its first real block.
     if (id && nested.length > 0 && nested[0]!.id === undefined) nested[0]!.id = id;
+    if (hasVisibleBox(style)) {
+      return [withId({
+        type: 'container',
+        children: nested,
+        ...style,
+        width: undefined,
+        height: undefined,
+      } as Block)];
+    }
     return nested;
   }
   if (el.tag === 'li') {
@@ -1536,6 +1685,10 @@ function toCellNode(td: HElement, opts: HtmlOptions): CellNode {
   const s = style as Record<string, unknown>;
   if (s.backgroundColor !== undefined) cell.backgroundColor = s.backgroundColor as CellNode['backgroundColor'];
   if (s.border !== undefined) cell.border = s.border as BorderShorthand;
+  if (s.borderTop !== undefined) cell.borderTop = s.borderTop as BorderShorthand;
+  if (s.borderRight !== undefined) cell.borderRight = s.borderRight as BorderShorthand;
+  if (s.borderBottom !== undefined) cell.borderBottom = s.borderBottom as BorderShorthand;
+  if (s.borderLeft !== undefined) cell.borderLeft = s.borderLeft as BorderShorthand;
   if (s.paddingTop !== undefined) cell.paddingTop = s.paddingTop as number;
   if (s.paddingRight !== undefined) cell.paddingRight = s.paddingRight as number;
   if (s.paddingBottom !== undefined) cell.paddingBottom = s.paddingBottom as number;
@@ -1703,6 +1856,8 @@ export interface HtmlOptions {
   info?: ReportDoc['info'];
   /** @internal Stylesheet declarations precomputed for every element. */
   _selectorStyles?: WeakMap<HElement, IrBox>;
+  /** @internal Skip CSS cascade parsing when a live DOM snapshot already has computed styles. */
+  _disableStyleSheets?: boolean;
 }
 
 /** Absolute filesystem path? (POSIX `/…`, Windows `C:\…` / `C:/…`). */
@@ -1945,12 +2100,188 @@ function collectStyleText(root: HElement): string {
   return css;
 }
 
-/** Convert constrained authoring HTML into the report IR. */
-export function htmlToReportDoc(html: string, opts: HtmlOptions = {}): ReportDoc {
-  const tree = parseHtml(html);
+const COMPUTED_STYLE_PROPERTIES = [
+  'font-size',
+  'font-family',
+  'font-weight',
+  'font-style',
+  'color',
+  'background-color',
+  'background-image',
+  'border-radius',
+  'box-shadow',
+  'text-align',
+  'text-decoration',
+  'opacity',
+  'line-height',
+  'letter-spacing',
+  'white-space',
+  'text-transform',
+  'width',
+  'height',
+  'position',
+  'left',
+  'top',
+  'z-index',
+  'transform',
+  'min-height',
+  'vertical-align',
+  'margin',
+  'margin-top',
+  'margin-right',
+  'margin-bottom',
+  'margin-left',
+  'padding',
+  'padding-top',
+  'padding-right',
+  'padding-bottom',
+  'padding-left',
+  'border',
+  'border-top',
+  'border-right',
+  'border-bottom',
+  'border-left',
+  'break-before',
+  'break-after',
+  'break-inside',
+  'page-break-before',
+  'page-break-after',
+  'page-break-inside',
+  'display',
+  'flex-direction',
+  'flex-wrap',
+  'justify-content',
+  'align-items',
+  'gap',
+  'row-gap',
+  'column-gap',
+  'flex-grow',
+  'flex-shrink',
+  'flex-basis',
+  'align-self',
+  'column-count',
+] as const;
+
+const AUTO_LENGTH_PROPERTIES = new Set([
+  'width',
+  'height',
+  'min-height',
+  'left',
+  'top',
+  'margin',
+  'margin-top',
+  'margin-right',
+  'margin-bottom',
+  'margin-left',
+  'padding',
+  'padding-top',
+  'padding-right',
+  'padding-bottom',
+  'padding-left',
+  'letter-spacing',
+  'gap',
+  'row-gap',
+  'column-gap',
+  'flex-basis',
+]);
+
+function domNodeToHNode(
+  node: Node,
+  view: Window,
+  includeStyles: boolean,
+  inheritedVisibility = true,
+  computedStyle?: CSSStyleDeclaration,
+): HNode | undefined {
+  if (node.nodeType === 3) {
+    return inheritedVisibility ? { type: 'text', text: node.nodeValue ?? '' } : undefined;
+  }
+  if (node.nodeType !== 1) return undefined;
+
+  const element = node as Element;
+  const computed = includeStyles ? computedStyle ?? view.getComputedStyle(element) : undefined;
+  if (computed?.display === 'none') return undefined;
+  const textVisible = computed
+    ? computed.visibility !== 'hidden' && computed.visibility !== 'collapse'
+    : inheritedVisibility;
+  const attrs: Record<string, string> = {};
+  for (const attr of Array.from(element.attributes)) attrs[attr.name.toLowerCase()] = attr.value;
+  const isCanvas = element.localName.toLowerCase() === 'canvas';
+  if (isCanvas) {
+    if (!textVisible) return undefined;
+    const canvas = element as HTMLCanvasElement;
+    if (canvas.width === 0 || canvas.height === 0) {
+      throw new Error('Cannot capture a canvas with zero intrinsic width or height.');
+    }
+    const dataUrl = canvas.toDataURL('image/png');
+    if (!/^data:image\/png(?:;|,)/i.test(dataUrl)) {
+      throw new Error('Canvas could not be encoded as a PNG image.');
+    }
+    attrs['src'] = dataUrl;
+    if (attrs['alt'] === undefined && attrs['aria-label'] !== undefined) attrs['alt'] = attrs['aria-label'];
+    if (attrs['width'] === undefined) attrs['width'] = String(canvas.width);
+    if (attrs['height'] === undefined) attrs['height'] = String(canvas.height);
+  }
+
+  if (computed) {
+    const style = COMPUTED_STYLE_PROPERTIES
+      .map((property) => [property, computed.getPropertyValue(property)] as const)
+      .map(([property, value]) => [property, property === 'transform' ? reportRotation(value) : value] as const)
+      .filter(([property, value]) => {
+        const keyword = value.trim().toLowerCase();
+        return !(
+          (AUTO_LENGTH_PROPERTIES.has(property) && keyword === 'auto') ||
+          (
+            (property === 'letter-spacing' || property === 'gap' || property === 'row-gap' || property === 'column-gap') &&
+            keyword === 'normal'
+          )
+        );
+      })
+      .filter(([, value]) => value !== '')
+      .map(([property, value]) => `${property}: ${value}`)
+      .join('; ');
+    if (style) attrs['style'] = [attrs['style'], style].filter(Boolean).join('; ');
+    if ((computed.display === 'block' || computed.display === 'table-cell') && computed.whiteSpace === 'normal') {
+      const range = element.ownerDocument.createRange();
+      range.selectNodeContents(element);
+      const lineTops = new Set(
+        Array.from(range.getClientRects())
+          .filter((rect) => rect.width > 0 && rect.height > 0)
+          .map((rect) => Math.round(rect.top * 10) / 10),
+      );
+      if (lineTops.size === 1) attrs['style'] = [attrs['style'], 'white-space: nowrap'].filter(Boolean).join('; ');
+    }
+  }
+
+  const children: HNode[] = [];
+  for (const child of Array.from(element.childNodes)) {
+    const converted = domNodeToHNode(child, view, includeStyles, textVisible);
+    if (converted) children.push(converted);
+  }
+  if (computed && !textVisible && children.length === 0) return undefined;
+  return { type: 'element', tag: isCanvas ? 'img' : element.localName.toLowerCase(), attrs, children };
+}
+
+function reportRotation(transform: string): string {
+  if (transform === 'none' || transform === '') return '';
+  const matrix = /^matrix\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\)$/i.exec(transform);
+  if (!matrix) return '';
+  const [a, b, c, d, x, y] = matrix.slice(1).map(Number);
+  const epsilon = 0.001;
+  const isRotation =
+    Math.abs(a! * a! + b! * b! - 1) < epsilon &&
+    Math.abs(c! + b!) < epsilon &&
+    Math.abs(d! - a!) < epsilon &&
+    Math.abs(x!) < epsilon &&
+    Math.abs(y!) < epsilon;
+  if (!isRotation) return '';
+  const angle = Math.atan2(b!, a!) * 180 / Math.PI;
+  return `rotate(${angle}deg)`;
+}
+
+function reportDocFromTree(tree: HElement, opts: HtmlOptions, source: string): ReportDoc {
   // Resolve the `<style>` cascade once, up front: every later conversion reads
   // the precomputed match for its element instead of re-walking ancestors.
-  const rules = parseStyleSheet(collectStyleText(tree));
+  const rules = opts._disableStyleSheets ? [] : parseStyleSheet(collectStyleText(tree));
   const effective: HtmlOptions = rules.length > 0 ? { ...opts, _selectorStyles: computeMatchedStyles(tree, rules) } : opts;
   const body = findFirst(tree, 'body') ?? tree;
   const reportStyle = elementStyle(body, effective) as Partial<StyleProps>;
@@ -1971,12 +2302,12 @@ export function htmlToReportDoc(html: string, opts: HtmlOptions = {}): ReportDoc
     blocks.push(...elToBlock(child, effective));
   }
 
-  const htmlPage = pageSpecFromHtml(html, tree);
+  const htmlPage = pageSpecFromHtml(source, tree);
   const language = findFirst(tree, 'html')?.attrs['lang'] ?? body.attrs['lang'];
   const page = { ...htmlPage, ...pickDefined(opts.page) };
   const hasPage = Object.keys(page).length > 0;
   const fonts = collectFontRefs(tree);
-  const watermark = parseWatermark(html, tree, body);
+  const watermark = parseWatermark(source, tree, body);
 
   return {
     info: opts.info,
@@ -1989,6 +2320,58 @@ export function htmlToReportDoc(html: string, opts: HtmlOptions = {}): ReportDoc
     ...(language ? { language } : {}),
     ...(watermark ? { watermark } : {}),
   };
+}
+
+/** Convert constrained authoring HTML into the report IR. */
+export function htmlToReportDoc(html: string, opts: HtmlOptions = {}): ReportDoc {
+  return reportDocFromTree(parseHtml(html), opts, html);
+}
+
+/**
+ * Convert a live browser element into the report IR using its current computed
+ * styles. Page scripts are not executed; call this after the page has reached
+ * the state you want to capture.
+ */
+export function htmlElementToReportDoc(element: Element, opts: HtmlOptions = {}): ReportDoc {
+  if (!element || element.nodeType !== 1) {
+    throw new Error('htmlElementToReportDoc requires a live DOM Element.');
+  }
+  const view = element.ownerDocument.defaultView;
+  if (!view) {
+    throw new Error('htmlElementToReportDoc requires an element attached to a document with a window.');
+  }
+
+  const rootStyle = view.getComputedStyle(element);
+  if (rootStyle.display === 'none') {
+    throw new Error('htmlElementToReportDoc cannot capture an element with display: none.');
+  }
+  const liveElement = domNodeToHNode(element, view, true, true, rootStyle);
+  if (!liveElement || liveElement.type !== 'element') {
+    throw new Error('htmlElementToReportDoc could not read the supplied DOM Element.');
+  }
+
+  const headNodes = Array.from(element.ownerDocument.head?.children ?? [])
+    .filter((child) => child.localName === 'style' || child.localName === 'link' || child.localName === 'meta')
+    .map((child) => domNodeToHNode(child, view, false))
+    .filter((child): child is HElement => child?.type === 'element');
+  const lang = element.ownerDocument.documentElement?.lang;
+  const body: HElement = liveElement.tag === 'body'
+    ? liveElement
+    : { type: 'element', tag: 'body', attrs: {}, children: [liveElement] };
+  const tree: HElement = {
+    type: 'element',
+    tag: '#root',
+    attrs: {},
+    children: [{
+      type: 'element',
+      tag: 'html',
+      attrs: lang ? { lang } : {},
+      children: [...headNodes, body],
+    }],
+  };
+
+  const baseDir = opts.baseDir ?? new URL('.', element.ownerDocument.baseURI).href;
+  return reportDocFromTree(tree, { ...opts, baseDir, _disableStyleSheets: true }, collectStyleText(tree));
 }
 
 /** Extract watermark spec from `<meta name="watermark">` or `data-watermark` on body. */

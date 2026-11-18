@@ -7,7 +7,7 @@
  */
 import { probeImageSize, type ImageSize } from './image.js';
 import { readBoundedBytes, type LimitedFetchResponse } from './fetch-body.js';
-import type { ReportDoc, ImageBlock, SvgBlock, FlexBlock, Block } from '../ir/schema.js';
+import type { ReportDoc, ImageBlock, SvgBlock, FlexBlock, ContainerBlock, ColumnBlock, Block } from '../ir/schema.js';
 
 export interface ImageResolveOptions {
   /** Fetch `http(s)` image sources. Default `true`. Set `false` for air-gapped renders. */
@@ -125,7 +125,7 @@ export async function resolveRemoteImages(report: ReportDoc, opts: ImageResolveO
   };
 
   // Walk a list of blocks, replacing any image/svg nodes in place within the array,
-  // and recursing into flex containers (whose children are ordinary blocks).
+  // and recursing into nested block containers.
   const resolveBlocks = async <T>(blocks: T[] | undefined): Promise<T[] | undefined> => {
     if (!blocks) return blocks;
     const out = [...blocks];
@@ -141,6 +141,14 @@ export async function resolveRemoteImages(report: ReportDoc, opts: ImageResolveO
           children.push(inner === child.block ? child : { ...child, block: inner });
         }
         out[i] = { ...flex, children } as unknown as T;
+      } else if (node && typeof node === 'object' && (node as { type?: unknown }).type === 'container') {
+        const container = node as unknown as ContainerBlock;
+        const children = (await resolveBlocks(container.children)) ?? container.children;
+        out[i] = { ...container, children } as unknown as T;
+      } else if (node && typeof node === 'object' && (node as { type?: unknown }).type === 'columns') {
+        const columns = node as unknown as ColumnBlock;
+        const children = (await resolveBlocks(columns.children)) ?? columns.children;
+        out[i] = { ...columns, children } as unknown as T;
       }
     }
     return out;
