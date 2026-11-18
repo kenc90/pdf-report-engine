@@ -24,7 +24,6 @@
     .demo-main { max-width: 1040px; margin: 0 auto; padding: 26px 20px 56px; }
     .demo-main h1 { margin: 0 0 8px; color: var(--heading); font-size: clamp(1.7rem, 3vw, 2.3rem); }
     .demo-main h2 { margin: 0 0 6px; color: var(--heading); font-size: 1.15rem; }
-    .demo-main p { max-width: 78ch; }
     .demo-card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px; margin: 18px 0; }
     .demo-tabs { display: flex; gap: 6px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 12px; }
     .demo-tab, .demo-button {
@@ -128,6 +127,7 @@
       <div class="demo-tabs" role="tablist" aria-label="Choose a live DOM example">
         <button class="demo-tab" id="tab-invoice" role="tab" aria-selected="true" aria-controls="panel-invoice" data-example="invoice" type="button">Invoice · good fit</button>
         <button class="demo-tab" id="tab-kpi" role="tab" aria-selected="false" aria-controls="panel-kpi" data-example="kpi" type="button">KPI cards · good fit</button>
+        <button class="demo-tab" id="tab-bands" role="tab" aria-selected="false" aria-controls="panel-bands" data-example="bands" type="button">Header + footer · good fit</button>
         <button class="demo-tab" id="tab-grid" role="tab" aria-selected="false" aria-controls="panel-grid" data-example="grid" type="button">CSS Grid · lossy</button>
         <button class="demo-tab" id="tab-generated" role="tab" aria-selected="false" aria-controls="panel-generated" data-example="generated" type="button">Canvas + pseudo · partial</button>
         <button class="demo-tab" id="tab-hidden" role="tab" aria-selected="false" aria-controls="panel-hidden" data-example="hidden" type="button">Hidden element · error</button>
@@ -175,6 +175,52 @@
             </div>
           </div>
         </div>
+      </section>
+
+      <section class="demo-panel" id="panel-bands" role="tabpanel" aria-labelledby="tab-bands" data-status="good" data-example="bands">
+        <h3 id="explicit-page-bands">Explicit header and footer · good fit</h3>
+        <p>The report body is captured from this element. Separate HTML strings provide repeating page bands, including per-page number tokens.</p>
+        <pre data-copy><code>const report = htmlElementToReportDoc(reportElement, {
+  page: { size: 'a5', margin: 36 },
+  header: '&lt;div style="font-size:9px;font-weight:bold;color:#174a73;border-bottom:1px solid #dbe5ef;padding-bottom:6px"&gt;NORTHWIND STUDIO · OPERATIONS&lt;/div&gt;',
+  footer: '&lt;div style="font-size:8px;color:#586c80;text-align:right;border-top:1px solid #dbe5ef;padding-top:5px"&gt;Confidential · Page {PAGE} of {TOTAL}&lt;/div&gt;',
+});</code></pre>
+        <div class="sample-sheet">
+          <div class="demo-target" id="page-bands-report">
+            <h2 class="report-title">Operations service summary</h2>
+            <p>Quarterly activity by service region. The PDF uses a compact page size so the header and footer repeat across multiple pages.</p>
+            <table>
+              <thead><tr><th>Region</th><th>Service</th><th class="money">Requests</th></tr></thead>
+              <tbody>
+                <tr><td>North</td><td>Account support</td><td class="money">184</td></tr>
+                <tr><td>South</td><td>Account support</td><td class="money">162</td></tr>
+                <tr><td>East</td><td>Data services</td><td class="money">153</td></tr>
+                <tr><td>West</td><td>Data services</td><td class="money">147</td></tr>
+                <tr><td>Central</td><td>Reporting</td><td class="money">139</td></tr>
+                <tr><td>International</td><td>Reporting</td><td class="money">128</td></tr>
+                <tr><td>Northeast</td><td>Account support</td><td class="money">121</td></tr>
+                <tr><td>Northwest</td><td>Data services</td><td class="money">116</td></tr>
+                <tr><td>Southeast</td><td>Reporting</td><td class="money">109</td></tr>
+                <tr><td>Southwest</td><td>Account support</td><td class="money">103</td></tr>
+                <tr><td>Midwest</td><td>Data services</td><td class="money">98</td></tr>
+                <tr><td>Coastal</td><td>Reporting</td><td class="money">94</td></tr>
+                <tr><td>Mountain</td><td>Account support</td><td class="money">88</td></tr>
+                <tr><td>Pacific</td><td>Data services</td><td class="money">83</td></tr>
+                <tr><td>Atlantic</td><td>Reporting</td><td class="money">79</td></tr>
+                <tr><td>Metro</td><td>Account support</td><td class="money">74</td></tr>
+                <tr><td>Rural</td><td>Data services</td><td class="money">68</td></tr>
+                <tr><td>Global</td><td>Reporting</td><td class="money">61</td></tr>
+                <tr><td>Emerging</td><td>Account support</td><td class="money">54</td></tr>
+                <tr><td>Enterprise</td><td>Data services</td><td class="money">49</td></tr>
+                <tr><td>Public sector</td><td>Reporting</td><td class="money">43</td></tr>
+                <tr><td>Education</td><td>Account support</td><td class="money">37</td></tr>
+                <tr><td>Healthcare</td><td>Data services</td><td class="money">32</td></tr>
+                <tr><td>Nonprofit</td><td>Reporting</td><td class="money">26</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <p class="code-caption">The header and footer are supplied as HTML strings to <code>htmlElementToReportDoc</code>; they do not need to be inside the captured DOM element.</p>
       </section>
 
       <section class="demo-panel" id="panel-grid" role="tabpanel" aria-labelledby="tab-grid" data-status="lossy">

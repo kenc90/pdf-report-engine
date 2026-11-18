@@ -47,22 +47,82 @@
       <table>
         <thead><tr><th>Export</th><th>Purpose</th></tr></thead>
         <tbody>
-          <tr><td><code>createReport(report, options?)</code></td><td>Build the pdfkit doc + paginated <code>pages</code>; returns <code>{ doc, pages, registry }</code>. Synchronous; offline only.</td></tr>
-          <tr><td><code>renderToBuffer(report, options?)</code></td><td><code>createReport</code> + collect to a <code>Buffer</code>. Async; resolves remote images and web fonts first.</td></tr>
-          <tr><td><code>renderToStream(report, options?)</code></td><td>Returns a <code>ReadableStream&lt;Uint8Array&gt;</code> that flushes pages incrementally (<code>bufferPages: false</code>). Async; ideal for HTTP streaming.</td></tr>
-          <tr><td><code>htmlToReportDoc(html, options?)</code></td><td>HTML subset → <code>ReportDoc</code>.</td></tr>
-          <tr><td><code>htmlElementToReportDoc(element, options?)</code></td><td>Live browser element + current computed styles → <code>ReportDoc</code>.</td></tr>
-          <tr><td><code>parseHtml(html)</code></td><td>HTML subset → element tree (<code>HElement</code>) without converting.</td></tr>
-          <tr><td><code>readFontFiles(entries)</code></td><td>Load <code>FontFileEntry[]</code> (paths or bytes) → <code>FontSource[]</code>.</td></tr>
-          <tr><td><code>resolveRemoteImages(report, opts)</code></td><td>Run the URL→bytes image pre-pass yourself (advanced).</td></tr>
-          <tr><td><code>setImageFileReader(reader)</code></td><td>Install the synchronous file reader used for path-based image/SVG sources (the Node CLI calls this once). Clearing it does <em>not</em> disable path reads — see <code>setImagePathAccess</code>.</td></tr>
-          <tr><td><code>setImagePathAccess('allow' | 'deny')</code></td><td>Forbid reading image/SVG sources from the host filesystem. <code>'allow'</code> is the default and the historical behaviour; call <code>'deny'</code> once at startup when you render documents you did not author. See <a href="#hosting">Hosting untrusted payloads</a>.</td></tr>
-          <tr><td><code>imagePathAccessEnabled()</code></td><td>Read the current path-access policy.</td></tr>
-          <tr><td><code>resolveRemoteFonts(report, opts)</code></td><td>Turn <code>report.fonts</code> (Google <code>&lt;link&gt;</code>/<code>@import</code>, <code>@font-face</code>, font URLs) into embedded <code>FontSource[]</code> — decodes WOFF2 when needed.</td></tr>
-          <tr><td><code>parseFontFace(css)</code></td><td>Parse <code>@font-face</code> rules out of a CSS string.</td></tr>
-          <tr><td><code>FontRegistry</code></td><td>Lower-level face registration / measurement.</td></tr>
-          <tr><td><code>paginate</code></td><td>Drive the pagination engine directly against your own fragments.</td></tr>
-          <tr><td><code>resolvePage</code>, <code>toPt</code>, <code>expandBox</code>, <code>MM_TO_PT</code>, <code>CM_TO_PT</code>, <code>IN_TO_PT</code>, <code>PX_TO_PT</code></td><td>Page-size &amp; unit helpers (lengths default to points).</td></tr>
+          <tr>
+            <td><code>createReport(report: <a href="#ir">ReportDoc</a>, options?: <a href="#options">RenderOptions</a>)</code></td>
+            <td>Synchronously lays out and paginates a report, returning <code>{ doc, pages, registry }</code>. It does not fetch remote images or fonts; use an async renderer or resolve them yourself.</td>
+          </tr>
+          <tr>
+            <td><code>renderToBuffer(report: <a href="#ir">ReportDoc</a>, options?: <a href="#options">RenderOptions</a>)</code></td>
+            <td>Asynchronously resolves remote images/fonts, creates the PDF, and returns a <code>Promise&lt;Buffer&gt;</code> containing the complete file.</td>
+          </tr>
+          <tr>
+            <td><code>renderToStream(report: <a href="#ir">ReportDoc</a>, options?: <a href="#options">RenderOptions</a>)</code></td>
+            <td>Asynchronously resolves remote assets and returns a <code>Promise&lt;ReadableStream&lt;Uint8Array&gt;&gt;</code>. Pages are flushed incrementally; <code>bufferPages</code> is forced to <code>false</code>.</td>
+          </tr>
+          <tr>
+            <td><code>htmlToReportDoc(html: string, options?: <a href="#html-options">HtmlOptions</a>)</code></td>
+            <td>Parses an HTML string using the documented subset and converts it to a <a href="#ir"><code>ReportDoc</code></a>. It accepts <a href="#html-options"><code>HtmlOptions</code></a>; descriptions of the shared fields are in the <a href="#live-dom-options">options reference</a>.</td>
+          </tr>
+          <tr>
+            <td><code>htmlElementToReportDoc(element: Element, options?: <a href="#live-dom-options">HtmlElementOptions</a>)</code></td>
+            <td>Converts a live browser element using its current computed styles. The selected element must be attached to a document with a window and must not have <code>display: none</code>.</td>
+          </tr>
+          <tr>
+            <td><code>parseHtml(html: string): <a href="#types">HElement</a></code></td>
+            <td>Parses HTML text into the adapter's lightweight element tree. Use this when you need to inspect or transform the parsed tree before conversion; it does not apply browser computed styles.</td>
+          </tr>
+          <tr>
+            <td><code>readFontFiles(entries: <a href="#font-files">FontFileEntry[]</a>): Promise&lt;<a href="#font-files">FontSource[]</a>&gt;</code></td>
+            <td>Loads each entry's font bytes from a file path (Node) or accepts supplied bytes, producing the font sources used by <code>RenderOptions.fonts</code>.</td>
+          </tr>
+          <tr>
+            <td><code>resolveRemoteImages(report: <a href="#ir">ReportDoc</a>, options?: <a href="#image-resolve-options">ImageResolveOptions</a>)</code></td>
+            <td>Async pre-pass for remote <code>http(s)</code> image/SVG sources. Returns a new report with loaded bytes and intrinsic dimensions; the input report is not mutated.</td>
+          </tr>
+          <tr>
+            <td><code>setImageFileReader(reader: ImageFileReader | null)</code></td>
+            <td>Sets a synchronous <code>(path) =&gt; Uint8Array</code> loader for path-based images. Pass <code>null</code> to clear the custom loader; use <a href="#hosting"><code>setImagePathAccess</code></a> to actually forbid path reads.</td>
+          </tr>
+          <tr>
+            <td><code>setImagePathAccess(access: <a href="#hosting">ImagePathAccess</a>)</code></td>
+            <td>Sets the process-wide filesystem path policy to <code>'allow'</code> (default) or <code>'deny'</code>. See <a href="#hosting">Hosting untrusted payloads</a>.</td>
+          </tr>
+          <tr>
+            <td><code>imagePathAccessEnabled(): boolean</code></td>
+            <td>Returns whether filesystem-path image sources are currently allowed.</td>
+          </tr>
+          <tr>
+            <td><code>resolveRemoteFonts(report: <a href="#ir">ReportDoc</a>, options?: <a href="#font-resolve-options">FontResolveOptions</a>)</code></td>
+            <td>Resolves the font references in <code>report.fonts</code> and returns embedded <a href="#font-files"><code>FontSource[]</code></a>. Use it with synchronous <code>createReport</code> or a custom rendering pipeline when remote font bytes are needed first.</td>
+          </tr>
+          <tr>
+            <td><code>parseFontFace(css: string)</code></td>
+            <td>Extracts supported <code>@font-face</code> declarations from CSS text into family/weight/style/URL records.</td>
+          </tr>
+          <tr>
+            <td><code>collectCharset(report: <a href="#ir">ReportDoc</a>): string</code></td>
+            <td>Returns printable ASCII plus the report's used characters and case variants, for callers creating text-subset font requests.</td>
+          </tr>
+          <tr>
+            <td><code>new FontRegistry(options?: { fallbackFamily?: string })</code></td>
+            <td>Low-level font registration and face matching. Use <code>register(doc, source)</code> or <code>registerAll(doc, sources)</code> to add faces, then <code>resolve(familyStack, weight?, style?)</code> to match one. Most callers should pass <a href="#font-files"><code>FontSource[]</code></a> through render options instead.</td>
+          </tr>
+          <tr>
+            <td><code>paginate(input: <a href="#pagination-input">PaginateInput</a>): <a href="#pagination">Page[]</a></code></td>
+            <td>Low-level pagination entry point for callers that already have resolved layout context, page geometry, body blocks, bands, and expression scope. Most callers should use <code>createReport</code>.</td>
+          </tr>
+          <tr>
+            <td><code>resolvePage(spec?: <a href="#page-spec">PageSpec</a>): ResolvedPage</code></td>
+            <td>Applies defaults and orientation to page size/margins. See <a href="#page-spec">Page sizes and units</a>.</td>
+          </tr>
+          <tr>
+            <td><code>toPt(value: <a href="#page-spec">Length</a> | undefined, fallback?: number): number</code>, <code>resolveLen(value: <a href="#page-spec">Length</a> | undefined, reference: number, fallback?: number): number</code>, <code>expandBox(value, fallback)</code></td>
+            <td>Converts supported lengths to PDF points, resolves percentages against an explicit reference dimension, and expands CSS-style shorthand values. See <a href="#page-spec">Page sizes and units</a>.</td>
+          </tr>
+          <tr>
+            <td><code>MM_TO_PT</code>, <code>CM_TO_PT</code>, <code>IN_TO_PT</code>, <code>PX_TO_PT</code></td>
+            <td>Unit conversion constants; PDF layout coordinates are points (1/72 inch).</td>
+          </tr>
         </tbody>
       </table>
     </section>
@@ -70,15 +130,24 @@
     <section id="options">
       <h2><code>RenderOptions</code></h2>
       <pre data-copy><code>{
-  fonts?: FontSource[];                       // embedded font programs
+  fonts?: FontSource[];                       // embedded font programs; see FontSource below
   now?: () => Date;                           // injectable clock (deterministic tests)
   baseStyle?: Partial&lt;StyleProps&gt;;            // applied before IR style inheritance
   accessibility?: { language?: string };        // tagged output; language required here or on ReportDoc
   pdfa?: 'PDF/A-2b';                             // archival output; all used fonts must be embedded
-  images?: ImageResolveOptions;               // remote image handling (renderToBuffer only)
-  resolveFonts?: FontResolveOptions;          // remote/web-font handling (renderToBuffer only)
+  images?: ImageResolveOptions;               // remote image handling in async renderers
+  resolveFonts?: FontResolveOptions;          // remote/web-font handling in async renderers
   bufferPages?: boolean;                      // default true; false = flush each page as it ends
 }</code></pre>
+      <p>
+        <code>report</code> is the <a href="#ir"><code>ReportDoc</code></a> to lay out.
+        <code>options</code> is optional; omit it to use the defaults shown above. The
+        <code>fonts</code> field accepts embedded <a href="#font-files"><code>FontSource</code></a>
+        records.
+        <code>images</code> and <code>resolveFonts</code> settings are used by
+        <code>renderToBuffer</code> and <code>renderToStream</code>, not by the synchronous
+        <code>createReport</code>.
+      </p>
       <p>
         <code>bufferPages</code> is pdfkit's own page buffering. Left at its default the encoded
         stream of every page is held in memory and written only when the document ends — which is
@@ -96,7 +165,7 @@
         an sRGB output intent, and rejects encrypted output or unembedded font fallbacks. Validate
         files with dedicated accessibility and PDF/A tools before relying on formal conformance.
       </p>
-      <h3><code>ImageResolveOptions</code></h3>
+      <h3 id="image-resolve-options"><code>ImageResolveOptions</code></h3>
       <pre data-copy><code>{
   fetchRemote?: boolean;                      // default true
   timeoutMs?: number;                         // default 15000
@@ -104,7 +173,13 @@
   resolveImage?: (url) => Promise&lt;Uint8Array | null&gt;; // proxy / auth / cache / fixtures
   onError?: 'throw' | 'skip';                 // default 'throw'
 }</code></pre>
-      <h3><code>FontResolveOptions</code></h3>
+      <p>
+        These options are passed as <code>RenderOptions.images</code> or as the second argument
+        to <code>resolveRemoteImages(report, options)</code>. A custom
+        <code>resolveImage(url)</code> returns image bytes, or <code>null</code> when it cannot
+        resolve that URL; <code>onError</code> controls whether a failure throws or skips that asset.
+      </p>
+      <h3 id="font-resolve-options"><code>FontResolveOptions</code></h3>
       <pre data-copy><code>{
   fetchRemote?: boolean;                      // default true
   timeoutMs?: number;                         // default 15000
@@ -113,8 +188,51 @@
   resolveFont?: (url) => Promise&lt;Uint8Array | null&gt;; // proxy / auth / cache / fixtures
   resolveText?: (url) => Promise&lt;string | null&gt;;     // override CSS stylesheet fetch
   decodeWoff2?: (bytes) => Promise&lt;Uint8Array&gt;;      // override the WOFF2 → TTF decoder
+  decodeTimeoutMs?: number;                          // WOFF2 decode ceiling (default 8000ms)
   onError?: 'throw' | 'skip';                 // default 'skip' — a missing web font is non-fatal
+  subsetText?: boolean;                       // Google Fonts text subset (default true)
 }</code></pre>
+      <p>
+        These options are passed as <code>RenderOptions.resolveFonts</code> or as the second
+        argument to <code>resolveRemoteFonts(report, options)</code>.
+        <code>resolveFont(url)</code> returns font bytes, while <code>resolveText(url)</code>
+        returns stylesheet text. Set <code>fetchRemote: false</code> to disable the built-in
+        network fetch and rely only on your loaders.
+      </p>
+      <h3 id="font-files">FontFileEntry and FontSource</h3>
+      <p>
+        <code>readFontFiles(entries)</code> accepts one <code>FontFileEntry</code> per face. Supply
+        either a <code>path</code> (Node.js) or font <code>buffer</code> (browser or Node.js);
+        supplying neither is an error. It returns <code>FontSource[]</code>, which can be passed
+        to <code>RenderOptions.fonts</code>. A source's <code>family</code> must match a name in
+        the report's <code>fontFamily</code> style.
+      </p>
+      <pre data-copy><code>type FontFileEntry = {
+  family: string;                         // logical CSS family name
+  path?: string;                           // Node.js file path
+  buffer?: Uint8Array | ArrayBuffer;       // font bytes; works in browsers
+  weight?: number;                         // defaults to 400
+  style?: 'normal' | 'italic';             // defaults to 'normal'
+  postscriptName?: string;                 // face name when reading a .ttc collection
+};
+
+interface FontSource {
+  family: string;
+  buffer: Uint8Array | ArrayBuffer;        // TTF/OTF bytes
+  weight?: number;
+  style?: 'normal' | 'italic';
+  postscriptName?: string;
+  instance?: string;                       // distinguish Unicode-range subsets
+}</code></pre>
+      <p>
+        Use <code>new FontRegistry({ fallbackFamily? })</code> only for low-level integrations:
+        register sources with <code>register(pdfkitDoc, source)</code> or
+        <code>registerAll(pdfkitDoc, sources)</code>, then call
+        <code>resolve(familyStack, weight?, style?)</code>. <code>familyStack</code> is a family
+        name or ordered list of names, <code>weight</code> defaults to <code>400</code>, and
+        <code>style</code> defaults to <code>'normal'</code>. The optional fallback family defaults
+        to <code>'Helvetica'</code>.
+      </p>
     </section>
 
     <section id="hosting">
@@ -187,7 +305,15 @@
     </section>
 
     <section id="html-options">
-      <h2><code>HtmlOptions</code></h2>
+      <h2>HTML adapter options</h2>
+      <p><code>htmlToReportDoc(html, options?)</code> accepts <code>HtmlOptions</code>. The live-DOM
+      function <code>htmlElementToReportDoc(element, options?)</code> accepts
+      <code>HtmlElementOptions</code>, which extends <code>HtmlOptions</code> with explicit repeating
+      page headers and footers. The field-by-field descriptions below apply to the shared options too.
+      These are adapter options; PDF rendering options are passed separately
+      to <code>renderToBuffer</code>, <code>renderToStream</code>, or <code>createReport</code>.</p>
+
+      <h3><code>HtmlOptions</code> (HTML string input)</h3>
       <pre data-copy><code>{
   styles?: Record&lt;string, Partial&lt;BoxProps&gt;&gt;,  // class name -> IR style
   data?: Record&lt;string, unknown&gt;,              // scope for data-bind / data-each
@@ -196,6 +322,93 @@
   page?: PageSpec,                              // wins over @page / &lt;meta name="pdf-page"&gt;
   info?: ReportDoc['info'],
 }</code></pre>
+
+      <h3 id="live-dom-options"><code>HtmlElementOptions</code> (live DOM input)</h3>
+      <p>
+        This is the complete public options shape accepted by
+        <code>htmlElementToReportDoc</code>. It includes every <code>HtmlOptions</code> field plus
+        <code>header</code> and <code>footer</code>. Fields marked internal in the TypeScript source
+        are not intended for application use.
+      </p>
+      <pre data-copy><code>{
+  header?: Element | string,
+  footer?: Element | string,
+  styles?: Record&lt;string, Partial&lt;BoxProps&gt;&gt;,
+  data?: Record&lt;string, unknown&gt;,
+  style?: Partial&lt;StyleProps&gt;,
+  baseDir?: string,
+  page?: PageSpec,
+  info?: ReportDoc['info'],
+}</code></pre>
+      <table>
+        <thead><tr><th>Option</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>header</code> / <code>footer</code><br /><code>Element | string</code></td>
+            <td>
+              Creates a repeating page band. An <code>Element</code> is captured from its current
+              computed styles; a string is parsed as HTML using the supported HTML/CSS subset.
+              Explicit options replace the corresponding <code>data-band="pageHeader"</code> or
+              <code>data-band="pageFooter"</code> band found in the captured element.
+            </td>
+          </tr>
+          <tr>
+            <td><code>styles</code><br /><code>Record&lt;string, Partial&lt;BoxProps&gt;&gt;</code></td>
+            <td>
+              Maps class names (without the leading dot) to IR style overrides. The map is applied
+              after stylesheet rules and before inline styles. For live capture, sampled computed
+              styles are serialized as inline styles, so they take precedence for overlapping properties.
+            </td>
+          </tr>
+          <tr>
+            <td><code>data</code><br /><code>Record&lt;string, unknown&gt;</code></td>
+            <td>
+              Data context for <code>data-bind</code> and <code>data-each</code> expressions in
+              declarative HTML blocks.
+            </td>
+          </tr>
+          <tr>
+            <td><code>style</code><br /><code>Partial&lt;StyleProps&gt;</code></td>
+            <td>
+              Report-wide base text style, such as font family, size, or color. Captured element
+              styles override it where they specify a value.
+            </td>
+          </tr>
+          <tr>
+            <td><code>baseDir</code><br /><code>string</code></td>
+            <td>
+              Base path or URL for relative image sources. Live capture defaults this to the
+              directory of the captured element's document base URL; set it to override that base.
+            </td>
+          </tr>
+          <tr>
+            <td><code>page</code><br /><code>PageSpec</code></td>
+            <td>
+              Page geometry override; each supplied field takes precedence over <code>@page</code>
+              or <code>&lt;meta name="pdf-page"&gt;</code> declarations. <code>size</code> accepts
+              a standard name (for example <code>'a4'</code> or <code>'letter'</code>), a
+              <code>[width, height]</code> pair of lengths, or a <code>{ width, height }</code>
+              size in points. <code>orientation</code> is <code>'portrait'</code> or
+              <code>'landscape'</code>. <code>margin</code> accepts one length (all sides), two
+              (vertical/horizontal), or four (top/right/bottom/left). If neither HTML nor options supply
+              page geometry, the defaults are A4 and 20mm margins.
+            </td>
+          </tr>
+          <tr>
+            <td><code>info</code><br /><code>ReportDoc['info']</code></td>
+            <td>
+              PDF document metadata: <code>title</code>, <code>author</code>, <code>subject</code>,
+              <code>keywords</code>, <code>creator</code>, and <code>producer</code>.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <pre data-copy><code>const report = htmlElementToReportDoc(reportElement, {
+  page: { size: 'a4', margin: '18mm' },
+  info: { title: 'Quarterly report', author: 'Northwind' },
+  header: '&lt;div&gt;Northwind · Quarterly report&lt;/div&gt;',
+  footer: '&lt;div style="text-align:right"&gt;Page {PAGE} of {TOTAL}&lt;/div&gt;',
+});</code></pre>
 
       <h3>CSS subset</h3>
       <p>
@@ -970,7 +1183,7 @@ formatNumber(Infinity, '#,##0.00')                // ∞</code></pre>
     <section id="types">
       <h2>Exported types</h2>
       <p>
-        <code>ReportDoc</code>, <code>Block</code>, <code>ParagraphBlock</code>, <code>HeadingBlock</code>,
+        <code>ReportDoc</code>, <code>RenderResult</code>, <code>Block</code>, <code>ParagraphBlock</code>, <code>HeadingBlock</code>,
         <code>TableBlock</code>, <code>SpacerBlock</code>, <code>PageBreakBlock</code>, <code>ImageBlock</code>,
         <code>ChartBlock</code>, <code>ChartKind</code>, <code>ChartSeries</code>, <code>ValueAxisOptions</code>,
         <code>TocBlock</code>, <code>BarcodeBlock</code>, <code>BarcodeSymbology</code>,
@@ -979,8 +1192,48 @@ formatNumber(Infinity, '#,##0.00')                // ∞</code></pre>
         <code>CellNode</code>, <code>GroupNode</code>, <code>DataSource</code>, <code>Expr</code>,
         <code>DiagonalHeader</code>,
         <code>FontReference</code>, <code>RenderOptions</code>, <code>ImageResolveOptions</code>,
-        <code>FontResolveOptions</code>, <code>HtmlOptions</code>, <code>ImagePathAccess</code>,
+        <code>FontResolveOptions</code>, <code>FontSource</code>, <code>FontFileEntry</code>,
+        <code>FontHandle</code>, <code>HtmlOptions</code>, <code>HtmlElementOptions</code>,
+        <code>HElement</code>, <code>ImageFileReader</code>, <code>ImagePathAccess</code>,
+        <code>PageSpec</code>, <code>ResolvedPage</code>, <code>Length</code>, <code>Page</code>,
+        <code>PaginateInput</code>,
         <code>ContainerBlock</code>, <code>ColumnBlock</code>, <code>WatermarkSpec</code>, <code>GanttTask</code>.
+      </p>
+    </section>
+
+    <section id="page-spec">
+      <h2>Page sizes and units</h2>
+      <p>
+        <code>PageSpec</code> controls the physical page and its printable margins. Named sizes
+        include <code>a3</code>, <code>a4</code>, <code>a5</code>, <code>b4</code>, <code>b5</code>,
+        <code>letter</code>, <code>legal</code>, <code>tabloid</code>, and <code>executive</code>.
+        Custom array dimensions are <code>[width, height]</code>; object dimensions are in points.
+        For a margin array, one value applies to all sides, two mean vertical/horizontal, and four
+        mean top/right/bottom/left.
+      </p>
+      <pre data-copy><code>interface PageSpec {
+  size?: StandardPageName | string
+    | [Length, Length]
+    | { width: number, height: number };
+  orientation?: 'portrait' | 'landscape';
+  margin?: Length | [Length] | [Length, Length]
+    | [Length, Length, Length, Length];
+}</code></pre>
+      <p>
+        <code>resolvePage(spec?)</code> turns that specification into resolved page dimensions
+        and margins. With no HTML or option-supplied geometry, it defaults to A4 with 20mm margins.
+        <code>toPt(value, fallback?)</code> converts a number (already points) or a unit string
+        (<code>pt</code>, <code>mm</code>, <code>cm</code>, <code>in</code>, <code>pc</code>,
+        <code>px</code>) to points; an omitted value uses <code>fallback</code> (default 0).
+        A percentage passed to <code>toPt</code> is not relative and is treated as points.
+        <code>resolveLen(value, reference, fallback?)</code> does the same but resolves
+        percentages against the supplied reference size. <code>expandBox(value, fallback)</code>
+        expands a single value or CSS-style 1–4 item shorthand into
+        <code>{ top, right, bottom, left }</code>.
+      </p>
+      <p>
+        <code>MM_TO_PT</code>, <code>CM_TO_PT</code>, <code>IN_TO_PT</code>, and
+        <code>PX_TO_PT</code> are the corresponding unit conversion constants.
       </p>
     </section>
 
@@ -998,6 +1251,16 @@ formatNumber(Infinity, '#,##0.00')                // ∞</code></pre>
         page-by-page before painting. When the body contains a <code>toc</code> block,
         <code>createReport</code> wraps pagination in a fixed-point loop (at most four passes) so
         the entries and their page numbers are stable.
+      </p>
+      <h3 id="pagination-input"><code>PaginateInput</code></h3>
+      <p>
+        This is the low-level input to <code>paginate(input)</code>, not the usual application API.
+        It packages the layout context (<code>ctx</code>), already resolved page geometry
+        (<code>page</code>) and usable width (<code>contentWidth</code>), report body blocks
+        (<code>body</code>), repeated bands (<code>bands</code>), expression values
+        (<code>scope</code>), optional resolved base style (<code>baseStyle</code>), and optional
+        watermark. The layout context and expression scope are engine-level objects; use
+        <code>createReport(report)</code> unless you are building a custom layout pipeline.
       </p>
     </section>
 

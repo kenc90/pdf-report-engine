@@ -853,11 +853,18 @@ const pdf = await renderToBuffer(report);</code></pre>
       canvas-drawn text is not selectable. Exporting a cross-origin-tainted canvas fails explicitly.
       <a href="live-dom-demo.html">Try the multi-example live DOM demo</a> to see successful captures,
       layout limitations, and an intentional capture error.</p>
+      <p>Optional <code>header</code> and <code>footer</code> values become repeating page bands.
+      Each can be a live <code>Element</code> (using its computed styles) or an HTML string (using
+      the supported HTML/CSS subset). Explicit values override matching <code>data-band</code>
+      page bands in the captured content.</p>
       <pre data-copy><code>import { htmlElementToReportDoc, renderToBuffer } from 'pdf-report-engine';
 
 const element = document.querySelector('#report');
 if (!element) throw new Error('Report element not found');
-const report = htmlElementToReportDoc(element);
+const report = htmlElementToReportDoc(element, {
+  header: '&lt;div style="font-size:9px;color:#666"&gt;Quarterly report&lt;/div&gt;',
+  footer: '&lt;p style="text-align:right"&gt;Page {PAGE} of {TOTAL}&lt;/p&gt;',
+});
 const pdf = await renderToBuffer(report);</code></pre>
     </section>
 

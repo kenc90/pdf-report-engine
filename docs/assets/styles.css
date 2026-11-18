@@ -506,6 +506,10 @@ code { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monosp
   overflow-wrap: break-word;
 }
 pre code { color: inherit; background: none; padding: 0; }
+.copy-code-wrap {
+  position: relative;
+  display: flow-root;
+}
 .copy {
   position: absolute;
   top: 8px;

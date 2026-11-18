@@ -1860,6 +1860,13 @@ export interface HtmlOptions {
   _disableStyleSheets?: boolean;
 }
 
+export interface HtmlElementOptions extends HtmlOptions {
+  /** Repeating page header from a live element (computed styles) or HTML fragment. */
+  header?: Element | string;
+  /** Repeating page footer from a live element (computed styles) or HTML fragment. */
+  footer?: Element | string;
+}
+
 /** Absolute filesystem path? (POSIX `/…`, Windows `C:\…` / `C:/…`). */
 function isAbsolutePath(p: string): boolean {
   return /^([a-zA-Z]:[\\/]|[\\/])/.test(p);
@@ -2332,10 +2339,11 @@ export function htmlToReportDoc(html: string, opts: HtmlOptions = {}): ReportDoc
  * styles. Page scripts are not executed; call this after the page has reached
  * the state you want to capture.
  */
-export function htmlElementToReportDoc(element: Element, opts: HtmlOptions = {}): ReportDoc {
+export function htmlElementToReportDoc(element: Element, opts: HtmlElementOptions = {}): ReportDoc {
   if (!element || element.nodeType !== 1) {
     throw new Error('htmlElementToReportDoc requires a live DOM Element.');
   }
+  const { header, footer, ...htmlOpts } = opts;
   const view = element.ownerDocument.defaultView;
   if (!view) {
     throw new Error('htmlElementToReportDoc requires an element attached to a document with a window.');
@@ -2370,8 +2378,32 @@ export function htmlElementToReportDoc(element: Element, opts: HtmlOptions = {})
     }],
   };
 
-  const baseDir = opts.baseDir ?? new URL('.', element.ownerDocument.baseURI).href;
-  return reportDocFromTree(tree, { ...opts, baseDir, _disableStyleSheets: true }, collectStyleText(tree));
+  const baseDir = htmlOpts.baseDir ?? new URL('.', element.ownerDocument.baseURI).href;
+  const report = reportDocFromTree(
+    tree,
+    { ...htmlOpts, baseDir, _disableStyleSheets: true },
+    collectStyleText(tree),
+  );
+  const bands = { ...(report.bands ?? {}) };
+  const fontRefs = new Map<string, FontReference>(
+    (report.fonts ?? []).map((font) => [JSON.stringify(font), font]),
+  );
+
+  for (const [bandName, source] of [['pageHeader', header], ['pageFooter', footer]] as const) {
+    if (source === undefined) continue;
+    const bandReport = typeof source === 'string'
+      ? htmlToReportDoc(source, { ...htmlOpts, baseDir })
+      : htmlElementToReportDoc(source, htmlOpts);
+    bands[bandName] = {
+      blocks: bandReport.body ?? [],
+      ...(bandReport.style && Object.keys(bandReport.style).length > 0 ? { style: bandReport.style } : {}),
+    };
+    for (const font of bandReport.fonts ?? []) fontRefs.set(JSON.stringify(font), font);
+  }
+
+  if (header !== undefined || footer !== undefined) report.bands = bands;
+  if (fontRefs.size > 0) report.fonts = [...fontRefs.values()];
+  return report;
 }
 
 /** Extract watermark spec from `<meta name="watermark">` or `data-watermark` on body. */

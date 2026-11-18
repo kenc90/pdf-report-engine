@@ -428,7 +428,10 @@ const reportElement = document.querySelector('#report');
 if (!reportElement) throw new Error('Report element not found');
 
 // Call after the page has applied the state you want in the PDF.
-const report = htmlElementToReportDoc(reportElement);
+const report = htmlElementToReportDoc(reportElement, {
+  header: '<div style="font-size:9px;color:#666">Quarterly report</div>',
+  footer: '<p style="text-align:right">Page {PAGE} of {TOTAL}</p>',
+});
 const pdf = await renderToBuffer(report);
 ```
 
@@ -439,6 +442,11 @@ browser layout engine. For example, unsupported CSS layout features and pseudo-e
 are not reproduced. Canvas elements are captured as PNG images from their current pixels;
 canvas-drawn text is raster content, and exporting a cross-origin-tainted canvas fails.
 Relative image paths resolve against the document URL.
+
+Optional `header` and `footer` values become repeating page bands. Each accepts either
+a live `Element` (captured with its computed styles) or an HTML string (parsed using the
+supported HTML/CSS subset). Explicit values override matching `data-band="pageHeader"`
+or `data-band="pageFooter"` bands in the captured content.
 
 **What the HTML adapter understands** (deliberately narrow — anything outside this is ignored):
 
@@ -931,7 +939,7 @@ From the package root (`pdf-report-engine`):
 | `setImageFileReader(reader)` | Install the synchronous reader for path-based image/SVG sources (the Node CLI calls it once). |
 | `setImagePathAccess('allow' \| 'deny')` | Forbid reading image/SVG sources from the host filesystem. Default `'allow'`. |
 | `htmlToReportDoc(html, options?)` | HTML subset → `ReportDoc`. |
-| `htmlElementToReportDoc(element, options?)` | Live browser DOM element + computed styles → `ReportDoc`. |
+| `htmlElementToReportDoc(element, options?)` | Live browser DOM element + computed styles and optional header/footer page bands → `ReportDoc`. |
 | `parseHtml(html)` | HTML subset → element tree (`HElement`). |
 | `readFontFiles(entries)` | Load `FontFileEntry[]` (paths or bytes) → `FontSource[]`. |
 | `FontRegistry` | Lower-level face registration / measurement. |

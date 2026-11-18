@@ -346,6 +346,54 @@ describe('htmlElementToReportDoc', () => {
     expect(block.rotate).toBeCloseTo(90, 1);
   });
 
+  it('accepts explicit live-element and HTML-string page bands', () => {
+    const computedStyles = new WeakMap<Element, Record<string, string>>();
+    const view = {
+      getComputedStyle: (element: Element) => ({
+        getPropertyValue: (property: string) => computedStyles.get(element)?.[property] ?? '',
+        get display() { return computedStyles.get(element)?.display ?? ''; },
+        get visibility() { return computedStyles.get(element)?.visibility ?? ''; },
+      }),
+    } as unknown as Window;
+    const ownerDocument = {
+      defaultView: view,
+      head: { children: [] },
+      documentElement: { lang: 'en-US' },
+      baseURI: 'https://example.test/reports/page.html',
+    } as unknown as Document;
+    const content = mockElement(
+      'div',
+      {},
+      [{ nodeType: 3, nodeValue: 'Report body', childNodes: [] } as unknown as Node],
+      ownerDocument,
+      { display: 'block' },
+      computedStyles,
+    );
+    const header = mockElement(
+      'header',
+      {},
+      [{ nodeType: 3, nodeValue: 'Current page header', childNodes: [] } as unknown as Node],
+      ownerDocument,
+      { display: 'block', 'font-size': '20px' },
+      computedStyles,
+    );
+
+    const report = htmlElementToReportDoc(content, {
+      header,
+      footer: '<style>.pdf-footer { font-size: 12px; color: #333; }</style>' +
+        '<p class="pdf-footer">Page {PAGE} of {TOTAL}</p>',
+    });
+    const headerBlock = report.bands!.pageHeader!.blocks![0] as ParagraphBlock;
+    const footerBlock = report.bands!.pageFooter!.blocks![0] as ParagraphBlock;
+
+    expect((report.body![0] as ParagraphBlock).content).toBe('Report body');
+    expect(headerBlock.content).toBe('Current page header');
+    expect(headerBlock.fontSize).toBeCloseTo(15, 2);
+    expect(footerBlock.fontSize).toBeCloseTo(9, 2);
+    expect(JSON.stringify(footerBlock.content)).toContain('$page.number');
+    expect(footerBlock.color).toBe('#333');
+  });
+
   it('preserves line breaks for elements with computed block display', () => {
     const computedStyles = new WeakMap<Element, Record<string, string>>();
     const view = {

@@ -23,6 +23,7 @@ export {
   htmlToReportDoc,
   htmlElementToReportDoc,
   parseHtml,
+  type HtmlElementOptions,
   type HtmlOptions,
   type HElement,
   type HNode,

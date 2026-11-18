@@ -78,7 +78,14 @@ generateButton.addEventListener('click', async () => {
   download.hidden = true;
   setStatus('Reading current DOM and rendering PDF…');
   try {
-    const report = htmlElementToReportDoc(target);
+    const options = panel.dataset.example === 'bands'
+      ? {
+          page: { size: 'a5', margin: 36 },
+          header: '<div style="font-size:9px;font-weight:bold;color:#174a73;border-bottom:1px solid #dbe5ef;padding-bottom:6px">NORTHWIND STUDIO · OPERATIONS</div>',
+          footer: '<div style="font-size:8px;color:#586c80;text-align:right;border-top:1px solid #dbe5ef;padding-top:5px">Confidential · Page {PAGE} of {TOTAL}</div>',
+        }
+      : {};
+    const report = htmlElementToReportDoc(target, options);
     const bytes = await renderToBuffer(report);
     if (currentUrl) URL.revokeObjectURL(currentUrl);
     currentUrl = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));

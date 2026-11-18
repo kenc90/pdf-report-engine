@@ -33,7 +33,15 @@ var VERSION = '0.2.1';
         setTimeout(function () { btn.textContent = 'copy'; }, 1400);
       });
     });
-    pre.appendChild(btn);
+    var margin = getComputedStyle(pre);
+    var wrapper = document.createElement('div');
+    wrapper.className = 'copy-code-wrap';
+    wrapper.style.margin = margin.marginTop + ' ' + margin.marginRight + ' ' +
+      margin.marginBottom + ' ' + margin.marginLeft;
+    pre.parentNode.insertBefore(wrapper, pre);
+    pre.style.margin = '0';
+    wrapper.appendChild(pre);
+    wrapper.appendChild(btn);
   });
 })();
 

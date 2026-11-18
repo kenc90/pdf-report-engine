@@ -7,6 +7,7 @@ Notable user-facing changes for each release are listed here.
 ### Added
 
 - Browser-only live DOM capture from current computed styles, including canvas snapshots as PNG images.
+- Optional live-DOM header and footer bands from Elements or HTML strings.
 
 ### Fixed
 

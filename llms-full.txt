@@ -445,12 +445,17 @@ the characters actually used. With `createReport` (offline) instead pre-resolve 
 
 ## Live browser DOM capture
 
-`htmlElementToReportDoc(element: Element, options?: HtmlOptions): ReportDoc` is a browser-only entry
+`htmlElementToReportDoc(element: Element, options?: HtmlElementOptions): ReportDoc` is a browser-only entry
 point for converting an existing live DOM element to the report IR. The browser's current computed
 styles are sampled at call time, so styles from external CSS and styles already applied by page
 JavaScript are included to the extent they map to the engine's supported style/layout subset. The
 caller must wait for the desired DOM state before calling; the adapter does not execute or wait for
 page scripts.
+
+Optional `header` and `footer` options accept either a live `Element` (captured with computed styles)
+or an HTML string (parsed with the supported HTML/CSS subset); each becomes a repeating page band.
+Explicit options override corresponding `data-band="pageHeader"` / `data-band="pageFooter"` bands
+in the captured content.
 
 Only the selected element and its descendants are captured. This is not a screenshot or complete
 browser layout implementation: CSS Grid and other unsupported layout modes are not preserved, canvas
