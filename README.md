@@ -61,6 +61,9 @@ glyph embedding all happen in-process via [`pdfkit`](https://pdfkit.org) +
 - **Flexbox layout** — a `display: flex` container lays out any blocks along a row or column with
   `flex-direction`, `flex-wrap`, `justify-content`, `align-items` / `align-self`, `gap` and per-item
   `flex-grow` / `flex-shrink` / `flex-basis`, as a single atomic fragment.
+- **Report-focused CSS Grid** — fixed, percentage, and `fr` columns (including `repeat()`), gaps,
+  row-major auto-placement, and span-based placement. Intrinsic track sizing and browser-equivalent
+  CSS Grid behavior are not modelled.
 - **Multi-column layout** — a `columns` block (or CSS `column-count: N` in HTML) distributes its
   children across N equal-width sub-columns with an optional vertical rule between them, balanced
   by height and kept atomic so pagination can push the whole cluster to a new page.
@@ -619,6 +622,8 @@ The `samples/` folder demonstrates the supported subset:
 - `table-colors.html` — a focused styling showcase: a full cell **grid** with striped rows and
   a dark colored header, a **status table** whose body cells are individually colored, and a
   value **heatmap** — all with real per-cell borders and background fills.
+- `grid.html` — **report-focused CSS Grid**: fractional columns, `repeat()`, gaps, automatic
+  row placement and a card spanning two columns.
 - `merge-cells.html` — **merged cells**: a `rowspan` table (a label centered over several rows),
   a `colspan` table (a subtotal spanning columns plus a full-width banner), and a third table
   that **combines** both merges in one grid.

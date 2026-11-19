@@ -3,7 +3,7 @@
 ## Project scope
 
 - This is a TypeScript PDF report engine. The HTML adapter maps a supported HTML/CSS subset into the report IR; it is not a browser renderer or screenshot tool.
-- Preserve the library's vector/selectable output and pagination behavior. Do not imply unsupported browser layouts such as CSS Grid are faithfully reproduced.
+- Preserve the library's vector/selectable output and pagination behavior. CSS Grid has a report-focused subset; never imply browser-equivalent track sizing or layout fidelity.
 - Keep changes surgical and follow existing adapter, layout, and test patterns.
 
 ## Validation

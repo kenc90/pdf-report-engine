@@ -715,6 +715,29 @@ export interface FlexItem extends BlockBase {
   alignSelf?: 'auto' | 'flex-start' | 'center' | 'flex-end' | 'stretch';
 }
 
+/** A CSS Grid track: a fixed length/percentage or a share of remaining space. */
+export type GridTrack = Length | { fr: number };
+
+/** One auto-placed child in a report Grid. */
+export interface GridItem {
+  block: Block;
+  columnSpan?: number;
+  rowSpan?: number;
+}
+
+/**
+ * A report-oriented two-dimensional grid. Explicit columns support fixed,
+ * percentage, and fractional tracks; rows grow to fit their contents.
+ */
+export interface GridBlock extends BlockBase {
+  type: 'grid';
+  columns: GridTrack[];
+  gap?: Length;
+  rowGap?: Length;
+  columnGap?: Length;
+  children: GridItem[];
+}
+
 /** A styled, pageable block wrapper around ordinary vertical-flow content. */
 export interface ContainerBlock extends BlockBase {
   type: 'container';
@@ -734,7 +757,7 @@ export interface ColumnBlock extends BlockBase {
   children: Block[];
 }
 
-export type Block = ParagraphBlock | HeadingBlock | TableBlock | SpacerBlock | PageBreakBlock | ImageBlock | SvgBlock | ChartBlock | TocBlock | BarcodeBlock | FlexBlock | ContainerBlock | ColumnBlock;
+export type Block = ParagraphBlock | HeadingBlock | TableBlock | SpacerBlock | PageBreakBlock | ImageBlock | SvgBlock | ChartBlock | TocBlock | BarcodeBlock | FlexBlock | GridBlock | ContainerBlock | ColumnBlock;
 
 export type BandType = 'pageHeader' | 'pageFooter' | 'title' | 'summary' | 'background';
 

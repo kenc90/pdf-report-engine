@@ -1004,6 +1004,24 @@ const pdf = await renderToBuffer(report);</code></pre>
       </div>
     </section>
 
+    <section id="grid">
+      <h2>CSS Grid layout</h2>
+      <p>
+        The HTML adapter supports a report-focused subset of <code>display: grid</code>: explicit
+        fixed, percentage, or <code>fr</code> columns, <code>repeat()</code>, gaps, row-major
+        auto-placement, and <code>grid-row</code>/<code>grid-column: span N</code>. Rows grow to
+        fit their content. This is a PDF layout mapping, not browser rendering; intrinsic tracks
+        such as <code>auto</code> and <code>minmax()</code>, implicit columns, and explicit
+        grid-line placement and per-cell alignment are not modelled. Grid blocks are atomic and
+        move to the next page when they do not fit.
+      </p>
+      <pre data-copy><code>&lt;div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:12px"&gt;
+  &lt;div&gt;Revenue&lt;/div&gt;
+  &lt;div&gt;Expenses&lt;/div&gt;
+  &lt;div style="grid-column:span 2"&gt;Quarterly summary&lt;/div&gt;
+&lt;/div&gt;</code></pre>
+    </section>
+
     <section id="rich-text">
       <h2>Rich inline text</h2>
       <p>

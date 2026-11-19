@@ -44,6 +44,9 @@ import type {
   SvgBlock,
   FlexBlock,
   FlexItem,
+  GridBlock,
+  GridItem,
+  GridTrack,
   ReferenceLine,
   ColumnBlock,
   WatermarkSpec,
@@ -437,9 +440,19 @@ function applyDecl(prop: string, value: string, set: (k: string, v: unknown) => 
     case 'page-break-inside':
       set('breakInside', value === 'avoid' ? 'avoid' : 'auto');
       return;
-    // --- flexbox (subset) -------------------------------------------------
+    // --- flexbox and grid (supported subsets) ----------------------------
     case 'display':
       if (value === 'flex' || value === 'inline-flex') set('display', 'flex');
+      else if (value === 'grid' || value === 'inline-grid') set('display', 'grid');
+      return;
+    case 'grid-template-columns':
+      set('gridTemplateColumns', value);
+      return;
+    case 'grid-column':
+      set('gridColumn', value);
+      return;
+    case 'grid-row':
+      set('gridRow', value);
       return;
     case 'flex-direction':
       if (value === 'column' || value === 'column-reverse') set('direction', 'column');
@@ -1430,6 +1443,104 @@ function flexFromElement(el: HElement, opts: HtmlOptions, style: IrBox): FlexBlo
   return block;
 }
 
+function gridFromElement(el: HElement, opts: HtmlOptions, style: IrBox): GridBlock {
+  const s = { ...(style as Record<string, unknown>) };
+  delete s.display;
+  delete s.gridTemplateColumns;
+  delete s.gridColumn;
+  delete s.gridRow;
+  const grid: GridBlock = {
+    type: 'grid',
+    columns: parseGridTracks(String((style as Record<string, unknown>).gridTemplateColumns ?? 'none')),
+    children: [],
+    ...(s as Partial<GridBlock>),
+  };
+
+  const children: GridItem[] = [];
+  let textRun: HNode[] = [];
+  const flushText = (): void => {
+    if (textRun.length === 0) return;
+    const pseudo: HElement = { type: 'element', tag: 'span', attrs: {}, children: textRun };
+    const content = inlineContent(pseudo, opts, inheritedTextStyle(style));
+    const nonEmpty = typeof content === 'string' ? content.trim().length > 0 : Array.isArray(content) ? content.length > 0 : true;
+    if (nonEmpty) children.push({ block: { type: 'paragraph', content } as Block });
+    textRun = [];
+  };
+
+  for (const node of el.children) {
+    if (node.type === 'text') {
+      if (/\S/.test(node.text)) textRun.push(node);
+      continue;
+    }
+    flushText();
+    const built = elToBlock(node, opts);
+    if (built.length === 0) continue;
+    const childBlock = built.length === 1
+      ? built[0]!
+      : ({ type: 'flex', direction: 'column', children: built.map((block) => ({ block })) } as Block);
+    const childStyle = elementStyle(node, opts) as Record<string, unknown>;
+    children.push({
+      block: childBlock,
+      columnSpan: parseGridSpan(childStyle.gridColumn),
+      rowSpan: parseGridSpan(childStyle.gridRow),
+    });
+  }
+  flushText();
+  grid.children = children;
+  return grid;
+}
+
+function parseGridTracks(source: string): GridTrack[] {
+  const value = source.trim();
+  if (!value || value.toLowerCase() === 'none') return [{ fr: 1 }];
+  const tracks: GridTrack[] = [];
+  const append = (trackList: string): void => {
+    for (const token of splitOutsideParens(trackList, ' ')) {
+      const repeat = /^repeat\(\s*(\d+)\s*,([\s\S]*)\)$/i.exec(token);
+      if (repeat) {
+        const count = Number(repeat[1]);
+        const repeated = parseGridTracks(repeat[2]!);
+        if (count < 1 || count > 64 || repeated.length * count + tracks.length > 64) {
+          throw new Error('CSS Grid repeat() must expand to between 1 and 64 columns.');
+        }
+        for (let i = 0; i < count; i += 1) tracks.push(...repeated);
+        continue;
+      }
+
+      const fr = /^((?:\d+(?:\.\d*)?|\.\d+))fr$/i.exec(token);
+      if (fr) {
+        tracks.push({ fr: Number(fr[1]) });
+        continue;
+      }
+
+      if (!/^(?:0|(?:\d+\.?\d*|\.\d+)(?:px|pt|mm|cm|in|pc|%))$/i.test(token)) {
+        throw new Error(`Unsupported CSS Grid column track: ${JSON.stringify(token)}.`);
+      }
+      tracks.push(token);
+    }
+  };
+  append(value);
+  if (tracks.length === 0 || tracks.length > 64) {
+    throw new Error('CSS Grid must define between 1 and 64 columns.');
+  }
+  return tracks;
+}
+
+function parseGridSpan(value: unknown): number | undefined {
+  if (typeof value !== 'string') return undefined;
+  for (const part of splitOutsideParens(value, '/')) {
+    if (!part || part.toLowerCase() === 'auto') continue;
+    const match = /^span\s+(\d+)$/i.exec(part);
+    if (match) {
+      const span = Number(match[1]);
+      if (span < 1 || span > 64) throw new Error('CSS Grid item spans must be between 1 and 64 tracks.');
+      return span;
+    }
+    throw new Error(`Unsupported CSS Grid item placement: ${JSON.stringify(value)}. Use auto placement with span N.`);
+  }
+  return undefined;
+}
+
 function elToBlock(el: HElement, opts: HtmlOptions): Block[] {
   const blocks = elToBlockCore(el, opts);
   // Conditional formatting works on any block carrier (`data-if` / `data-when`).
@@ -1540,8 +1651,11 @@ function elToBlockCore(el: HElement, opts: HtmlOptions): Block[] {
     return [withId(svgFromElement(el, style))];
   }
 
-  // A `display: flex` container becomes a single atomic flex block whose children
-  // are ordinary blocks wrapped as flex items.
+  // CSS layout containers become atomic report blocks with their own child layout.
+  if ((style as { display?: string }).display === 'grid') {
+    return [withId(gridFromElement(el, opts, style))];
+  }
+
   if ((style as { display?: string }).display === 'flex') {
     return [withId(flexFromElement(el, opts, style))];
   }
@@ -2156,6 +2270,9 @@ const COMPUTED_STYLE_PROPERTIES = [
   'page-break-after',
   'page-break-inside',
   'display',
+  'grid-template-columns',
+  'grid-column',
+  'grid-row',
   'flex-direction',
   'flex-wrap',
   'justify-content',
@@ -2273,6 +2390,77 @@ function isNamedError(error: unknown, name: string): boolean {
   return typeof error === 'object' && error !== null && 'name' in error && error.name === name;
 }
 
+function authoredFractionalGridColumns(element: Element, view: Window): string | undefined {
+  let winner: { value: string; important: boolean; specificity: number; order: number } | undefined;
+  let order = 0;
+  const consider = (value: string, important: boolean, specificity: number): void => {
+    const candidate = { value, important, specificity, order: order++ };
+    if (
+      !winner ||
+      Number(candidate.important) > Number(winner.important) ||
+      (
+        candidate.important === winner.important &&
+        (candidate.specificity > winner.specificity ||
+          (candidate.specificity === winner.specificity && candidate.order >= winner.order))
+      )
+    ) winner = candidate;
+  };
+
+  const visitRules = (rules: CSSRuleList): void => {
+    for (const rule of Array.from(rules)) {
+      if (rule.type === 1) {
+        const styleRule = rule as CSSStyleRule;
+        const value = styleRule.style.getPropertyValue('grid-template-columns').trim();
+        if (value) {
+          for (const selector of splitOutsideParens(styleRule.selectorText, ',')) {
+            const parts = parseSelector(selector);
+            if (parts.length === 0) continue;
+            try {
+              if (element.matches(selector)) {
+                consider(value, styleRule.style.getPropertyPriority('grid-template-columns') === 'important', specificityOf(parts));
+              }
+            } catch (error) {
+              if (!isNamedError(error, 'SyntaxError')) throw error;
+            }
+          }
+        }
+      } else if (rule.type === 4) {
+        const media = rule as CSSMediaRule;
+        if (typeof view.matchMedia === 'function' && !view.matchMedia(media.conditionText).matches) continue;
+      } else if (rule.type === 3) {
+        const imported = (rule as CSSImportRule).styleSheet;
+        if (imported) visitRules(imported.cssRules);
+        continue;
+      }
+
+      if ('cssRules' in rule) visitRules((rule as CSSGroupingRule).cssRules);
+    }
+  };
+
+  const sheets = [
+    ...Array.from(element.ownerDocument.styleSheets ?? []),
+    ...Array.from(element.ownerDocument.adoptedStyleSheets ?? []),
+  ];
+  for (const sheet of sheets) {
+    try {
+      if (!sheet.disabled) visitRules(sheet.cssRules);
+    } catch (error) {
+      if (!isNamedError(error, 'SecurityError')) throw error;
+    }
+  }
+
+  const inlineStyle = Array.from(element.attributes).find((attr) => attr.name.toLowerCase() === 'style')?.value ?? '';
+  for (const declaration of splitOutsideParens(inlineStyle, ';')) {
+    const colon = declaration.indexOf(':');
+    if (colon < 0 || declaration.slice(0, colon).trim().toLowerCase() !== 'grid-template-columns') continue;
+    const raw = declaration.slice(colon + 1).trim();
+    const important = /\s*!important\s*$/i.test(raw);
+    consider(raw.replace(/\s*!important\s*$/i, '').trim(), important, 1_000_000);
+  }
+
+  return winner && /(?:\d+\.?\d*|\.\d+)fr\b/i.test(winner.value) ? winner.value : undefined;
+}
+
 function domNodeToHNode(
   node: Node,
   view: Window,
@@ -2316,11 +2504,13 @@ function domNodeToHNode(
       .map((property) => [property, computed.getPropertyValue(property)] as const)
       .map(([property, value]) => [
         property,
-        property === 'transform'
-          ? reportRotation(value)
-          : property === 'line-height'
-            ? normalizeComputedLineHeight(value, computed)
-            : value,
+        property === 'grid-template-columns'
+          ? authoredFractionalGridColumns(element, view) ?? value
+          : property === 'transform'
+            ? reportRotation(value)
+            : property === 'line-height'
+              ? normalizeComputedLineHeight(value, computed)
+              : value,
       ] as const)
       .filter(([property, value]) => {
         const keyword = value.trim().toLowerCase();

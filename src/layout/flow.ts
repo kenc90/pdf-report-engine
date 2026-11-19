@@ -52,6 +52,7 @@ export type DrawCommand = (
       w: number;
       h: number;
       color: RGB;
+      paintLayer?: 'background';
       opacity?: number;
       radius?: Radius;
       gradient?: ResolvedGradient;

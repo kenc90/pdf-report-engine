@@ -452,6 +452,11 @@ h1, h2 { margin-bottom: 4pt; }           /* list */</code></pre>
             <td>A flex container; its children become flex items. Supported CSS: <code>flex-direction</code>, <code>flex-wrap</code>, <code>justify-content</code>, <code>align-items</code>, <code>gap</code>/<code>row-gap</code>/<code>column-gap</code>, and per-item <code>flex-grow</code>/<code>flex-shrink</code>/<code>flex-basis</code>/<code>flex</code>/<code>align-self</code>.</td>
           </tr>
           <tr>
+            <td><code>&lt;div style="<wbr>display:grid"&gt;</code></td>
+            <td><code>GridBlock</code></td>
+            <td>Report-focused Grid subset: explicit fixed, percentage, and <code>fr</code> columns (including <code>repeat()</code>), gaps, row-major auto-placement, and <code>grid-row</code>/<code>grid-column: span N</code>. Rows size to content. Intrinsic tracks such as <code>auto</code>/<code>minmax()</code>, explicit row tracks, implicit columns, explicit line placement, and per-cell alignment are not modelled.</td>
+          </tr>
+          <tr>
             <td>A styled block wrapper with block children</td>
             <td><code>ContainerBlock</code></td>
             <td>Background, padding, borders, radius and shadow remain around the flow content, and the wrapper can split across pages. A browser text line that already fits on one line is kept together to reduce font-metric reflow.</td>
@@ -763,6 +768,27 @@ h1, h2 { margin-bottom: 4pt; }           /* list */</code></pre>
         itself be another <code>flex</code> block, so a two-dimensional layout is a row of
         columns (or the reverse). Cross-axis <code>stretch</code> paints the item's
         <code>backgroundColor</code> across the full line height.
+      </p>
+
+      <h3><code>GridBlock</code></h3>
+      <pre data-copy><code>{
+  type: 'grid',
+  columns: [{ fr: 1 }, { fr: 2 }, '120px'],  // fixed, percentage, or fractional tracks
+  rowGap?: number | string,
+  columnGap?: number | string,
+  children: [
+    { block: { type: 'paragraph', content: 'Wide card' }, columnSpan: 2 },
+    { block: { type: 'paragraph', content: 'Third column' } },
+  ],
+}</code></pre>
+      <p>
+      Rows size to their contents; children auto-place in row-major order, with
+      <code>rowSpan</code> and <code>columnSpan</code> reserving multiple cells. The grid is an
+      atomic fragment and does not split across pages. CSS Grid intrinsic track sizing
+      (<code>auto</code>, <code>minmax()</code>, and content-based sizing), implicit columns,
+      explicit row tracks, per-cell alignment, and numeric line placement are not modelled.
+      Unsupported track functions or explicit
+      line placement fail with an error instead of silently flattening the layout.
       </p>
 
       <h3>Heading outline</h3>

@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Examples · pdf-report-engine</title>
-  <meta name="description" content="Runnable JavaScript examples for pdf-report-engine: basic IR, data-driven tables, oversized table rows, rich cells, conditional formatting, HTML authoring, charts, SVG vector images, flexbox layout, bookmarks and TOC, barcodes, streaming, images and merged cells." />
+  <meta name="description" content="Runnable JavaScript and HTML examples for pdf-report-engine: CSS Grid, flexbox, data-driven tables, oversized rows, rich cells, conditional formatting, charts, SVG images, bookmarks, barcodes, streaming and merged cells." />
   <script>
     (function () {
       try {
@@ -88,6 +88,17 @@ node examples/06-long-table-row.mjs</code></pre>
         The sections below break the same features down into standalone snippets; the six
         <code>.mjs</code> scripts above stay focused on the core data/report flow.
       </p>
+    </section>
+
+    <section id="ex-grid">
+      <h3>CSS Grid report: <code>samples/grid.html</code></h3>
+      <p>
+        A focused report-card example using <code>repeat(3, 1fr)</code>, gaps, row-major
+        auto-placement and a two-column span. The engine supports explicit fixed, percentage and
+        fractional columns; intrinsic browser track sizing and full browser CSS Grid behavior are
+        outside this report-focused subset.
+      </p>
+      <pre data-copy><code>npm run html:pdf -- samples/grid.html -o output/</code></pre>
     </section>
 
     <section id="ex-long-row">

@@ -7,7 +7,7 @@ import { FontRegistry, HeuristicFontHandle } from '../src/fonts/registry.js';
 import { resolveStyle } from '../src/text/style.js';
 import { LayoutContext } from '../src/layout/context.js';
 import { layoutBlock } from '../src/layout/block.js';
-import type { ReportDoc, TableBlock, ParagraphBlock, ImageBlock, ContainerBlock } from '../src/ir/schema.js';
+import type { ReportDoc, TableBlock, ParagraphBlock, ImageBlock, ContainerBlock, GridBlock } from '../src/ir/schema.js';
 import type { Fragment } from '../src/layout/flow.js';
 import { probeImageSize } from '../src/core/image.js';
 
@@ -148,6 +148,40 @@ describe('table layout', () => {
     expect(
       sharedVerticals.every((command) => command.op === 'line' && command.y1 === 0 && command.y2 === fragment.height),
     ).toBe(true);
+  });
+
+  it('keeps table row separators above stretched grid-item backgrounds', () => {
+    const table: TableBlock = {
+      type: 'table',
+      columns: [{ grow: 1 }],
+      staticRows: ['Revenue', 'Retention', 'Delivery'].map((content) => ({
+        kind: 'detail',
+        cells: [{ content, borderBottom: [0.75, 'solid', '#dbe5ef'] }],
+      })),
+    };
+    const grid: GridBlock = {
+      type: 'grid',
+      columns: [{ fr: 1 }],
+      children: [{
+        block: {
+          type: 'container',
+          backgroundColor: '#edf3fa',
+          children: [table],
+        },
+      }],
+    };
+    const fragment = layoutBlock(grid, makeCtx(), opts(220))[0]!;
+    const lastBackground = Math.max(
+      ...fragment.commands.map((command, index) =>
+        command.op === 'fillRect' && command.paintLayer === 'background' ? index : -1,
+      ),
+    );
+    const separators = fragment.commands.filter(
+      (command) => command.op === 'line' && command.y1 === command.y2 && command.lineWidth === 0.75,
+    );
+
+    expect(separators).toHaveLength(3);
+    expect(separators.every((separator) => fragment.commands.indexOf(separator) > lastBackground)).toBe(true);
   });
 
   it('centers table-cell text within extra line-height leading', () => {

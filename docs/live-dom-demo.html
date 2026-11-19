@@ -65,9 +65,16 @@
     .kpi-change { margin: 8px 0 0; color: #16834d; font-size: 12px; }
     .kpi-change .trend-arrow { font-family: "Noto Sans Symbols", sans-serif; font-size: 15px; }
     .report-title { margin: 0 0 14px; color: #174a73; }
-    .grid-sample { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .grid-sample { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 12px; }
     .grid-tile { min-height: 90px; padding: 13px; border-radius: 8px; background: #edf3fa; border: 1px solid #d5e0ed; }
-    .grid-tile strong { display: block; color: #174a73; margin-bottom: 5px; }
+    .grid-tile p { margin: 0 0 7px; }
+    .grid-tile strong { color: #174a73; }
+    .grid-featured { grid-column: span 2; grid-row: span 2; background: #e8f1fb; }
+    .grid-sidebar { grid-row: span 2; }
+    .grid-wide { grid-column: span 2; }
+    .grid-nested { display: grid; grid-template-columns: 45% 1fr; gap: 8px; margin-top: 10px; }
+    .grid-nested-tile { padding: 9px; background: #fff; border: 1px solid #d5e0ed; }
+    .grid-mini-table { width: 100%; margin-top: 8px; border-collapse: collapse; font-size: 12px; }
     .loss-note { padding: 12px 14px; border: 1px solid var(--note-line); border-radius: 9px; background: var(--note-bg); color: var(--note-ink); }
     .unavailable { display: none; }
     .pseudo-card { position: relative; padding: 20px; border: 1px solid #dce5ef; border-radius: 10px; background: #f7fafc; }
@@ -181,7 +188,7 @@
         <button class="demo-tab" id="tab-comprehensive" role="tab" aria-selected="false" aria-controls="panel-comprehensive" data-example="comprehensive" type="button">Full report · feature showcase</button>
         <button class="demo-tab" id="tab-template" role="tab" aria-selected="false" aria-controls="panel-template" data-example="template" type="button">DOM template + data</button>
         <button class="demo-tab" id="tab-zero-size" role="tab" aria-selected="false" aria-controls="panel-zero-size" data-example="zero-size" type="button">Zero-size wrapper · inner DOM</button>
-        <button class="demo-tab" id="tab-grid" role="tab" aria-selected="false" aria-controls="panel-grid" data-example="grid" type="button">CSS Grid · lossy</button>
+        <button class="demo-tab" id="tab-grid" role="tab" aria-selected="false" aria-controls="panel-grid" data-example="grid" type="button">CSS Grid · supported subset</button>
         <button class="demo-tab" id="tab-generated" role="tab" aria-selected="false" aria-controls="panel-generated" data-example="generated" type="button">Canvas + pseudo · partial</button>
         <button class="demo-tab" id="tab-hidden" role="tab" aria-selected="false" aria-controls="panel-hidden" data-example="hidden" type="button">Hidden element · error</button>
       </div>
@@ -482,23 +489,57 @@ const bytes = await renderToBuffer(report);</code></pre>
   <p class="loss-note"><strong>Note:</strong> the engine can read DOM that is not painted, but this does not remove all layout effects of the zero-size ancestor. For flex-heavy reports, capture from a normally sized element or use explicit layout dimensions.</p>
 </section>
 
-      <section class="demo-panel" id="panel-grid" role="tabpanel" aria-labelledby="tab-grid" data-status="lossy">
-        <h3 id="css-grid-limit">CSS Grid · lossy layout</h3>
-        <p>This example still produces a PDF, but the report engine does not preserve the three-column Grid arrangement.</p>
+      <section class="demo-panel" id="panel-grid" role="tabpanel" aria-labelledby="tab-grid" data-status="good">
+        <h3 id="css-grid-limit">CSS Grid · report-focused subset</h3>
+        <p>This example combines weighted fractional tracks, a nested percentage/fraction grid, row and column spans, and a table inside a spanning card. The engine maps the supported declarations into its own Grid layout; it does not reproduce the browser rendering engine.</p>
         <div class="sample-sheet">
           <div class="demo-target" id="grid-report">
             <h2 class="report-title">Operations summary</h2>
             <div class="grid-sample">
-              <div class="grid-tile"><strong>North</strong>On target · 98%</div>
-              <div class="grid-tile"><strong>South</strong>On target · 94%</div>
-              <div class="grid-tile"><strong>East</strong>Needs review · 81%</div>
-              <div class="grid-tile"><strong>West</strong>On target · 96%</div>
-              <div class="grid-tile"><strong>Central</strong>On target · 92%</div>
-              <div class="grid-tile"><strong>International</strong>Needs review · 78%</div>
+              <div class="grid-tile grid-featured">
+                <p><strong>Quarterly performance</strong></p>
+                <p>Revenue reached $72.1M, up 18.4% year over year. Growth came from renewals and expanded analytics adoption.</p>
+                <div class="grid-nested">
+                  <div class="grid-nested-tile">
+                    <p>Revenue growth</p>
+                    <p><strong>+18.4%</strong></p>
+                  </div>
+                  <div class="grid-nested-tile">
+                    <p>Operating margin</p>
+                    <p><strong>24.9%</strong></p>
+                  </div>
+                </div>
+              </div>
+              <div class="grid-tile grid-sidebar">
+                <p><strong>Target check</strong></p>
+                <table class="grid-mini-table">
+                  <tbody>
+                    <tr><td>Revenue</td><td>On target</td></tr>
+                    <tr><td>Retention</td><td>On target</td></tr>
+                    <tr><td>Delivery</td><td>Review</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="grid-tile grid-wide">
+                <p><strong>Regional highlights</strong></p>
+                <p>North America led in renewals. Europe expanded analytics adoption. Asia Pacific needs closer pipeline review.</p>
+              </div>
+              <div class="grid-tile">
+                <p><strong>North</strong></p>
+                <p>On target · 98%</p>
+              </div>
+              <div class="grid-tile">
+                <p><strong>South</strong></p>
+                <p>On target · 94%</p>
+              </div>
+              <div class="grid-tile">
+                <p><strong>East</strong></p>
+                <p>Needs review · 81%</p>
+              </div>
             </div>
           </div>
         </div>
-        <p class="loss-note"><strong>Expected:</strong> the cards appear in normal document flow instead of a faithful three-column grid. Use the supported flex layout or author the report layout explicitly when placement matters.</p>
+        <p class="loss-note"><strong>Supported:</strong> fixed, percentage, and <code>fr</code> columns, <code>repeat()</code>, gaps, row-major auto-placement, span-based placement, and default row-area stretching for container items. Rows grow to content. Intrinsic tracks such as <code>minmax()</code>, explicit row sizing, implicit columns, numeric line placement, and custom per-item alignment are not modelled.</p>
       </section>
 
       <section class="demo-panel" id="panel-generated" role="tabpanel" aria-labelledby="tab-generated" data-status="lossy">

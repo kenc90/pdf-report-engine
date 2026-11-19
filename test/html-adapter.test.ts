@@ -8,7 +8,7 @@ import { parseHtml, htmlToReportDoc, htmlElementToReportDoc, type HElement } fro
 import { resolvePage } from '../src/core/page.js';
 import { MM_TO_PT } from '../src/core/units.js';
 import { renderToBuffer } from '../src/index.js';
-import type { TableBlock, Block, ParagraphBlock, HeadingBlock, ImageBlock, ContentSpan, ContainerBlock, FlexBlock } from '../src/ir/schema.js';
+import type { TableBlock, Block, ParagraphBlock, HeadingBlock, ImageBlock, ContentSpan, ContainerBlock, FlexBlock, GridBlock } from '../src/ir/schema.js';
 
 const ARIAL = 'C:/Windows/Fonts/arial.ttf';
 
@@ -426,6 +426,54 @@ describe('htmlElementToReportDoc', () => {
     expect((autoBlock.children[0]!.block as HeadingBlock).height).toBeUndefined();
     expect(fixedBlock.width).toBe('120px');
     expect(fixedBlock.height).toBe('40px');
+  });
+
+  it('preserves fractional grid tracks from matching live-DOM stylesheet rules', () => {
+    const computedStyles = new WeakMap<Element, Record<string, string>>();
+    const gridRule = {
+      type: 1,
+      selectorText: '.grid-root',
+      style: {
+        getPropertyValue: (property: string) => property === 'grid-template-columns' ? 'repeat(3, 1fr)' : '',
+        getPropertyPriority: () => '',
+      },
+    } as unknown as CSSRule;
+    const view = {
+      getComputedStyle: (element: Element) => ({
+        getPropertyValue: (property: string) => computedStyles.get(element)?.[property] ?? '',
+        get display() { return computedStyles.get(element)?.display ?? ''; },
+        get visibility() { return computedStyles.get(element)?.visibility ?? ''; },
+        get whiteSpace() { return computedStyles.get(element)?.['white-space'] ?? ''; },
+      }),
+    } as unknown as Window;
+    const ownerDocument = {
+      defaultView: view,
+      head: { children: [] },
+      documentElement: {},
+      styleSheets: [{ cssRules: [gridRule] }],
+      baseURI: 'https://example.test/page.html',
+    } as unknown as Document;
+    const child = mockElement(
+      'div',
+      {},
+      [{ nodeType: 3, nodeValue: 'Grid cell', childNodes: [] } as unknown as Node],
+      ownerDocument,
+      { display: 'block' },
+      computedStyles,
+    );
+    const root = mockElement(
+      'div',
+      { class: 'grid-root' },
+      [child],
+      ownerDocument,
+      { display: 'grid', 'grid-template-columns': '220px 220px 220px' },
+      computedStyles,
+    );
+
+    const grid = htmlElementToReportDoc(root).body![0] as GridBlock;
+
+    expect(grid.type).toBe('grid');
+    expect(grid.columns).toEqual([{ fr: 1 }, { fr: 1 }, { fr: 1 }]);
   });
 
   it('accepts explicit live-element and HTML-string page bands', () => {

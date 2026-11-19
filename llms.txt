@@ -136,7 +136,7 @@ fs.writeFileSync('out.pdf', await renderToBuffer(report));
   Running tokens `{PAGE}`/`{TOTAL}` and `$page.number`/`$page.total` resolve **only inside bands**.
 - **`body`** is the array of flowing blocks (see below).
 
-## `block` union — `type` discriminator (the 12 block kinds)
+## `block` union — `type` discriminator (the 13 block kinds)
 
 | `type` | Purpose | Key fields (beyond common block props) |
 | --- | --- | --- |
@@ -151,6 +151,7 @@ fs.writeFileSync('out.pdf', await renderToBuffer(report));
 | `toc` | table of contents from headings | `title?`, `maxLevel?`, `leaders?`, `pageNumbers?` |
 | `barcode` | QR / Code 128 / EAN-13 | `symbology`, `value`, `moduleSize?`, `showText?` |
 | `flex` | CSS flexbox (atomic fragment) | `direction`, `wrap`, `justify`, `alignItems`, `gap`, `children: FlexItem[]` |
+| `grid` | Report-focused two-dimensional layout | `columns: GridTrack[]`, `gap`/`rowGap`/`columnGap`, `children: GridItem[]` with `rowSpan`/`columnSpan` |
 | `columns` | multi-column flow | `count?`, `gap?`, `rule?`, `children: Block[]` |
 
 Every block also accepts **`BoxProps`** (`width/height/margin*/padding*/border*/
@@ -206,13 +207,20 @@ the selected element and descendants with the browser's current computed styles;
 after page JavaScript has updated the DOM. It does not execute scripts or capture pixels.
 Optional `header` and `footer` values accept live Elements or HTML strings and become repeating
 page bands; HTML strings use the supported HTML/CSS subset.
-Unsupported layouts such as CSS Grid and generated content such as `::before` are not
-reproduced. See `docs/live-dom-demo.html` for working and intentionally lossy examples.
+Only the selected element and its descendants are captured. Supported CSS Grid declarations use
+the report-focused subset above; browser Grid behavior outside that subset is not reproduced.
+Generated content such as `::before` is not part of the DOM snapshot. See
+`docs/live-dom-demo.html` for working and intentionally lossy examples.
 
 - **Blocks:** `h1..h6, p, div/section/article/header/footer/main, ul/ol/li, table, hr,
   blockquote, img, inline <svg>`.
 - **Inline:** `b/strong, i/em, u/ins, span, font, a, mark, br` (br → line separator).
 - **Style:** a flat subset of inline `style`; `<style>` class rules (e.g. `.toc { outline: true }`) are honoured.
+- **CSS Grid:** `display: grid` maps fixed, percentage, and `fr` columns (including `repeat()`), gaps,
+  row-major auto-placement, and row/column spans. Rows grow to their content and container items
+  stretch to their assigned row area. Intrinsic tracks (`auto`, `minmax()`), explicit row tracks,
+  implicit columns, numeric line placement, and per-item alignment are not modelled; Grid blocks
+  are atomic and move to the next page when they do not fit.
 - **Page:** `<meta name="pdf-page" content="size=...; margin=...">` or `@page { size: A4 landscape; margin: 15mm }`.
 - **Fonts:** `<link href="fonts.googleapis.com/…">` and `@import` become `report.fonts`.
 - **Watermark:** `data-watermark="DRAFT"` on `<body>` (with `data-watermark-rotate`,

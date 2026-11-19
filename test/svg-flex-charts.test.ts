@@ -14,7 +14,7 @@ import { layoutBlock } from '../src/layout/block.js';
 import { parseSvg, svgSourceToText } from '../src/core/svg.js';
 import { htmlToReportDoc } from '../src/adapter/html.js';
 import { renderToBuffer } from '../src/index.js';
-import type { Block, ChartBlock, FlexBlock, ReportDoc, SvgBlock, ContainerBlock, HeadingBlock } from '../src/ir/schema.js';
+import type { Block, ChartBlock, FlexBlock, GridBlock, ReportDoc, SvgBlock, ContainerBlock, HeadingBlock } from '../src/ir/schema.js';
 import type { Fragment } from '../src/layout/flow.js';
 
 function makeCtx(): LayoutContext {
@@ -307,6 +307,170 @@ describe('flex adapter', () => {
     const one = htmlToReportDoc('<div style="display:flex;gap:8pt"><div>A</div><div>B</div></div>');
     const flexOne = findBlock(one, 'flex') as FlexBlock | undefined;
     expect(flexOne!.gap).toBe('8pt');
+  });
+});
+
+describe('grid layout', () => {
+  const para = (text: string): Block => ({ type: 'paragraph', content: text });
+
+  it('resolves fractional columns and places auto-flow items row by row', () => {
+    const block: GridBlock = {
+      type: 'grid',
+      columns: [{ fr: 1 }, { fr: 2 }],
+      columnGap: 12,
+      rowGap: 8,
+      children: ['A', 'B', 'C'].map((text) => ({ block: para(text) })),
+    };
+    const fragment = layoutBlock(block, makeCtx(), opts(300))[0]!;
+    const texts = fragment.commands.filter((command) => command.op === 'text');
+    const byText = new Map(texts.map((command) => [
+      command.op === 'text' ? command.runs.map((run) => run.text).join('') : '',
+      command,
+    ]));
+    const first = byText.get('A');
+    const second = byText.get('B');
+    const third = byText.get('C');
+
+    expect(first?.op).toBe('text');
+    expect(second?.op).toBe('text');
+    expect(third?.op).toBe('text');
+    if (first?.op === 'text' && second?.op === 'text' && third?.op === 'text') {
+      expect(second.x - first.x).toBeCloseTo(108, 1);
+      expect(third.x).toBeCloseTo(first.x, 1);
+      expect(third.baselineY).toBeGreaterThan(first.baselineY);
+    }
+  });
+
+  it('reserves spanned cells before auto-placing later items', () => {
+    const block: GridBlock = {
+      type: 'grid',
+      columns: [{ fr: 1 }, { fr: 1 }],
+      columnGap: 10,
+      children: [
+        { block: para('Wide'), columnSpan: 2 },
+        { block: para('Left') },
+        { block: para('Right') },
+      ],
+    };
+    const fragment = layoutBlock(block, makeCtx(), opts(300))[0]!;
+    const xByText = new Map(
+      fragment.commands
+        .filter((command) => command.op === 'text')
+        .map((command) => [command.op === 'text' ? command.runs.map((run) => run.text).join('') : '', command.op === 'text' ? command.x : 0]),
+    );
+
+    expect(xByText.get('Left')).toBeCloseTo(0, 1);
+    expect(xByText.get('Right')).toBeGreaterThan(100);
+  });
+
+  it('auto-places around row-spanned items', () => {
+    const block: GridBlock = {
+      type: 'grid',
+      columns: [{ fr: 1 }, { fr: 1 }],
+      rowGap: 6,
+      children: [
+        { block: para('Tall'), rowSpan: 2 },
+        { block: para('Top') },
+        { block: para('Bottom') },
+      ],
+    };
+    const fragment = layoutBlock(block, makeCtx(), opts(240))[0]!;
+    const byText = new Map(
+      fragment.commands
+        .filter((command) => command.op === 'text')
+        .map((command) => [
+          command.op === 'text' ? command.runs.map((run) => run.text).join('') : '',
+          command.op === 'text' ? command.baselineY : 0,
+        ]),
+    );
+
+    expect(byText.get('Bottom')).toBeGreaterThan(byText.get('Top')!);
+  });
+
+  it('stretches grid container backgrounds to fill their spanned row area', () => {
+    const block: GridBlock = {
+      type: 'grid',
+      columns: [{ fr: 1 }, { fr: 1 }, { fr: 1 }, { fr: 1 }],
+      rowGap: 6,
+      children: [
+        {
+          block: {
+            type: 'container',
+            backgroundColor: '#dbeafe',
+            children: [
+              { type: 'paragraph', content: 'A tall card with enough content to determine the height of both grid rows.', marginTop: 0, marginBottom: 0 },
+              { type: 'paragraph', content: 'Additional detail keeps this card taller than its neighbor.', marginTop: 0, marginBottom: 0 },
+            ],
+          },
+          columnSpan: 2,
+          rowSpan: 2,
+        },
+        {
+          block: {
+            type: 'container',
+            backgroundColor: '#fef3c7',
+            children: [{ type: 'paragraph', content: 'Short card', marginTop: 0, marginBottom: 0 }],
+          },
+          columnSpan: 2,
+          rowSpan: 2,
+        },
+      ],
+    };
+    const fragment = layoutBlock(block, makeCtx(), opts(300))[0]!;
+    const shortCardBackground = fragment.commands.find(
+      (command) => command.op === 'fillRect' && command.x > 100,
+    );
+
+    expect(shortCardBackground?.op).toBe('fillRect');
+    if (shortCardBackground?.op === 'fillRect') {
+      expect(shortCardBackground.h).toBeCloseTo(fragment.height, 1);
+    }
+  });
+
+  it('resolves percentage and fixed tracks before distributing fractional space', () => {
+    const block: GridBlock = {
+      type: 'grid',
+      columns: ['25%', '60px', { fr: 1 }],
+      columnGap: 10,
+      children: ['A', 'B', 'C'].map((text) => ({ block: para(text) })),
+    };
+    const fragment = layoutBlock(block, makeCtx(), opts(300))[0]!;
+    const xByText = new Map(
+      fragment.commands
+        .filter((command) => command.op === 'text')
+        .map((command) => [command.op === 'text' ? command.runs.map((run) => run.text).join('') : '', command.op === 'text' ? command.x : 0]),
+    );
+
+    expect(xByText.get('B')! - xByText.get('A')!).toBeCloseTo(85, 1);
+    expect(xByText.get('C')! - xByText.get('B')!).toBeCloseTo(55, 1);
+  });
+});
+
+describe('grid adapter', () => {
+  it('parses explicit fractional tracks, gaps, and span-based placement', () => {
+    const doc = htmlToReportDoc(`
+      <div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:4px 8px">
+        <div style="grid-column:span 2;grid-row:span 2">Wide</div>
+        <div>Left</div><div>Right</div>
+      </div>
+    `);
+    const grid = findBlock(doc, 'grid') as GridBlock | undefined;
+
+    expect(grid).toBeTruthy();
+    expect(grid!.columns).toEqual([{ fr: 1 }, { fr: 1 }]);
+    expect(grid!.rowGap).toBe('4px');
+    expect(grid!.columnGap).toBe('8px');
+    expect(grid!.children[0]!.columnSpan).toBe(2);
+    expect(grid!.children[0]!.rowSpan).toBe(2);
+  });
+
+  it('reports unsupported intrinsic track functions instead of silently flattening them', () => {
+    expect(() => htmlToReportDoc(
+      '<div style="display:grid;grid-template-columns:repeat(2,minmax(80px,1fr))"><div>A</div></div>',
+    )).toThrow('Unsupported CSS Grid column track');
+    expect(() => htmlToReportDoc(
+      '<div style="display:grid;grid-template-columns:1fr 1fr"><div style="grid-column:1 / 3">A</div></div>',
+    )).toThrow('Unsupported CSS Grid item placement');
   });
 });
 

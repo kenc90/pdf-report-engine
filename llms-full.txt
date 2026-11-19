@@ -284,6 +284,29 @@ rectangles. `ean13` takes 12 digits (checksum appended) or 13 (checksum validate
 Laid out as a **single atomic fragment** (never splits across pages). `display: flex`
 in HTML maps here.
 
+### `grid`
+```jsonc
+{
+  "type": "grid",
+  "columns": [ "40%", { "fr": 1 } ],
+  "gap": 12, "rowGap": 8, "columnGap": 12,
+  "children": [
+    { "block": { "type": "paragraph", "content": "Revenue" } },
+    { "block": { "type": "paragraph", "content": "Quarterly summary" }, "columnSpan": 2, "rowSpan": 2 }
+  ]
+}
+```
+Report-focused two-dimensional layout. Columns accept fixed lengths, percentages, and `{fr:n}`
+tracks. Items auto-place row-major and can span rows or columns; rows grow to fit content, and
+container items stretch to their assigned row area by default. `gap` sets both axes unless
+`rowGap` or `columnGap` overrides it. The whole Grid is atomic and moves to the next page when it
+does not fit.
+
+HTML `display: grid` supports explicit fixed, percentage, and `fr` columns (including `repeat()`),
+gaps, auto-placement, and `grid-row`/`grid-column: span N`. Intrinsic tracks (`auto`, `minmax()`),
+explicit row tracks, implicit columns, numeric line placement, and per-item alignment are not
+modelled.
+
 ### `columns`
 `{ type: 'columns', count?: 2, gap?: 12, rule?: boolean | {color,width}, children: Block[] }`
 Distributes children across N equal-width sub-columns, balanced by height and kept
@@ -408,7 +431,8 @@ the characters actually used. With `createReport` (offline) instead pre-resolve 
   `font`, `a` (→ `link`), `mark` (highlight), `br` (U+2028 line separator).
 - **CSS:** flat subset of inline `style`; a `<style>`/linked stylesheet with class rules
   (`.toc { outline: true }`, `table { width: 100% }`) is honoured. `display: flex` →
-  flex block; `column-count` → columns block; `transform: rotate(Ndeg)` → `rotate`.
+  flex block; `display: grid` → the report-focused Grid subset above; `column-count` → columns
+  block; `transform: rotate(Ndeg)` → `rotate`.
 - **Page:** `<meta name="pdf-page" content="size=a4; margin=48; orientation=landscape">`
   or `@page { size: A4 landscape; margin: 15mm }` (a JS `report.page` still wins).
 - **Fonts:** `<link href="fonts.googleapis.com/…">` and `@import` → `report.fonts`.
@@ -458,7 +482,7 @@ Explicit options override corresponding `data-band="pageHeader"` / `data-band="p
 in the captured content.
 
 Only the selected element and its descendants are captured. This is not a screenshot or complete
-browser layout implementation: CSS Grid and other unsupported layout modes are not preserved, canvas
+browser layout implementation: only the report-focused CSS Grid subset above is preserved, canvas
 drawing pixels and pseudo-element content are absent from the DOM snapshot, and hidden root elements
 are rejected. The demo in `docs/live-dom-demo.html` shows successful, lossy, and rejected examples.
 

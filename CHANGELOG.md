@@ -2,6 +2,12 @@
 
 Notable user-facing changes for each release are listed here.
 
+## [Unreleased]
+
+### Added
+
+- Report-focused CSS Grid layout with fixed, percentage, and fractional columns, gaps, auto-placement, row/column spans, and automatic stretching to fill assigned row areas.
+
 ## [0.3.1] - 2026-11-19
 
 ### Fixed

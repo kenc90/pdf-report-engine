@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>CSS Grid report</title>
+  <style>
+    @page { size: a4; margin: 18mm 16mm; }
+
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #243447; }
+    h1 { color: #0f2f57; margin-bottom: 2pt; }
+    h2 { color: #0f2f57; margin-top: 14pt; border-bottom: 0.6pt solid #c9d6e6; padding-bottom: 3pt; }
+    p { margin: 0; }
+    .muted { color: #6b7c93; font-size: 8.5pt; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8pt; margin-top: 8pt; }
+    .card { background-color: #f3f6fb; border: 0.6pt solid #cbd5e1; padding: 8pt; }
+    .card-wide { grid-column: span 2; background-color: #eaf1fb; }
+    .label { color: #64748b; font-size: 8pt; margin-bottom: 4pt; }
+    .value { color: #0f2f57; font-size: 16pt; font-weight: bold; margin-bottom: 3pt; }
+    .comparison { display: grid; grid-template-columns: 2fr 1fr; gap: 8pt; margin-top: 8pt; }
+  </style>
+</head>
+<body>
+  <header data-band="pageHeader" style="font-size:8pt; color:#94a3b8; letter-spacing:2pt; text-transform:uppercase; border-bottom:0.8pt solid #e2e8f0; padding-bottom:3pt">
+    Northwind Group &middot; Regional performance
+  </header>
+  <footer data-band="pageFooter" style="font-size:8pt; color:#94a3b8; text-align:right">
+    Page {PAGE} of {TOTAL}
+  </footer>
+
+  <h1>Regional performance</h1>
+  <p class="muted">
+    A report-focused CSS Grid example: fractional tracks, <code>repeat()</code>, gaps,
+    row-major auto-placement and a card spanning two columns.
+  </p>
+
+  <h2>Quarterly snapshot</h2>
+  <div class="grid">
+    <div class="card card-wide">
+      <p class="label">Company-wide revenue</p>
+      <p class="value">$72.1M</p>
+      <p>Up 18.4% year over year, with growth across all reporting regions.</p>
+    </div>
+    <div class="card">
+      <p class="label">North America</p>
+      <p class="value">$34.8M</p>
+      <p>On target &middot; +16%</p>
+    </div>
+    <div class="card">
+      <p class="label">Europe</p>
+      <p class="value">$18.6M</p>
+      <p>On target &middot; +21%</p>
+    </div>
+    <div class="card">
+      <p class="label">Asia Pacific</p>
+      <p class="value">$12.4M</p>
+      <p>Needs review &middot; +9%</p>
+    </div>
+    <div class="card">
+      <p class="label">Latin America</p>
+      <p class="value">$6.3M</p>
+      <p>On target &middot; +24%</p>
+    </div>
+  </div>
+
+  <h2>Priorities</h2>
+  <div class="comparison">
+    <div class="card">
+      <p class="label">Next-quarter focus</p>
+      <p>Expand analytics renewals and improve delivery capacity in high-growth markets.</p>
+    </div>
+    <div class="card">
+      <p class="label">Review</p>
+      <p>Monitor Asia Pacific pipeline conversion.</p>
+    </div>
+  </div>
+</body>
+</html>

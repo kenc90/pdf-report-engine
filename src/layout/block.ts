@@ -39,6 +39,7 @@ import { layoutToc } from './toc.js';
 import { layoutBarcode } from './barcode.js';
 import { layoutSvg } from './svg.js';
 import { layoutFlex } from './flex.js';
+import { layoutGrid } from './grid.js';
 import { layoutColumns } from './column.js';
 
 export interface BlockLayoutOptions {
@@ -48,6 +49,8 @@ export interface BlockLayoutOptions {
   inherited?: ResolvedStyle;
   /** Full-page body height, used to prepare continuations for oversized table rows. */
   maxRowHeight?: number;
+  /** Minimum outer height for a Grid-aligned container item. */
+  gridAreaHeight?: number;
 }
 
 export function layoutBlock(block: Block, ctx: LayoutContext, opts: BlockLayoutOptions): Fragment[] {
@@ -77,6 +80,9 @@ export function layoutBlock(block: Block, ctx: LayoutContext, opts: BlockLayoutO
       break;
     case 'flex':
       frags = layoutFlex(effective, ctx, opts, inherited);
+      break;
+    case 'grid':
+      frags = layoutGrid(effective, ctx, opts, inherited);
       break;
     case 'container':
       frags = layoutContainer(effective, ctx, opts, inherited);
@@ -289,12 +295,14 @@ function layoutContainer(block: ContainerBlock, ctx: LayoutContext, opts: BlockL
     ? { ...style, backgroundColor: undefined }
     : style;
   const children = block.children.flatMap((child) =>
-    layoutBlock(child, ctx, { ...opts, contentWidth: innerWidth, inherited: childStyle }),
+    layoutBlock(child, ctx, { ...opts, gridAreaHeight: undefined, contentWidth: innerWidth, inherited: childStyle }),
   );
   if (children.length === 0) return [];
 
   const contentHeight = children.reduce((sum, fragment) => sum + fragment.before + fragment.height + fragment.after, 0);
-  const boxHeight = borderTop + padding.top + contentHeight + padding.bottom + borderBottom;
+  const naturalBoxHeight = borderTop + padding.top + contentHeight + padding.bottom + borderBottom;
+  const stretchExtra = Math.max(0, (opts.gridAreaHeight ?? naturalBoxHeight) - naturalBoxHeight);
+  const boxHeight = naturalBoxHeight + stretchExtra;
   const radius = resolveRadius(block);
   const gradient = resolveGradient(block);
   const shadow = resolveShadow(block);
@@ -308,7 +316,7 @@ function layoutContainer(block: ContainerBlock, ctx: LayoutContext, opts: BlockL
     const contentBefore = fragment.before;
     const contentAfter = fragment.after;
     const yTop = first ? -(borderTop + padding.top + contentBefore) : -contentBefore;
-    const yBottom = fragment.height + contentAfter + (last ? padding.bottom + borderBottom : 0);
+    const yBottom = fragment.height + contentAfter + (last ? padding.bottom + borderBottom + stretchExtra : 0);
     const commands: DrawCommand[] = [];
 
     if (fill !== undefined || gradient) {
@@ -319,6 +327,7 @@ function layoutContainer(block: ContainerBlock, ctx: LayoutContext, opts: BlockL
         w: width,
         h: Math.max(0, yBottom - yTop),
         color: fill !== undefined ? toRGB(fill) : [0, 0, 0],
+        paintLayer: 'background',
       };
       if (radius) background.radius = outerCorners(radius, first, last);
       if (gradient) background.gradient = { ...gradient, boxTop, boxHeight };
@@ -347,7 +356,7 @@ function layoutContainer(block: ContainerBlock, ctx: LayoutContext, opts: BlockL
     const wrapped: Fragment = {
       ...fragment,
       before: contentBefore + (first ? margin.top + borderTop + padding.top : 0),
-      after: contentAfter + (last ? margin.bottom + padding.bottom + borderBottom : 0),
+      after: contentAfter + (last ? margin.bottom + padding.bottom + borderBottom + stretchExtra : 0),
       commands,
       breakBefore: first ? block.breakBefore ?? fragment.breakBefore : fragment.breakBefore,
       breakAfter: last ? block.breakAfter ?? fragment.breakAfter : fragment.breakAfter,

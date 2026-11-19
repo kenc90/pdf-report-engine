@@ -86,8 +86,8 @@ const DEMO_DATA = {
 // barcodes, a page break, and base-14 fallback; plus the six new features: hyperlinks,
 // rich inline text, a rotated page watermark (rendered as non-selectable vector outlines
 // on the foreground layer), multi-column layout, a Gantt timeline chart,
-// absolute positioning with z-index (a page-1 stamp, a behind-body wash, and a fixed
-// per-page badge), and streaming output (see renderToStream in the API docs).
+// Absolute positioning with z-index (a page-1 stamp, a behind-body wash, and a fixed
+// per-page badge), streaming output, and report-focused CSS Grid.
 const DEFAULT_HTML = `<!-- ══ Web fonts straight from the HTML: the engine collects the charset from
      the IR, passes it as text= to Google's CSS API, fetches only the needed glyphs (tiny subset),
      and embeds them. In Node a bot UA yields TTF directly; in a browser WOFF2 is decoded. ══ -->
@@ -99,6 +99,11 @@ const DEFAULT_HTML = `<!-- ══ Web fonts straight from the HTML: the engine c
   .section-title { font-family: 'Roboto Slab'; color: #0f2f57; border-bottom: 2pt solid #e08a1e; padding-bottom: 4pt; }
   #ledger { color: #1b4d3e; }                 /* id beats class */
   .callout { background-color: #fff7e6; padding: 6pt; }
+  .grid-kpis { display:grid; grid-template-columns:repeat(3, 1fr); gap:8pt; margin-top:8pt; }
+  .grid-kpi { background-color:#f3f6fb; border:1pt solid #dbe6f4; padding:8pt; }
+  .grid-kpi-wide { grid-column:span 2; background-color:#eaf1fb; }
+  .grid-kpi-label { color:#64748b; font-size:8pt; margin:0 0 4pt; }
+  .grid-kpi-value { color:#0f2f57; font-size:15pt; font-weight:700; margin:0 0 3pt; }
   mark { background-color: #ffe08a; }          /* tag selector */
 
   /* Absolute positioning & z-index: position:absolute/fixed lift an element out of the flow and
@@ -163,6 +168,33 @@ const DEFAULT_HTML = `<!-- ══ Web fonts straight from the HTML: the engine c
     <td style="background:#f3f6fb; border:1pt solid #dbe6f4; padding:10pt; text-align:center"><span style="font-size:17pt; font-weight:700; color:#7c2d12">1,240</span><br><span style="font-size:8pt; letter-spacing:1pt; text-transform:uppercase; color:#64748b">Headcount</span></td>
   </tr>
 </table>
+
+<!-- ══ CSS Grid: fractional tracks, repeat(), gaps and span-based placement.
+     The report engine resolves the supported tracks against the PDF content width. ══ -->
+<h2 id="grid" class="section-title">CSS Grid: regional performance</h2>
+<p style="font-size:8.5pt; color:#94a3b8">Three equal fractional columns; the company-wide card spans two columns.</p>
+<div class="grid-kpis">
+  <div class="grid-kpi grid-kpi-wide">
+    <p class="grid-kpi-label">Company-wide revenue</p>
+    <p class="grid-kpi-value">$72.1M</p>
+    <p>Up 18.4% year over year, with growth across all reporting regions.</p>
+  </div>
+  <div class="grid-kpi">
+    <p class="grid-kpi-label">North America</p>
+    <p class="grid-kpi-value">$34.8M</p>
+    <p>On target &middot; +16%</p>
+  </div>
+  <div class="grid-kpi">
+    <p class="grid-kpi-label">Europe</p>
+    <p class="grid-kpi-value">$18.6M</p>
+    <p>On target &middot; +21%</p>
+  </div>
+  <div class="grid-kpi">
+    <p class="grid-kpi-label">Asia Pacific</p>
+    <p class="grid-kpi-value">$12.4M</p>
+    <p>Needs review &middot; +9%</p>
+  </div>
+</div>
 
 <!-- ══ Vector charts from plain attributes — no canvas, no images. ══ -->
 <h2 id="charts" class="section-title">Charts</h2>
