@@ -1,6 +1,6 @@
 # pdf-report-engine
 
-![version](https://img.shields.io/badge/version-0.3.1-brightgreen)
+![version](https://img.shields.io/badge/version-0.4.0-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 ![node](https://img.shields.io/badge/node-%E2%89%A518-brightgreen)
 
