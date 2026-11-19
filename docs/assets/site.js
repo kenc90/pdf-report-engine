@@ -3,6 +3,54 @@
 // scripts/sync-version.mjs. It is stamped into every [data-version] placeholder.
 var VERSION = '0.4.0';
 (function () {
+  var footerLinks = {
+    guides: [
+      ['getting-started.html', 'Getting started'],
+      ['getting-started.html#first-report', 'Your first report'],
+      ['live-dom-demo.html', 'Live DOM demo'],
+      ['getting-started.html#charts', 'Charts'],
+      ['getting-started.html#navigation', 'TOC, bookmarks & links'],
+      ['getting-started.html#breaks', 'Breaks & keep-together'],
+      ['getting-started.html#barcodes', 'Barcodes'],
+      ['getting-started.html#svg', 'SVG vector images'],
+      ['getting-started.html#flex', 'Flexbox layout'],
+      ['getting-started.html#web-fonts', 'Web fonts & CJK'],
+      ['getting-started.html#cli', 'Command line'],
+    ],
+    reference: [
+      ['api.html', 'API reference'],
+      ['api.html#ir', 'IR block types'],
+      ['api.html#options', 'Render options'],
+      ['api.html#html-options', 'HTML adapter options'],
+      ['api.html#hosting', 'Hosting untrusted payloads'],
+      ['api.html#expr', 'Expression language'],
+      ['api.html#style', 'Style & box properties'],
+      ['examples.html', 'Example recipes'],
+      ['examples.html#ex-tour', 'Full worked example'],
+      ['browser-demo.html', 'Browser demo'],
+      ['editor.html', 'Online editor'],
+    ],
+  };
+
+  function populateFooterNav(nav, title, links) {
+    if (!nav) return;
+    nav.textContent = '';
+    var heading = document.createElement('h4');
+    heading.textContent = title;
+    nav.appendChild(heading);
+    links.forEach(function (link) {
+      var anchor = document.createElement('a');
+      anchor.href = link[0];
+      anchor.textContent = link[1];
+      nav.appendChild(anchor);
+    });
+  }
+
+  document.querySelectorAll('.site-footer').forEach(function (footer) {
+    populateFooterNav(footer.querySelector('nav[aria-label="Guides"]'), 'Guides', footerLinks.guides);
+    populateFooterNav(footer.querySelector('nav[aria-label="Reference"]'), 'Reference', footerLinks.reference);
+  });
+
   // Show the current version wherever a [data-version] placeholder exists.
   document.querySelectorAll('[data-version]').forEach(function (el) {
     el.textContent = 'v' + VERSION;
