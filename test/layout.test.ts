@@ -132,6 +132,24 @@ describe('table layout', () => {
     )).toBe(true);
   });
 
+  it('aligns adjacent cell borders on one shared edge', () => {
+    const table: TableBlock = {
+      type: 'table',
+      columns: [{ width: 50 }, { width: 50 }],
+      showGrid: true,
+      staticRows: [{ kind: 'detail', cells: [{ content: 'left' }, { content: 'right' }] }],
+    };
+    const fragment = layoutBlock(table, makeCtx(), opts(100))[0]!;
+    const sharedVerticals = fragment.commands.filter(
+      (command) => command.op === 'line' && command.x1 === command.x2 && command.x1 === 50,
+    );
+
+    expect(sharedVerticals).toHaveLength(2);
+    expect(
+      sharedVerticals.every((command) => command.op === 'line' && command.y1 === 0 && command.y2 === fragment.height),
+    ).toBe(true);
+  });
+
   it('centers table-cell text within extra line-height leading', () => {
     const table = {
       type: 'table',

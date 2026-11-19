@@ -14,7 +14,7 @@ import { layoutBlock } from '../src/layout/block.js';
 import { parseSvg, svgSourceToText } from '../src/core/svg.js';
 import { htmlToReportDoc } from '../src/adapter/html.js';
 import { renderToBuffer } from '../src/index.js';
-import type { Block, ChartBlock, FlexBlock, ReportDoc, SvgBlock, ContainerBlock } from '../src/ir/schema.js';
+import type { Block, ChartBlock, FlexBlock, ReportDoc, SvgBlock, ContainerBlock, HeadingBlock } from '../src/ir/schema.js';
 import type { Fragment } from '../src/layout/flow.js';
 
 function makeCtx(): LayoutContext {
@@ -133,6 +133,61 @@ describe('flex layout', () => {
     expect(textCmds.length).toBeGreaterThanOrEqual(2);
     const xs = textCmds.map((c) => (c.op === 'text' ? c.x : 0));
     expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(20);
+  });
+
+  it('sizes a heading border to its text during flex intrinsic measurement', () => {
+    const eyebrow = para('NORTHWIND STUDIO · SERVICES', {
+      fontSize: 7.5,
+      width: '189.047px',
+      height: '16px',
+      marginTop: 2.25,
+      marginBottom: 2.25,
+    });
+    const heading: HeadingBlock = {
+      type: 'heading',
+      level: 2,
+      content: [
+        'Invoice ',
+        { bind: '$data.invoice.number', style: { fontSize: 17.25, whiteSpace: 'normal' } } as ContentSpan,
+      ],
+      fontSize: 17.25,
+      whiteSpace: 'nowrap',
+      marginTop: 0,
+      marginBottom: 0,
+      paddingBottom: 4.5,
+      borderBottom: [2, 'solid', '#ff0000'],
+    };
+    const leftColumn: FlexBlock = {
+      type: 'flex',
+      direction: 'column',
+      children: [
+        { block: eyebrow, width: '189.047px', height: '16px' },
+        { block: heading },
+      ],
+    };
+    const block: FlexBlock = {
+      type: 'flex',
+      direction: 'row',
+      gap: 18,
+      justify: 'space-between',
+      children: [{ block: leftColumn }, { block: para('November 19, 2026', { align: 'right' }) }],
+    };
+    const fragment = layoutBlock(block, makeCtx(), {
+      contentWidth: 515.275591,
+      scope: { $data: { invoice: { number: 'INV-2026-042' } } },
+    })[0]!;
+    const title = fragment.commands.find((command) =>
+      command.op === 'text' && command.runs.map((run) => run.text).join('').includes('Invoice INV-2026-042'),
+    );
+    const redRule = fragment.commands.find((command) => command.op === 'line');
+
+    expect(title?.op).toBe('text');
+    expect(redRule?.op).toBe('line');
+    if (title?.op === 'text' && redRule?.op === 'line') {
+      const lastRun = title.runs[title.runs.length - 1]!;
+      const textRight = title.x + lastRun.x + lastRun.width + title.gapWidth * (title.runs.length - 1);
+      expect(redRule.x2).toBeCloseTo(textRight, 1);
+    }
   });
 
   it('grows items to fill the row and applies gap', () => {

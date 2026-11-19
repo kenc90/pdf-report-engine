@@ -426,6 +426,8 @@ function layoutRow(unit: Extract<Unit, { t: 'header' | 'footer' | 'detail' }>, u
     if (cl.fill) commands.push({ op: 'fillRect', x: cl.x, y: 0, w: cl.w, h: rowHeight, color: toRGB(cl.fill) });
     if (cl.diagonal) paintDiagonal(commands, cl.pad, cl.diagonal, cl.x, 0, cl.w, rowHeight, cl.borders.top ?? cl.borders.left);
     else paintCellContent(commands, cl, contentTop(cl, rowHeight), cl.structurePath);
+  }
+  for (const cl of layouts) {
     drawSides(commands, cl.borders, cl.x, 0, cl.w, rowHeight);
   }
 
@@ -916,6 +918,11 @@ function layoutMergedRun(run: RowUnit[], uc: UnitCtx, isFirstVisual: boolean): F
     if (a.fill) commands.push({ op: 'fillRect', x: a.x, y: ry, w: a.w, h: rectH, color: toRGB(a.fill) });
     if (a.diagonal) paintDiagonal(commands, a.pad, a.diagonal, a.x, ry, a.w, rectH, a.borders.top ?? a.borders.left);
     else paintCellContent(commands, a, ry + contentTop(a, rectH), a.structurePath);
+  }
+  for (const a of anchors) {
+    let rectH = 0;
+    for (let k = 0; k < a.rowSpan; k += 1) rectH += rowH[a.row + k]!;
+    const ry = yTop[a.row]!;
     drawSides(commands, a.borders, a.x, ry, a.w, rectH);
   }
 
@@ -1052,10 +1059,12 @@ function resolveRowStyle(block: TableBlock, row: Record<string, unknown>, index:
 function drawSides(commands: DrawCommand[], sides: Sides, x: number, y: number, w: number, h: number): void {
   const add = (b: ResolvedBorder, x1: number, y1: number, x2: number, y2: number) =>
     commands.push({ op: 'line', x1, y1, x2, y2, color: borderRGB(b), lineWidth: b.width, dash: borderDash(b) });
-  if (sides.top) add(sides.top, x, y + sides.top.width / 2, x + w, y + sides.top.width / 2);
-  if (sides.bottom) add(sides.bottom, x, y + h - sides.bottom.width / 2, x + w, y + h - sides.bottom.width / 2);
-  if (sides.left) add(sides.left, x + sides.left.width / 2, y, x + sides.left.width / 2, y + h);
-  if (sides.right) add(sides.right, x + w - sides.right.width / 2, y, x + w - sides.right.width / 2, y + h);
+  // Adjacent cells share these coordinates. Centering each stroke on the edge
+  // makes their borders overlap instead of appearing as two parallel lines.
+  if (sides.top) add(sides.top, x, y, x + w, y);
+  if (sides.bottom) add(sides.bottom, x, y + h, x + w, y + h);
+  if (sides.left) add(sides.left, x, y, x, y + h);
+  if (sides.right) add(sides.right, x + w, y, x + w, y + h);
 }
 
 // --- unit building ---------------------------------------------------------

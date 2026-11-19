@@ -26,6 +26,8 @@ function mockElement(
     ownerDocument,
     attributes: Object.entries(attrs).map(([name, value]) => ({ name, value })),
     childNodes: children,
+    matches: (selector: string) =>
+      selector === tag || selector === `.${attrs.class}` || selector === `#${attrs.id}`,
   } as unknown as Element;
   computedStyles.set(element, computed);
   return element;
@@ -346,6 +348,84 @@ describe('htmlElementToReportDoc', () => {
     expect(block.border).toBeUndefined();
     expect(block.borderTop).toBeUndefined();
     expect(block.rotate).toBeCloseTo(90, 1);
+  });
+
+  it('reflows computed sizes for bound content but keeps authored dimensions', () => {
+    const computedStyles = new WeakMap<Element, Record<string, string>>();
+    const fixedRule = {
+      type: 1,
+      selectorText: '.fixed-size',
+      style: {
+        getPropertyValue: (property: string) =>
+          property === 'width' ? '120px' : property === 'height' ? '40px' : '',
+      },
+    } as unknown as CSSRule;
+    const view = {
+      getComputedStyle: (element: Element) => ({
+        getPropertyValue: (property: string) => computedStyles.get(element)?.[property] ?? '',
+        get display() { return computedStyles.get(element)?.display ?? ''; },
+        get visibility() { return computedStyles.get(element)?.visibility ?? ''; },
+        get whiteSpace() { return computedStyles.get(element)?.['white-space'] ?? ''; },
+      }),
+    } as unknown as Window;
+    const ownerDocument = {
+      defaultView: view,
+      head: { children: [] },
+      documentElement: {},
+      styleSheets: [{ cssRules: [fixedRule] }],
+      baseURI: 'https://example.test/page.html',
+    } as unknown as Document;
+    const placeholder = { nodeType: 3, nodeValue: 'INV-0000', childNodes: [] } as unknown as Node;
+    const binding = mockElement(
+      'span',
+      { 'data-bind': '$data.invoice.number' },
+      [placeholder],
+      ownerDocument,
+      { display: 'inline' },
+      computedStyles,
+    );
+    const heading = mockElement(
+      'h2',
+      {},
+      [binding],
+      ownerDocument,
+      { display: 'block', width: '96px', height: '30px' },
+      computedStyles,
+    );
+    const item = mockElement(
+      'div',
+      {},
+      [heading],
+      ownerDocument,
+      { display: 'block', width: '96px', height: '30px' },
+      computedStyles,
+    );
+    const autoSized = mockElement(
+      'div',
+      { style: 'display:flex' },
+      [item],
+      ownerDocument,
+      { display: 'flex', width: '180px', height: '48px' },
+      computedStyles,
+    );
+    const fixedSized = mockElement(
+      'div',
+      { class: 'fixed-size', 'data-bind': '$data.invoice.number' },
+      [placeholder],
+      ownerDocument,
+      { display: 'block', width: '120px', height: '40px' },
+      computedStyles,
+    );
+    const options = { data: { invoice: { number: 'INV-2026-042' } } };
+
+    const autoBlock = htmlElementToReportDoc(autoSized, options).body![0] as FlexBlock;
+    const fixedBlock = htmlElementToReportDoc(fixedSized, options).body![0] as ParagraphBlock;
+
+    expect(autoBlock.children[0]!.width).toBeUndefined();
+    expect((autoBlock.children[0]!.block as HeadingBlock).width).toBeUndefined();
+    expect((autoBlock.children[0]!.block as HeadingBlock).height).toBeUndefined();
+    expect(fixedBlock.width).toBe('120px');
+    expect(fixedBlock.height).toBe('40px');
   });
 
   it('accepts explicit live-element and HTML-string page bands', () => {

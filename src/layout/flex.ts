@@ -46,17 +46,21 @@ interface Extent {
 }
 
 /** Bounding size of a run of fragments (main-axis cross measures). */
-function measureFrags(frags: Fragment[]): Extent {
+function measureFrags(frags: Fragment[], maxContentProbe = false): Extent {
   let width = 0;
   let height = 0;
   for (const f of frags) {
     height += f.before + f.height + f.after;
-    for (const c of f.commands) width = Math.max(width, commandRight(c));
+    for (const c of f.commands) {
+      // Borders span the probe width; they are decoration, not intrinsic content.
+      if (maxContentProbe && c.op === 'line' && Math.max(c.x1, c.x2) >= BIG / 2) continue;
+      width = Math.max(width, commandRight(c, maxContentProbe));
+    }
   }
   return { width, height };
 }
 
-function commandRight(c: DrawCommand): number {
+function commandRight(c: DrawCommand, maxContentProbe = false): number {
   switch (c.op) {
     case 'fillRect':
     case 'strokeRect':
@@ -72,7 +76,12 @@ function commandRight(c: DrawCommand): number {
       return c.subpaths.reduce((m, sp) => sp.points.reduce((mm, p) => Math.max(mm, p[0]), m), 0);
     case 'text': {
       const last = c.runs[c.runs.length - 1];
-      return last ? c.x + last.x + last.width + c.gapWidth * (c.runs.length - 1) : c.x;
+      if (!last) return c.x;
+      const right = last.x + last.width + c.gapWidth * (c.runs.length - 1);
+      const firstX = c.runs[0]!.x;
+      const align = c.runs[0]!.style.align;
+      const alignmentOffset = maxContentProbe && (align === 'center' || align === 'right') ? firstX : 0;
+      return c.x + right - alignmentOffset;
     }
     default:
       return 0;
@@ -294,7 +303,7 @@ function itemBase(item: FlexItem, dir: 'row' | 'column', innerW: number, ctx?: L
     const w = resolveLength(item.width, innerW);
     if (w !== undefined) return w;
     if (ctx && opts) {
-      return measureFrags(layoutBlock(item.block, ctx, { contentWidth: BIG, scope: opts.scope, inherited: undefined })).width;
+      return measureFrags(layoutBlock(item.block, ctx, { contentWidth: BIG, scope: opts.scope, inherited: undefined }), true).width;
     }
     return innerW / 3;
   }

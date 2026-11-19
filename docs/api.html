@@ -358,13 +358,16 @@ interface FontSource {
               Maps class names (without the leading dot) to IR style overrides. The map is applied
               after stylesheet rules and before inline styles. For live capture, sampled computed
               styles are serialized as inline styles, so they take precedence for overlapping properties.
+              With data bindings, auto-sized ancestors omit sampled width/height so they can reflow
+              from resolved values; explicit dimensions remain in effect.
             </td>
           </tr>
           <tr>
             <td><code>data</code><br /><code>Record&lt;string, unknown&gt;</code></td>
             <td>
               Data context for <code>data-bind</code> and <code>data-each</code> expressions in
-              declarative HTML blocks.
+              declarative HTML blocks. For live DOM capture, auto-sized ancestors of bound content
+              reflow from resolved values; explicitly sized boxes remain constrained.
             </td>
           </tr>
           <tr>

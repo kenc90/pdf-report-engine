@@ -105,6 +105,21 @@
     .comprehensive-list { margin: 4px 0 12px; }
     .comprehensive-list li { margin: 3px 0; }
     .comprehensive-barcode { display: block; width: 220px; height: 60px; margin: 4px 0 12px; }
+    .template-invoice { color: #263445; font-size: 13px; }
+    .template-heading { display: flex; justify-content: space-between; gap: 18px; padding-bottom: 12px; border-bottom: 2px solid #dbe5ef; }
+    .template-heading h2 { margin: 0; color: #174a73; font-size: 23px; }
+    .template-heading p { margin: 3px 0; text-align: right; color: #526579; }
+    .template-eyebrow { color: #526579; font-size: 10px; font-weight: 700; letter-spacing: 1px; }
+    .template-customer { margin: 18px 0; }
+    .template-customer p { margin: 0 0 4px; color: #586c80; font-size: 11px; }
+    .zero-size-holder { width: 0; height: 0; overflow: hidden; }
+    .zero-size-indicator { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; color: #526579; font-size: 13px; }
+    .template-invoice table { margin: 12px 0; font-size: 11px; }
+    .template-invoice th { background: #eaf2f8; color: #174a73; }
+    .template-invoice th, .template-invoice td { padding: 8px; border-bottom: none; }
+    .template-total { margin: 0; padding-top: 9px; color: #174a73; text-align: right; }
+    .template-total strong { margin-left: 24px; }
+    .template-note { margin-top: 18px; color: #586c80; font-size: 11px; }
     .hidden-panel .demo-target { display: none; }
     .code-caption { margin: 10px 0 0; color: var(--muted); font-size: .86rem; }
     .pdf-preview { width: 100%; height: min(76vh, 850px); min-height: 480px; border: 1px solid var(--line); border-radius: 8px; background: #f2f4f7; }
@@ -164,6 +179,8 @@
         <button class="demo-tab" id="tab-bands" role="tab" aria-selected="false" aria-controls="panel-bands" data-example="bands" type="button">Header + footer · good fit</button>
         <button class="demo-tab" id="tab-media" role="tab" aria-selected="false" aria-controls="panel-media" data-example="media" type="button">Images + SVG · good fit</button>
         <button class="demo-tab" id="tab-comprehensive" role="tab" aria-selected="false" aria-controls="panel-comprehensive" data-example="comprehensive" type="button">Full report · feature showcase</button>
+        <button class="demo-tab" id="tab-template" role="tab" aria-selected="false" aria-controls="panel-template" data-example="template" type="button">DOM template + data</button>
+        <button class="demo-tab" id="tab-zero-size" role="tab" aria-selected="false" aria-controls="panel-zero-size" data-example="zero-size" type="button">Zero-size wrapper · inner DOM</button>
         <button class="demo-tab" id="tab-grid" role="tab" aria-selected="false" aria-controls="panel-grid" data-example="grid" type="button">CSS Grid · lossy</button>
         <button class="demo-tab" id="tab-generated" role="tab" aria-selected="false" aria-controls="panel-generated" data-example="generated" type="button">Canvas + pseudo · partial</button>
         <button class="demo-tab" id="tab-hidden" role="tab" aria-selected="false" aria-controls="panel-hidden" data-example="hidden" type="button">Hidden element · error</button>
@@ -380,6 +397,90 @@ const bytes = await renderToBuffer(report);</code></pre>
 );
 const bytes = await renderToBuffer(report);</code></pre>
       </section>
+
+      <section class="demo-panel" id="panel-template" role="tabpanel" aria-labelledby="tab-template" data-status="good" data-example="template">
+        <h3 id="dom-template-data">DOM template + build-time data</h3>
+        <p>This invoice stays a single live DOM template. Its bound fields and one table-row template are populated from the <code>data</code> option only when the PDF is built; the browser DOM remains unchanged. Auto-sized ancestors reflow to the resolved values, while explicit dimensions remain constrained. The table uses <code>data-grid</code> to draw a visible border around each cell in the PDF.</p>
+        <div class="sample-sheet">
+          <div class="demo-target template-invoice" id="template-report">
+            <header class="template-heading">
+              <div>
+                <p class="template-eyebrow">NORTHWIND STUDIO · SERVICES</p>
+                <h2>Invoice <span data-bind="$data.invoice.number">INV-0000</span></h2>
+              </div>
+              <p>Issue date<br /><strong><span data-bind="$data.invoice.date">Date goes here</span></strong></p>
+            </header>
+            <div class="template-customer">
+              <p>PREPARED FOR</p>
+              <strong><span data-bind="$data.customer.name">Customer name</span></strong><br />
+              <span data-bind="$data.customer.address">Customer address</span>
+            </div>
+            <table data-each="row in $data.items" data-grid="1px solid #b8c4d4" data-striped data-striped-color="#f7fafc">
+              <thead><tr><th>Service</th><th class="money">Hours</th><th class="money">Rate</th><th class="money">Amount</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td data-bind="$row.description">Service description</td>
+                  <td class="money" data-bind="$row.hours">0</td>
+                  <td class="money" data-bind="$row.rate">$0.00</td>
+                  <td class="money" data-bind="$row.amount">$0.00</td>
+                </tr>
+              </tbody>
+            </table>
+            <p class="template-total">Total due <strong><span data-bind="$data.total">$0.00</span></strong></p>
+            <p class="template-note">Thank you for your business. Payment is due within 30 days.</p>
+          </div>
+        </div>
+        <p class="code-caption">Pass the report data separately; <code>data-bind</code> fills the fields and <code>data-each</code> expands the table row template:</p>
+        <pre data-copy><code>const data = {
+  invoice: { number: 'INV-2026-042', date: 'November 19, 2026' },
+  customer: {
+    name: 'Contoso Research',
+    address: '88 Market Street · Seattle, WA',
+  },
+  items: [
+    { description: 'Discovery and planning', hours: 4, rate: '$150.00', amount: '$600.00' },
+    { description: 'Data migration', hours: 16, rate: '$125.00', amount: '$2,000.00' },
+    { description: 'Report design', hours: 8, rate: '$106.25', amount: '$850.00' },
+  ],
+  total: '$3,450.00',
+};
+const report = htmlElementToReportDoc(
+  document.querySelector('#template-report'),
+  { data, page: { size: 'a4', margin: 40 } },
+);
+const bytes = await renderToBuffer(report);</code></pre>
+      </section>
+
+<section class="demo-panel" id="panel-zero-size" role="tabpanel" aria-labelledby="tab-zero-size" data-status="good" data-example="zero-size">
+  <h3 id="zero-size-inner-dom">Zero-size wrapper · capture the inner DOM</h3>
+  <p>The report element remains attached inside a <code>width: 0; height: 0; overflow: hidden</code> wrapper, so it is not visible in the page. Capture targets <code>#zero-size-report</code>, not the wrapper. Use the button to resize the wrapper and inspect the DOM; zero-sized ancestors can still affect computed dimensions in flex layouts.</p>
+  <div class="sample-sheet">
+    <div class="zero-size-indicator">
+      <strong id="zero-size-dimensions">Wrapper: 0 × 0 px</strong>
+      <span>Capture target: <code>#zero-size-report</code></span>
+      <button class="demo-button" id="toggle-zero-size" type="button" aria-controls="zero-size-holder" aria-pressed="false">Show DOM</button>
+    </div>
+    <div class="zero-size-holder" id="zero-size-holder" aria-hidden="true">
+      <div class="demo-target" id="zero-size-report">
+        <p class="template-eyebrow">NORTHWIND STUDIO · SERVICES</p>
+        <h2 class="report-title">Service delivery summary</h2>
+        <p>Prepared for <strong data-bind="$data.customer.name">Customer name</strong>.</p>
+        <p>Invoice reference: <strong data-bind="$data.invoice.number">INV-0000</strong></p>
+        <p>This content is hidden by its zero-size parent in the browser, but the inner element is still available for live-DOM capture.</p>
+      </div>
+    </div>
+  </div>
+  <p class="code-caption">Pass the inner element as the capture root and provide its binding data:</p>
+  <pre data-copy><code>const reportElement = document.querySelector('#zero-size-report');
+const report = htmlElementToReportDoc(reportElement, {
+  data: {
+    customer: { name: 'Contoso Research' },
+    invoice: { number: 'INV-2026-042' },
+  },
+});
+const bytes = await renderToBuffer(report);</code></pre>
+  <p class="loss-note"><strong>Note:</strong> the engine can read DOM that is not painted, but this does not remove all layout effects of the zero-size ancestor. For flex-heavy reports, capture from a normally sized element or use explicit layout dimensions.</p>
+</section>
 
       <section class="demo-panel" id="panel-grid" role="tabpanel" aria-labelledby="tab-grid" data-status="lossy">
         <h3 id="css-grid-limit">CSS Grid · lossy layout</h3>

@@ -849,6 +849,8 @@ const pdf = await renderToBuffer(report);</code></pre>
       and computed styles, including external CSS and styles applied by page JavaScript. Call it after
       the page has reached the state to capture. It maps those styles into the engine's supported
       report layout; it does not execute scripts or reproduce unsupported browser-only CSS.
+      When <code>data</code> bindings are supplied, auto-sized ancestors of bound content are
+      reflowed using the resolved values; explicitly sized boxes remain constrained.
       Canvas elements are snapshotted as PNG images at capture time, so their pixels appear but
       canvas-drawn text is not selectable. Exporting a cross-origin-tainted canvas fails explicitly.
       <a href="live-dom-demo.html">Try the multi-example live DOM demo</a> to see successful captures,

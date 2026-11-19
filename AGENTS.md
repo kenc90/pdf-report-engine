@@ -20,5 +20,5 @@
 
 ## Changelog
 
-- Keep `CHANGELOG.md` focused on library features and fixes.
-- Do not include documentation-, demo-, or editor-only changes.
+- Include only library behavior/API features and fixes in `CHANGELOG.md`.
+- Never list documentation, demo, editor, generated-artifact, or other non-library-only changes, even when they ship alongside library changes.

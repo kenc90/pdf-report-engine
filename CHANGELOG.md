@@ -2,6 +2,14 @@
 
 Notable user-facing changes for each release are listed here.
 
+## [Unreleased]
+
+### Fixed
+
+- Reflow auto-sized live-DOM ancestors around data-bound content while preserving explicitly authored dimensions.
+- Align adjacent table-cell borders on shared edges and draw them after cell content, preventing visible doubled lines.
+- Keep bordered flex headings sized to their text when right-aligned sibling content participates in intrinsic-width measurement.
+
 ## [0.3.0] - 2026-11-18
 
 ### Added
@@ -35,8 +43,6 @@ Notable user-facing changes for each release are listed here.
 - Corrected the PDF metadata field name from `Creater` to `Creator`.
 
 ## [0.1.1] - 2026-11-08
-
-This retrospective entry is reconstructed from the commits leading up to the release tag.
 
 ### Added
 

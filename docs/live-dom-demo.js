@@ -4,6 +4,9 @@ const tabs = Array.from(document.querySelectorAll('.demo-tab'));
 const panels = Array.from(document.querySelectorAll('.demo-panel'));
 const generateButton = document.getElementById('generate');
 const updateButton = document.getElementById('update-style');
+const zeroSizeButton = document.getElementById('toggle-zero-size');
+const zeroSizeHolder = document.getElementById('zero-size-holder');
+const zeroSizeDimensions = document.getElementById('zero-size-dimensions');
 const status = document.getElementById('status');
 const resultLabel = document.getElementById('result-label');
 const preview = document.getElementById('preview');
@@ -11,6 +14,19 @@ const download = document.getElementById('download');
 let currentUrl;
 let generation = 0;
 const comprehensiveReference = 'OPS-2026-Q3-026';
+const templateData = {
+  invoice: { number: 'INV-2026-042', date: 'November 19, 2026' },
+  customer: {
+    name: 'Contoso Research',
+    address: '88 Market Street · Seattle, WA',
+  },
+  items: [
+    { description: 'Discovery and planning', hours: 4, rate: '$150.00', amount: '$600.00' },
+    { description: 'Data migration', hours: 16, rate: '$125.00', amount: '$2,000.00' },
+    { description: 'Report design', hours: 8, rate: '$106.25', amount: '$850.00' },
+  ],
+  total: '$3,450.00',
+};
 
 function activePanel() {
   return document.querySelector('.demo-panel.active');
@@ -38,8 +54,13 @@ async function generateActiveReport(scrollToPreview = false) {
   setStatus('Reading current DOM and rendering PDF…');
   try {
     const example = panel.dataset.example;
-    const options = example === 'bands' || example === 'comprehensive'
+    const options = example === 'template' || example === 'zero-size'
       ? {
+          data: templateData,
+          page: { size: 'a4', margin: 40 },
+        }
+      : example === 'bands' || example === 'comprehensive'
+        ? {
           page: { size: example === 'bands' ? 'a5' : 'a4', margin: 36 },
           header: example === 'bands'
             ? '<div style="font-size:9px;font-weight:bold;color:#174a73;border-bottom:1px solid #dbe5ef;padding-bottom:6px">NORTHWIND STUDIO · OPERATIONS</div>'
@@ -48,7 +69,7 @@ async function generateActiveReport(scrollToPreview = false) {
             ? '<div style="font-size:8px;color:#586c80;text-align:right;border-top:1px solid #dbe5ef;padding-top:5px">Confidential · Page {PAGE} of {TOTAL}</div>'
             : '<div style="font-size:8px;color:#586c80;text-align:right;border-top:1px solid #dbe5ef;padding-top:5px">Internal use · Page {PAGE} of {TOTAL}</div>',
         }
-      : {};
+        : {};
     const report = htmlElementToReportDoc(target, options);
     const bytes = await renderToBuffer(report);
     if (requestId !== generation) return;
@@ -122,6 +143,20 @@ updateButton.addEventListener('click', () => {
   const heading = document.getElementById('live-title');
   heading.style.color = heading.style.color === 'rgb(175, 56, 67)' ? '' : '#af3843';
   setStatus(`Page JavaScript changed the heading color to ${getComputedStyle(heading).color}. Capture now to include it.`, 'success');
+});
+
+zeroSizeButton.addEventListener('click', () => {
+  const showing = zeroSizeButton.getAttribute('aria-pressed') !== 'true';
+  zeroSizeHolder.style.width = showing ? '100%' : '0px';
+  zeroSizeHolder.style.height = showing ? 'auto' : '0px';
+  zeroSizeHolder.style.overflow = showing ? 'visible' : 'hidden';
+  zeroSizeHolder.setAttribute('aria-hidden', String(!showing));
+  zeroSizeButton.setAttribute('aria-pressed', String(showing));
+  zeroSizeButton.textContent = showing ? 'Hide DOM' : 'Show DOM';
+  zeroSizeDimensions.textContent = showing ? 'Wrapper: auto-sized' : 'Wrapper: 0 × 0 px';
+  setStatus(showing
+    ? 'DOM shown at the wrapper’s full width. Capture again to use the visible layout.'
+    : 'DOM hidden in a 0 × 0 wrapper. Capture again to use the hidden layout.');
 });
 
 function countPages(bytes) {

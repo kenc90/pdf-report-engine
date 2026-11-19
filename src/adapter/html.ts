@@ -2193,12 +2193,93 @@ const AUTO_LENGTH_PROPERTIES = new Set([
   'flex-basis',
 ]);
 
+type DimensionProperty = 'width' | 'height';
+
+function boundContentAncestors(root: Element): WeakSet<Element> {
+  const affected = new WeakSet<Element>();
+  const visit = (element: Element): boolean => {
+    let containsBinding = Array.from(element.attributes).some((attr) =>
+      attr.name === 'data-bind' || attr.name === 'data-each' || attr.name === 'data-if',
+    );
+    for (const child of Array.from(element.childNodes)) {
+      if (child.nodeType === 1 && visit(child as Element)) containsBinding = true;
+    }
+    if (containsBinding) affected.add(element);
+    return containsBinding;
+  };
+  visit(root);
+  return affected;
+}
+
+function inlineSizeValue(element: Element, property: DimensionProperty): string | undefined {
+  const style = Array.from(element.attributes).find((attr) => attr.name.toLowerCase() === 'style')?.value;
+  if (!style) return undefined;
+  let value: string | undefined;
+  for (const declaration of splitOutsideParens(style, ';')) {
+    const colon = declaration.indexOf(':');
+    if (colon < 0 || declaration.slice(0, colon).trim().toLowerCase() !== property) continue;
+    value = declaration.slice(colon + 1).replace(/\s*!important\s*$/i, '').trim();
+  }
+  return value;
+}
+
+function hasAuthoredDimension(element: Element, property: DimensionProperty, view: Window): boolean {
+  const inlineValue = inlineSizeValue(element, property);
+  if (inlineValue !== undefined) return inlineValue.toLowerCase() !== 'auto';
+
+  const matchesFixedSize = (rules: CSSRuleList): boolean => {
+    for (const rule of Array.from(rules)) {
+      if (rule.type === 1) {
+        const styleRule = rule as CSSStyleRule;
+        const value = styleRule.style.getPropertyValue(property).trim();
+        if (value && value.toLowerCase() !== 'auto') {
+          try {
+            if (element.matches(styleRule.selectorText)) return true;
+          } catch (error) {
+            if (!isNamedError(error, 'SyntaxError')) throw error;
+          }
+        }
+      }
+
+      if (rule.type === 4) {
+        const media = rule as CSSMediaRule;
+        if (typeof view.matchMedia === 'function' && !view.matchMedia(media.conditionText).matches) continue;
+      }
+
+      if ('cssRules' in rule && matchesFixedSize((rule as CSSGroupingRule).cssRules)) return true;
+      if (rule.type === 3) {
+        const imported = (rule as CSSImportRule).styleSheet;
+        if (imported && matchesFixedSize(imported.cssRules)) return true;
+      }
+    }
+    return false;
+  };
+
+  const sheets = [
+    ...Array.from(element.ownerDocument.styleSheets ?? []),
+    ...Array.from(element.ownerDocument.adoptedStyleSheets ?? []),
+  ];
+  for (const sheet of sheets) {
+    try {
+      if (matchesFixedSize(sheet.cssRules)) return true;
+    } catch (error) {
+      if (!isNamedError(error, 'SecurityError')) throw error;
+    }
+  }
+  return false;
+}
+
+function isNamedError(error: unknown, name: string): boolean {
+  return typeof error === 'object' && error !== null && 'name' in error && error.name === name;
+}
+
 function domNodeToHNode(
   node: Node,
   view: Window,
   includeStyles: boolean,
   inheritedVisibility = true,
   computedStyle?: CSSStyleDeclaration,
+  boundSizing?: WeakSet<Element>,
 ): HNode | undefined {
   if (node.nodeType === 3) {
     return inheritedVisibility ? { type: 'text', text: node.nodeValue ?? '' } : undefined;
@@ -2243,6 +2324,13 @@ function domNodeToHNode(
       ] as const)
       .filter(([property, value]) => {
         const keyword = value.trim().toLowerCase();
+        // Browser-used sizes reflect placeholder content; let layout recompute
+        // auto-sized boxes when their bound content changes.
+        if (
+          boundSizing?.has(element) &&
+          (property === 'width' || property === 'height') &&
+          !hasAuthoredDimension(element, property, view)
+        ) return false;
         return !(
           (AUTO_LENGTH_PROPERTIES.has(property) && keyword === 'auto') ||
           (
@@ -2269,7 +2357,7 @@ function domNodeToHNode(
 
   const children: HNode[] = [];
   for (const child of Array.from(element.childNodes)) {
-    const converted = domNodeToHNode(child, view, includeStyles, textVisible);
+    const converted = domNodeToHNode(child, view, includeStyles, textVisible, undefined, boundSizing);
     if (converted) children.push(converted);
   }
   if (computed && !textVisible && children.length === 0) return undefined;
@@ -2370,7 +2458,8 @@ export function htmlElementToReportDoc(element: Element, opts: HtmlElementOption
   if (rootStyle.display === 'none') {
     throw new Error('htmlElementToReportDoc cannot capture an element with display: none.');
   }
-  const liveElement = domNodeToHNode(element, view, true, true, rootStyle);
+  const boundSizing = htmlOpts.data === undefined ? undefined : boundContentAncestors(element);
+  const liveElement = domNodeToHNode(element, view, true, true, rootStyle, boundSizing);
   if (!liveElement || liveElement.type !== 'element') {
     throw new Error('htmlElementToReportDoc could not read the supplied DOM Element.');
   }
