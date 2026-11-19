@@ -22,3 +22,4 @@
 
 - Include only library behavior/API features and fixes in `CHANGELOG.md`.
 - Never list documentation, demo, editor, generated-artifact, or other non-library-only changes, even when they ship alongside library changes.
+- Remove the `Unreleased` heading when it has no entries; do not leave an empty section.
