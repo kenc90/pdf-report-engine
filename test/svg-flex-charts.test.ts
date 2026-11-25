@@ -14,7 +14,7 @@ import { layoutBlock } from '../src/layout/block.js';
 import { parseSvg, svgSourceToText } from '../src/core/svg.js';
 import { htmlToReportDoc } from '../src/adapter/html.js';
 import { renderToBuffer } from '../src/index.js';
-import type { Block, ChartBlock, FlexBlock, GridBlock, ReportDoc, SvgBlock, ContainerBlock, HeadingBlock } from '../src/ir/schema.js';
+import type { Block, ChartBlock, FlexBlock, GridBlock, ReportDoc, SvgBlock, ContainerBlock, HeadingBlock, ContentSpan } from '../src/ir/schema.js';
 import type { Fragment } from '../src/layout/flow.js';
 
 function makeCtx(): LayoutContext {

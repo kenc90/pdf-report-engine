@@ -44,8 +44,10 @@ describe('block layout', () => {
       fragment.commands.find((command) => command.op === 'path' && command.stroke?.lineWidth === 1),
     );
     expect(borders.every((border) => border?.op === 'path')).toBe(true);
-    expect(borders[0]?.op === 'path' && borders[0].subpaths).toHaveLength(3);
-    expect(borders.at(-1)?.op === 'path' && borders.at(-1)!.subpaths).toHaveLength(3);
+    const firstBorder = borders[0];
+    const lastBorder = borders.at(-1);
+    expect(firstBorder?.op === 'path' && firstBorder.subpaths).toHaveLength(3);
+    expect(lastBorder?.op === 'path' && lastBorder.subpaths).toHaveLength(3);
     expect(frags[0]!.commands.some((command) => command.op === 'fillRect' && command.radius?.[0] === 4)).toBe(true);
     expect(frags[0]!.commands.filter((command) => command.op === 'fillRect')).toHaveLength(1);
   });
