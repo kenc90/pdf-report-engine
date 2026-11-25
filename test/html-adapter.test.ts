@@ -147,6 +147,19 @@ describe('htmlElementToReportDoc', () => {
     expect(JSON.stringify(heading.content)).not.toContain('border');
   });
 
+  it('preserves pagination-only properties on unstyled block wrappers', () => {
+    const report = htmlToReportDoc(
+      '<section style="break-inside:avoid">' +
+      '<table><tr><td>Fall 2025</td></tr></table>' +
+      '<table data-bind="$data.courses"><tbody><tr><td data-bind="code"></td></tr></tbody></table>' +
+      '</section>',
+    );
+    const wrapper = report.body![0] as ContainerBlock;
+
+    expect(wrapper.type).toBe('container');
+    expect(wrapper.breakInside).toBe('avoid');
+  });
+
   it('collects Google font references for Unicode glyphs outside base PDF fonts', () => {
     const url = 'https://fonts.googleapis.com/css2?family=Noto+Sans+Symbols&display=swap';
     const report = htmlToReportDoc(

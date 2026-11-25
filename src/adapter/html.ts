@@ -898,6 +898,9 @@ function hasVisibleBox(style: IrBox): boolean {
     return Array.isArray(value) && value.some((part) => typeof part === 'number' && part !== 0);
   };
   return Boolean(
+    style.breakBefore ||
+    style.breakAfter ||
+    style.breakInside ||
     style.backgroundColor ||
     style.backgroundImage ||
     style.boxShadow ||

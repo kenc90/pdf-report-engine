@@ -224,7 +224,15 @@ export function paginate(input: PaginateInput): Page[] {
     const runSpan = run.reduce((s, i) => s + fragSpan(bodyFragments[i]!), 0);
 
     const forceBreak = (first.breakBefore === 'page' || first.isPageBreak) && cursorY > bodyStartY + 0.01;
-    const overflow = cursorY + first.before + first.height > bodyBottomLimit;
+    // A keep-with-next run moves as a whole only when it can fit on a fresh page.
+    // For an oversized run, retaining the first-fragment check avoids changing
+    // the established behavior for intentionally unbreakable overlong blocks.
+    const overflowAsWhole =
+      run.length > 1 &&
+      runSpan <= fullPageBodyCapacity &&
+      cursorY + runSpan > bodyBottomLimit;
+    const overflow = cursorY + first.before + first.height > bodyBottomLimit ||
+      overflowAsWhole;
     const tableHeaderHeight = first.groupKey
       ? (headerByGroup.get(first.groupKey) ?? []).reduce((sum, header) => sum + fragSpan(header), 0)
       : 0;

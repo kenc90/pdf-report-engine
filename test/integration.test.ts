@@ -148,6 +148,22 @@ describe('pagination + running tokens', () => {
     expect(trailing.pages).toHaveLength(1);
   });
 
+  it('moves an atomic keep-with-next chain to a fresh page when it does not fit', () => {
+    const doc: ReportDoc = {
+      page: { size: [100, 45], margin: 4 },
+      body: [
+        { type: 'paragraph', content: 'filler' },
+        { type: 'paragraph', content: 'heading', keepWithNext: true },
+        { type: 'paragraph', content: 'following content' },
+      ],
+    };
+    const pages = createReport(doc, {}).pages;
+    expect(pages).toHaveLength(2);
+    expect(bodyText(pages[0]!)).not.toContain('heading');
+    expect(bodyText(pages[1]!)).toContain('heading');
+    expect(bodyText(pages[1]!)).toContain('following content');
+  });
+
   it('keeps a breakInside: "avoid" paragraph on one page, and splits it without the flag', () => {
     const lines = 'one two three four five six seven eight nine ten';
     const body = (breakInside?: 'avoid'): ReportDoc['body'] => [

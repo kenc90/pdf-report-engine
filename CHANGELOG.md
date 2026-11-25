@@ -4,9 +4,16 @@ Notable user-facing changes for each release are listed here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserve pagination-only CSS properties on HTML block wrappers such as `<section>`, so `break-inside: avoid` keeps nested heading-and-content blocks together.
+- Move a complete keep-with-next run to a fresh page when the run would extend past the page/footer boundary.
+
+## [0.4.0] - 2026-11-19
+
 ### Added
 
-- Report-focused CSS Grid layout with fixed, percentage, and fractional columns, gaps, auto-placement, row/column spans, and automatic stretching to fill assigned row areas.
+- Report-focused CSS Grid layout for HTML and IR authors, with fixed, percentage, and fractional columns, gaps, row-major auto-placement, column/row spans, and automatic stretching to fill assigned row areas.
 
 ## [0.3.1] - 2026-11-19
 
