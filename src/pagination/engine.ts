@@ -148,6 +148,12 @@ export function paginate(input: PaginateInput): Page[] {
     ...opts,
     maxRowHeight: bodyBottomLimit - bodyTop,
   });
+  // The summary is trailing body content, not a post-pagination overlay. Append
+  // its fragments to the normal fragment stream so pagination, not a footer-side
+  // patch, decides whether it fits or continues onto another page.
+  if (summaryMeasured.length) {
+    bodyFragments.push(...summaryMeasured.map((fragment) => ({ ...fragment, summary: true })));
+  }
   // Positioned blocks are laid out per page in Pass C (with the real `$page`
   // scope, so `{PAGE}`/`{TOTAL}` resolve) and never consume body flow space.
   const positioned = body.filter(
@@ -230,6 +236,30 @@ export function paginate(input: PaginateInput): Page[] {
       cursorY + runSpan > bodyBottomLimit;
     const overflow = cursorY + first.before + first.height > bodyBottomLimit ||
       overflowAsWhole;
+    if (run.length === 1 && first.summary && first.height > fullPageBodyCapacity) {
+      const capacity = fullPageBodyCapacity;
+      let remaining = first.height;
+      let offset = 0;
+      let firstChunk = true;
+      while (remaining > 0) {
+        const h = Math.min(remaining, capacity);
+        const chunk: Fragment = {
+          ...first,
+          height: h,
+          before: offset === 0 ? first.before : 0,
+          after: remaining - h <= 0 ? first.after : 0,
+          commands: firstChunk ? first.commands : [],
+        };
+        if (cursorY + chunk.before + chunk.height > bodyBottomLimit && cursorY > bodyStartY + 0.01) startNewPage();
+        cursorY += chunk.before;
+        current!.body.push({ fragment: chunk, x: contentLeft, y: cursorY });
+        cursorY += chunk.height + chunk.after;
+        remaining -= h;
+        offset += h;
+        firstChunk = false;
+      }
+      continue;
+    }
     const tableHeaderHeight = first.groupKey
       ? (headerByGroup.get(first.groupKey) ?? []).reduce((sum, header) => sum + fragSpan(header), 0)
       : 0;
@@ -329,47 +359,6 @@ export function paginate(input: PaginateInput): Page[] {
   // then nothing followed it; drop it.
   while (pages.length > 1 && pages.at(-1)!.body.length === 0 && pages.at(-1)!.number > 1) pages.pop();
 
-  // Summary bands are final-page content, but they may be taller than the
-  // remaining final-page capacity or taller than a full body area. Split their
-  // fragments across continuation pages instead of painting them over the footer.
-  const summaryPlan = new Map<number, Fragment[]>();
-  if (summaryMeasured.length) {
-    const finalIndex = pages.length - 1;
-    const finalPage = pages[finalIndex];
-    let targetIndex = finalIndex;
-    let y = finalPage?.body.length
-      ? finalPage.body.at(-1)!.y + finalPage.body.at(-1)!.fragment.height
-      : bodyTop;
-    const footerTop = page.height - page.margin.bottom - footerH;
-    const fullCapacity = footerTop - bodyTop;
-
-    for (const fragment of summaryMeasured) {
-      const span = fragSpan(fragment);
-      if (y + span > footerTop && span <= fullCapacity) {
-        targetIndex = pages.length;
-        pages.push({
-          number: pages.length + 1,
-          logical: 0,
-          total: 0,
-          width: page.width,
-          height: page.height,
-          margin: page.margin,
-          body: [],
-          header: [],
-          footer: [],
-          background: [],
-          foreground: [],
-          absolute: [],
-          anchors: [],
-          outline: [],
-        });
-        y = bodyTop;
-      }
-      summaryPlan.set(targetIndex, [...(summaryPlan.get(targetIndex) ?? []), fragment]);
-      y += span;
-    }
-  }
-
   const total = pages.length;
 
   // --- Pass C: real headers/footers + logical numbering + summary ----------
@@ -406,16 +395,6 @@ export function paginate(input: PaginateInput): Page[] {
 
     const footerTop = page.height - page.margin.bottom - footerH;
     p.footer = placeBand(layoutBand(bands?.pageFooter, ctx, po), contentLeft, footerTop);
-
-    const summaryFragments = summaryPlan.get(i) ?? [];
-    let summaryY = p.body.length
-      ? p.body.at(-1)!.y + p.body.at(-1)!.fragment.height
-      : bodyTop;
-    for (const fragment of summaryFragments) {
-      summaryY += fragment.before;
-      p.body.push({ fragment, x: contentLeft, y: summaryY });
-      summaryY += fragment.height + fragment.after;
-    }
 
 
     // Out-of-flow positioned blocks (`position: absolute/fixed`) that target

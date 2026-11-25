@@ -164,6 +164,120 @@ describe('pagination + running tokens', () => {
     expect(bodyText(pages[1]!)).toContain('following content');
   });
 
+  it('splits an oversized summary onto continuation pages below the body', () => {
+    const body: ReportDoc['body'] = Array.from({ length: 12 }, (_, i) => ({
+      type: 'paragraph',
+      content: `Body ${i + 1}`,
+    }));
+    const doc: ReportDoc = {
+      page: { size: [260, 180], margin: 12 },
+      body,
+      bands: {
+        summary: {
+          height: 70,
+          blocks: [{ type: 'paragraph', content: 'SUMMARY START' }],
+        },
+        pageFooter: {
+          blocks: [{ type: 'paragraph', content: 'FOOTER' }],
+        },
+      },
+    };
+    const pages = createReport(doc, {}).pages;
+    expect(pages.length).toBeGreaterThan(1);
+    const last = pages.at(-1)!;
+    const footer = last.footer.at(-1)!;
+    const summary = last.body.filter((placed) =>
+      placed.fragment.commands.some((command) =>
+        command.op === 'text' &&
+        command.runs.some((run) => run.text.includes('SUMMARY')),
+      ),
+    );
+    expect(summary.length).toBeGreaterThan(0);
+    for (const placed of summary) {
+      expect(placed.y + placed.fragment.height).toBeLessThanOrEqual(footer.y);
+    }
+  });
+
+  it('moves an oversized summary below the body to continuation pages', () => {
+    const body: ReportDoc['body'] = Array.from({ length: 12 }, (_, i) => ({
+      type: 'paragraph',
+      content: `Body ${i + 1}`,
+    }));
+    const doc: ReportDoc = {
+      page: { size: [260, 180], margin: 12 },
+      body,
+      bands: {
+        summary: {
+          height: 70,
+          blocks: [{ type: 'paragraph', content: 'SUMMARY START' }],
+        },
+        pageFooter: {
+          blocks: [{ type: 'paragraph', content: 'FOOTER' }],
+        },
+      },
+    };
+    const pages = createReport(doc, {}).pages;
+    expect(pages.length).toBeGreaterThan(1);
+    const last = pages.at(-1)!;
+    const footer = last.footer.at(-1)!;
+    const summaryFragments = last.body.filter((placed) =>
+      placed.fragment.commands.some((command) =>
+        command.op === 'text' &&
+        command.runs.some((run) => run.text.includes('SUMMARY')),
+      ),
+    );
+    expect(summaryFragments.length).toBeGreaterThan(0);
+    for (const placed of summaryFragments) {
+      expect(placed.y + placed.fragment.height).toBeLessThanOrEqual(footer.y);
+    }
+  });
+
+  it('keeps a fitting summary at the final body tail and moves an oversized one fully to a fresh page', () => {
+    const body: ReportDoc['body'] = Array.from({ length: 12 }, (_, i) => ({
+      type: 'paragraph',
+      content: `Body ${i + 1}`,
+    }));
+    const fitting: ReportDoc = {
+      page: { size: [260, 180], margin: 12 },
+      body,
+      bands: {
+        summary: {
+          height: 20,
+          blocks: [{ type: 'paragraph', content: 'SUMMARY START' }],
+        },
+        pageFooter: {
+          blocks: [{ type: 'paragraph', content: 'FOOTER' }],
+        },
+      },
+    };
+    const fittingPages = createReport(fitting, {}).pages;
+    expect(fittingPages.at(-1)!.body.some((placed) =>
+      placed.fragment.commands.some((command) =>
+        command.op === 'text' &&
+        command.runs.some((run) => run.text.includes('SUMMARY')),
+      ),
+    )).toBe(true);
+
+    const oversized: ReportDoc = {
+      ...fitting,
+      bands: {
+        ...fitting.bands,
+        summary: {
+          height: 240,
+          blocks: [{ type: 'paragraph', content: 'SUMMARY START' }],
+        },
+      },
+    };
+    const oversizedPages = createReport(oversized, {}).pages;
+    expect(oversizedPages.length).toBeGreaterThan(fittingPages.length);
+    for (const page of oversizedPages) {
+      const footer = page.footer.at(-1)!;
+      for (const placed of page.body) {
+        expect(placed.y + placed.fragment.height).toBeLessThanOrEqual(footer.y);
+      }
+    }
+  });
+
   it('keeps a breakInside: "avoid" paragraph on one page, and splits it without the flag', () => {
     const lines = 'one two three four five six seven eight nine ten';
     const body = (breakInside?: 'avoid'): ReportDoc['body'] => [

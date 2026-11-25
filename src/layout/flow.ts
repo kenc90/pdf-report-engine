@@ -144,6 +144,8 @@ export interface Fragment {
   isPageBreak?: boolean;
   /** Restart `{PAGE}` numbering before this fragment (Jasper "reset page number"). */
   resetPageNumber?: boolean;
+  /** Marks trailing summary-band fragments for final-band pagination. */
+  summary?: boolean;
   /** Marks the first fragment of a group so pagination can honour group page breaks. */
   groupValue?: unknown;
   /** Heading metadata: drives PDF bookmarks and table-of-contents entries. */
