@@ -207,9 +207,6 @@ export function paginate(input: PaginateInput): Page[] {
     let top = bodyTop;
     if (index === 0) top += titleH;
     let bottom = bodyBottomLimit;
-    // The summary band only sits on the final page; reserve it while flowing so we
-    // do not overrun into it, then it is placed for real in Pass C.
-    if (lastContent) bottom -= summaryH;
     return bottom - top;
   };
   const fullPageBodyCapacity = pageCapacity(1, false);
@@ -332,6 +329,47 @@ export function paginate(input: PaginateInput): Page[] {
   // then nothing followed it; drop it.
   while (pages.length > 1 && pages.at(-1)!.body.length === 0 && pages.at(-1)!.number > 1) pages.pop();
 
+  // Summary bands are final-page content, but they may be taller than the
+  // remaining final-page capacity or taller than a full body area. Split their
+  // fragments across continuation pages instead of painting them over the footer.
+  const summaryPlan = new Map<number, Fragment[]>();
+  if (summaryMeasured.length) {
+    const finalIndex = pages.length - 1;
+    const finalPage = pages[finalIndex];
+    let targetIndex = finalIndex;
+    let y = finalPage?.body.length
+      ? finalPage.body.at(-1)!.y + finalPage.body.at(-1)!.fragment.height
+      : bodyTop;
+    const footerTop = page.height - page.margin.bottom - footerH;
+    const fullCapacity = footerTop - bodyTop;
+
+    for (const fragment of summaryMeasured) {
+      const span = fragSpan(fragment);
+      if (y + span > footerTop && span <= fullCapacity) {
+        targetIndex = pages.length;
+        pages.push({
+          number: pages.length + 1,
+          logical: 0,
+          total: 0,
+          width: page.width,
+          height: page.height,
+          margin: page.margin,
+          body: [],
+          header: [],
+          footer: [],
+          background: [],
+          foreground: [],
+          absolute: [],
+          anchors: [],
+          outline: [],
+        });
+        y = bodyTop;
+      }
+      summaryPlan.set(targetIndex, [...(summaryPlan.get(targetIndex) ?? []), fragment]);
+      y += span;
+    }
+  }
+
   const total = pages.length;
 
   // --- Pass C: real headers/footers + logical numbering + summary ----------
@@ -369,15 +407,16 @@ export function paginate(input: PaginateInput): Page[] {
     const footerTop = page.height - page.margin.bottom - footerH;
     p.footer = placeBand(layoutBand(bands?.pageFooter, ctx, po), contentLeft, footerTop);
 
-    if (i === pages.length - 1 && summaryMeasured.length) {
-      // Place the real summary right after the last body fragment on the final page.
-      let y = p.body.length ? p.body.at(-1)!.y + p.body.at(-1)!.fragment.height : bodyTop;
-      for (const f of layoutBand(bands?.summary, ctx, po)) {
-        y += f.before;
-        p.body.push({ fragment: f, x: contentLeft, y });
-        y += f.height + f.after;
-      }
+    const summaryFragments = summaryPlan.get(i) ?? [];
+    let summaryY = p.body.length
+      ? p.body.at(-1)!.y + p.body.at(-1)!.fragment.height
+      : bodyTop;
+    for (const fragment of summaryFragments) {
+      summaryY += fragment.before;
+      p.body.push({ fragment, x: contentLeft, y: summaryY });
+      summaryY += fragment.height + fragment.after;
     }
+
 
     // Out-of-flow positioned blocks (`position: absolute/fixed`) that target
     // this page. Laid out with the real page scope so running tokens resolve.
